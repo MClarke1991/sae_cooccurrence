@@ -3,7 +3,8 @@ from unittest.mock import Mock
 
 import pytest
 import torch
-from PIBBSS.normalised_cooc_functions import (
+
+from sae_cooccurence.normalised_cooc_functions import (
     check_if_sae_has_threshold,
     get_sae_threshold,
 )
@@ -62,7 +63,7 @@ def test_check_if_sae_has_threshold(
 
 def test_get_sae_threshold_none_sae():
     with pytest.raises(AttributeError):
-        get_sae_threshold(None, "cpu")
+        get_sae_threshold(None, "cpu")  # type: ignore
 
 
 def test_get_sae_threshold_logging(mock_sae_with_threshold, caplog):
@@ -73,5 +74,5 @@ def test_get_sae_threshold_logging(mock_sae_with_threshold, caplog):
 
 def test_get_sae_threshold_incorrect_shape():
     incorrect_sae = MockSAE(d_sae=10, has_threshold=True, threshold_value=torch.ones(5))
-    result = get_sae_threshold(incorrect_sae, "cpu")
+    result = get_sae_threshold(incorrect_sae, "cpu")  # type: ignore
     assert torch.all(result == torch.zeros(10))

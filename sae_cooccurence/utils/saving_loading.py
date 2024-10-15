@@ -8,7 +8,7 @@ import numpy as np
 import torch.backends.mps
 import torch.cuda
 from sae_lens import SAE
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
 from transformer_lens import HookedTransformer
 
 

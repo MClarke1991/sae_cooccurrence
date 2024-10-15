@@ -5,7 +5,8 @@ import warnings
 import numpy as np
 import pytest
 import torch
-from PIBBSS.normalised_cooc_functions import calculate_jaccard_matrices_chunked
+
+from sae_cooccurence.normalised_cooc_functions import calculate_jaccard_matrices_chunked
 
 
 @pytest.fixture

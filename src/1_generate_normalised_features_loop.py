@@ -2,20 +2,23 @@ import logging
 import os
 import time
 from os.path import join as pj
-from typing import List, Union
 
 import toml
 import torch
-from PIBBSS.normalised_cooc_functions import generate_normalised_features, setup_logging
-from PIBBSS.utils.saving_loading import set_device
-from PIBBSS.utils.set_paths import get_git_root
 from tqdm.auto import tqdm
+
+from sae_cooccurence.normalised_cooc_functions import (
+    generate_normalised_features,
+    setup_logging,
+)
+from sae_cooccurence.utils.saving_loading import set_device
+from sae_cooccurence.utils.set_paths import get_git_root
 
 
 # Function to split activation_thresholds into batches of 4
 def batch_thresholds(
-    thresholds: List[Union[float, int]], batch_size: int = 4
-) -> List[List[Union[float, int]]]:
+    thresholds: list[float | int], batch_size: int = 4
+) -> list[list[float | int]]:
     """
     This function splits a list of thresholds into batches of a specified size. This is to keep execution within memory on e.g. an A100.
 
@@ -35,7 +38,7 @@ def process_sae(
     sae_id: str,
     model_name: str,
     sae_release_short: str,
-    activation_thresholds: List[Union[float, int]],
+    activation_thresholds: list[float | int],
     n_batches: int,
     n_batches_in_buffer: int,
     device: str,

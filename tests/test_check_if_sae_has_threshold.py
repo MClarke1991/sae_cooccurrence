@@ -2,7 +2,8 @@ from typing import NamedTuple
 
 import pytest
 import torch
-from PIBBSS.normalised_cooc_functions import check_if_sae_has_threshold
+
+from sae_cooccurence.normalised_cooc_functions import check_if_sae_has_threshold
 
 
 # Mock SAE class
@@ -33,7 +34,7 @@ def test_check_if_sae_has_threshold():
 
     # Test case 4: SAE with non-tensor threshold
     sae_with_non_tensor_threshold = MockSAE(d_sae=10)
-    sae_with_non_tensor_threshold.threshold = [
+    sae_with_non_tensor_threshold.threshold = [  # type:ignore
         0.5
     ] * 10  # List instead of tensor # type:ignore
     assert not check_if_sae_has_threshold(sae_with_non_tensor_threshold)  # type: ignore

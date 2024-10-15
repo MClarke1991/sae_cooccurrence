@@ -2,15 +2,18 @@ import logging
 import os
 import warnings
 from os.path import join as pj
-from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import torch
-from PIBBSS.utils.saving_loading import compress_directory_to_tar, load_npz_files
-from PIBBSS.utils.set_paths import get_git_root
 from sae_lens import SAE, ActivationsStore
 from tqdm.auto import tqdm
 from transformer_lens import HookedTransformer
+
+from sae_cooccurence.utils.saving_loading import (
+    compress_directory_to_tar,
+    load_npz_files,
+)
+from sae_cooccurence.utils.set_paths import get_git_root
 
 
 def setup_logging(
@@ -39,14 +42,14 @@ def generate_normalised_features(
     results_dir: str,
     device: str,
     tar_name: str,
-    activation_thresholds: List[Union[float, int]],
+    activation_thresholds: list[float | int],
     n_batches: int = 100,
     half_precision: bool = False,
     generate_jaccard: bool = True,
     generate_tar: bool = True,
     n_batches_in_buffer: int = 32,
     save: bool = True,
-) -> Union[None, dict[str, Union[dict[float, torch.Tensor], dict[float, np.ndarray]]]]:
+) -> None | dict[str, dict[float, torch.Tensor] | dict[float, np.ndarray]]:
     """
     Generates normalised features co-occurrence matrices for a given model, SAE release, and SAE ID.
 
@@ -61,7 +64,7 @@ def generate_normalised_features(
     - results_dir (str): The directory where the results will be saved.
     - device (str): The device to use for computations (e.g., 'cpu' or 'cuda').
     - tar_name (str): The name of the tar file to which the results directory will be compressed.
-    - activation_thresholds (List[Union[float, int]]): A list of thresholds for generating co-occurrence matrices where
+    - activation_thresholds (list[Union[float, int]]): A list of thresholds for generating co-occurrence matrices where
     the threshold is the minimum activation value for a feature to be considered active.
     - n_batches (int, optional): The number of batches of the Activations Store to use for computing co-occurrence matrices.
     Defaults to 100.
@@ -200,10 +203,13 @@ def generate_normalised_features(
         logging.info("Results directory compressed to tar file.")
 
     if not save:
+        feature_activations = generate_feature_activations(total_matrices)
         return {
             "total_matrices": total_matrices,
             "feature_activations": feature_activations,
         }
+    else:
+        return None
 
 
 # Functions -------
@@ -310,7 +316,7 @@ def compute_cooccurrence_matrices(
     sae_id: str,
     activation_store: ActivationsStore,
     n_batches: int,
-    activation_thresholds: List[float],
+    activation_thresholds: list[float],
     device: str,
     half_precision: bool = False,
 ) -> dict[float, torch.Tensor]:
@@ -327,7 +333,7 @@ def compute_cooccurrence_matrices(
     - sae_id (str): The identifier for the SAE model.
     - activation_store (ActivationsStore): SAE Lens ActivationsStore object.
     - n_batches (int): The number of batches of the activation store to process.
-    - activation_thresholds (List[float]): A list of thresholds for which to compute co-occurrence matrices,
+    - activation_thresholds (list[float]): A list of thresholds for which to compute co-occurrence matrices,
     where the threshold is the minimum activation value for a feature to be considered active.
     - device (str): The device on which to perform computations (e.g. 'cpu', 'cuda', 'mps').
     - half_precision (bool, optional): If True, computations are performed in half precision. Defaults to False.
@@ -402,7 +408,7 @@ def generate_feature_activations(
 
 def save_feature_activations(
     feature_activations: dict[float, np.ndarray],
-    activation_thresholds: List[float],
+    activation_thresholds: list[float],
     results_path: str,
 ) -> None:
     # Convert any integers to floats and ensure all elements are numbers
@@ -499,7 +505,7 @@ def calculate_jaccard_matrices_chunked(
 def save_cooccurrence_matrices(
     matrix_dict: dict[float, torch.Tensor],
     mat_type: str,
-    activation_thresholds: List[float],
+    activation_thresholds: list[float],
     results_path: str,
 ) -> None:
     # Convert any integers to floats and ensure all elements are numbers
@@ -516,7 +522,7 @@ def save_cooccurrence_matrices(
 
 
 def check_all_files_exist(
-    results_path: str, activation_thresholds: List[float], mat_type: str
+    results_path: str, activation_thresholds: list[float], mat_type: str
 ) -> bool:
     all_files_exist = True
 
@@ -535,7 +541,7 @@ def check_all_files_exist(
 
 def load_all_feature_matrices(
     directory: str,
-) -> Tuple[dict[float, np.ndarray], dict[float, np.ndarray]]:
+) -> tuple[dict[float, np.ndarray], dict[float, np.ndarray]]:
     """
     Load all feature_total and feature_prop npz files from a directory into two dictionaries.
 

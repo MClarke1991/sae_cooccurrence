@@ -4,7 +4,8 @@ import pickle
 import numpy as np
 import pytest
 import torch
-from PIBBSS.normalised_cooc_functions import compute_cooccurrence_matrices
+
+from sae_cooccurence.normalised_cooc_functions import compute_cooccurrence_matrices
 
 
 @pytest.fixture
