@@ -3,16 +3,19 @@ import os
 import platform
 import subprocess
 import tarfile
-from sae_lens import SAE
-from transformer_lens import HookedTransformer
 from typing import Dict
 
 import numpy as np
 import torch.backends.mps
 import torch.cuda
+from sae_lens import SAE
 from tqdm import tqdm
+from transformer_lens import HookedTransformer
 
-def load_model_and_sae(model_name: str, sae_release: str, sae_id: str, device: str) -> tuple:
+
+def load_model_and_sae(
+    model_name: str, sae_release: str, sae_id: str, device: str
+) -> tuple:
     model = HookedTransformer.from_pretrained(model_name, device=device)
     sae, _, _ = SAE.from_pretrained(release=sae_release, sae_id=sae_id, device=device)
     sae.W_dec.norm(dim=-1).mean()
@@ -100,7 +103,9 @@ def load_npz_files(directory, file_prefix):
 
     if not file_list:
         # Try looking in a subdirectory
-        subdirectory = os.path.join(directory, f"raw_cooc_{os.path.basename(directory)}")
+        subdirectory = os.path.join(
+            directory, f"raw_cooc_{os.path.basename(directory)}"
+        )
         if os.path.exists(subdirectory):
             directory = subdirectory
             file_list = [

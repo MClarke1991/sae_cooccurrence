@@ -6,11 +6,10 @@ from typing import List, Union
 
 import toml
 import torch
-from tqdm.auto import tqdm
-
 from PIBBSS.normalised_cooc_functions import generate_normalised_features, setup_logging
 from PIBBSS.utils.saving_loading import set_device
 from PIBBSS.utils.set_paths import get_git_root
+from tqdm.auto import tqdm
 
 
 # Function to split activation_thresholds into batches of 4
@@ -59,7 +58,13 @@ def process_sae(
 
     os.makedirs(results_dir, exist_ok=True)
 
-    setup_logging(results_dir, model_name, sae_release_short, sae_id_neat, context="normalised_features")
+    setup_logging(
+        results_dir,
+        model_name,
+        sae_release_short,
+        sae_id_neat,
+        context="normalised_features",
+    )
 
     start_time = time.time()
     logging.info(f"Script started running for {sae_id}")

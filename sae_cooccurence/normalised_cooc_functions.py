@@ -6,12 +6,11 @@ from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import torch
+from PIBBSS.utils.saving_loading import compress_directory_to_tar, load_npz_files
+from PIBBSS.utils.set_paths import get_git_root
 from sae_lens import SAE, ActivationsStore
 from tqdm.auto import tqdm
 from transformer_lens import HookedTransformer
-
-from PIBBSS.utils.saving_loading import compress_directory_to_tar, load_npz_files
-from PIBBSS.utils.set_paths import get_git_root
 
 
 def setup_logging(
@@ -270,23 +269,31 @@ def apply_activation_threshold(
     if internal_threshold.dim() != 1:
         raise ValueError("internal_threshold must be a 1D tensor")
     if feature_acts.dim() != 2 or feature_acts.size(1) != internal_threshold.size(0):
-        raise ValueError(f"feature_acts must be a 2D tensor with shape (N, {internal_threshold.size(0)})")
-    
+        raise ValueError(
+            f"feature_acts must be a 2D tensor with shape (N, {internal_threshold.size(0)})"
+        )
+
     # Only consider a feature active if it is greater than the threshold and the internal threshold
-    feature_acts_bool = (feature_acts > (threshold + internal_threshold.unsqueeze(0))).float()
+    feature_acts_bool = (
+        feature_acts > (threshold + internal_threshold.unsqueeze(0))
+    ).float()
     return feature_acts_bool
+
 
 def check_if_sae_has_threshold(sae: SAE) -> bool:
     """
     Check if the SAE has a threshold attribute that is a tensor of length sae.cfg.d_sae.
-    """ 
+    """
     if sae is None:
         raise AttributeError("SAE is None")
-    
-    return (hasattr(sae, 'threshold') and 
-            isinstance(sae.threshold, torch.Tensor) and 
-            sae.threshold.shape == (sae.cfg.d_sae,))
-    
+
+    return (
+        hasattr(sae, "threshold")
+        and isinstance(sae.threshold, torch.Tensor)
+        and sae.threshold.shape == (sae.cfg.d_sae,)
+    )
+
+
 # If the SAE has a threshold attribute, use it, otherwise set it to zero
 def get_sae_threshold(sae: SAE, device: str) -> torch.Tensor:
     sae_threshold = (
@@ -330,7 +337,6 @@ def compute_cooccurrence_matrices(
     the value is the accumulated co-occurrence matrix for that threshold.
     """
 
- 
     sae_threshold = get_sae_threshold(sae, device)
 
     if half_precision:
