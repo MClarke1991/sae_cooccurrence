@@ -3,7 +3,6 @@ import os
 import platform
 import subprocess
 import tarfile
-from typing import Dict
 
 import numpy as np
 import torch.backends.mps
@@ -52,7 +51,7 @@ def notify(title: str) -> None:
 #     return None
 
 
-def log_config_variables(config: Dict[str, Dict[str, str]]) -> None:
+def log_config_variables(config: dict[str, dict[str, str]]) -> None:
     # Log all config variables
     logging.info("Configuration variables:")
     for section, variables in config.items():

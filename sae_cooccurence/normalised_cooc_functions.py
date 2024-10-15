@@ -46,7 +46,7 @@ def generate_normalised_features(
     generate_tar: bool = True,
     n_batches_in_buffer: int = 32,
     save: bool = True,
-) -> Union[None, Dict[str, Union[Dict[float, torch.Tensor], Dict[float, np.ndarray]]]]:
+) -> Union[None, dict[str, Union[dict[float, torch.Tensor], dict[float, np.ndarray]]]]:
     """
     Generates normalised features co-occurrence matrices for a given model, SAE release, and SAE ID.
 
@@ -72,7 +72,7 @@ def generate_normalised_features(
     - save (bool, optional): Whether to save the results to disk. Defaults to True.
 
     Returns:
-    - Union[None, Dict[str, Union[Dict[float, torch.Tensor], Dict[float, np.ndarray]]]]:
+    - Union[None, dict[str, Union[dict[float, torch.Tensor], dict[float, np.ndarray]]]]:
     If save is False, returns a dictionary containing the total matrices and feature activations. Otherwise, returns None.
     """
     sae_release = f"{model_name}-{sae_release_short}"
@@ -220,7 +220,7 @@ def check_inf_features(activations: np.ndarray) -> None:
         )
 
 
-def check_inf_features_dict(feature_activations: Dict[float, np.ndarray]) -> None:
+def check_inf_features_dict(feature_activations: dict[float, np.ndarray]) -> None:
     """
     Check for 'inf' values in the feature activations dictionary.
 
@@ -230,7 +230,7 @@ def check_inf_features_dict(feature_activations: Dict[float, np.ndarray]) -> Non
     This can occur when using half precision.
 
     Args:
-    - feature_activations (Dict[float, np.ndarray]): A dictionary where each key is an activation threshold and
+    - feature_activations (dict[float, np.ndarray]): A dictionary where each key is an activation threshold and
     the value is the corresponding feature activations array.
 
     Returns:
@@ -313,7 +313,7 @@ def compute_cooccurrence_matrices(
     activation_thresholds: List[float],
     device: str,
     half_precision: bool = False,
-) -> Dict[float, torch.Tensor]:
+) -> dict[float, torch.Tensor]:
     """
     Computes co-occurrence matrices for given activation thresholds and precision.
 
@@ -333,7 +333,7 @@ def compute_cooccurrence_matrices(
     - half_precision (bool, optional): If True, computations are performed in half precision. Defaults to False.
 
     Returns:
-    - Dict[float, torch.Tensor]: A dictionary where each key is an activation threshold and
+    - dict[float, torch.Tensor]: A dictionary where each key is an activation threshold and
     the value is the accumulated co-occurrence matrix for that threshold.
     """
 
@@ -382,26 +382,26 @@ def compute_cooccurrence_matrices(
 
 
 def generate_feature_activations(
-    matrix_dict: Dict[float, torch.Tensor],
-) -> Dict[float, np.ndarray]:
+    matrix_dict: dict[float, torch.Tensor],
+) -> dict[float, np.ndarray]:
     """
     For a dictionary of co-occurrence matrices, extract the diagonal elements i.e. feature activations.
     Args:
-    - matrix_dict (Dict[float, torch.Tensor]): A dictionary where each key is a threshold and the value
+    - matrix_dict (dict[float, torch.Tensor]): A dictionary where each key is a threshold and the value
     is a tensor representing the co-occurrence matrix for that threshold.
 
     Returns:
-    - Dict[float, np.ndarray]: A dictionary where each key is a threshold and the value is a NumPy array
+    - dict[float, np.ndarray]: A dictionary where each key is a threshold and the value is a NumPy array
     representing the feature activations for that threshold.
     """
-    feature_activations: Dict[float, np.ndarray] = {}
+    feature_activations: dict[float, np.ndarray] = {}
     for threshold, matrix in matrix_dict.items():
         feature_activations[threshold] = matrix.diagonal().cpu().float().numpy()
     return feature_activations
 
 
 def save_feature_activations(
-    feature_activations: Dict[float, np.ndarray],
+    feature_activations: dict[float, np.ndarray],
     activation_thresholds: List[float],
     results_path: str,
 ) -> None:
@@ -419,10 +419,10 @@ def save_feature_activations(
 
 
 def calculate_jaccard_matrices_chunked(
-    feature_acts_totals: Dict[float, torch.Tensor],
+    feature_acts_totals: dict[float, torch.Tensor],
     device: str,
     chunk_size: int = 10_000,
-) -> Dict[float, torch.Tensor]:
+) -> dict[float, torch.Tensor]:
     """
     Calculate Jaccard similarity matrices for each threshold. Does this in chunks to avoid memory issues.
 
@@ -433,14 +433,14 @@ def calculate_jaccard_matrices_chunked(
     Jaccard similarity matrix as the value.
 
     Args:
-    - feature_acts_totals (Dict[float, torch.Tensor]): A dictionary where each key is a threshold
+    - feature_acts_totals (dict[float, torch.Tensor]): A dictionary where each key is a threshold
       and the value is a tensor representing the total co-occurrences of features for that threshold.
     - device (str): The device to use for calculations. Can be 'cpu', 'cuda' or 'mps'.
     - chunk_size (int, optional): The size of the chunk to use for calculating Jaccard similarity.
       Defaults to 10,000.
 
     Returns:
-    - Dict[float, torch.Tensor]: A dictionary where each key is a threshold and the value is the Jaccard
+    - dict[float, torch.Tensor]: A dictionary where each key is a threshold and the value is the Jaccard
       similarity matrix for that threshold.
     """
     jaccard_matrices = {}
@@ -497,7 +497,7 @@ def calculate_jaccard_matrices_chunked(
 
 
 def save_cooccurrence_matrices(
-    matrix_dict: Dict[float, torch.Tensor],
+    matrix_dict: dict[float, torch.Tensor],
     mat_type: str,
     activation_thresholds: List[float],
     results_path: str,
@@ -535,7 +535,7 @@ def check_all_files_exist(
 
 def load_all_feature_matrices(
     directory: str,
-) -> Tuple[Dict[float, np.ndarray], Dict[float, np.ndarray]]:
+) -> Tuple[dict[float, np.ndarray], dict[float, np.ndarray]]:
     """
     Load all feature_total and feature_prop npz files from a directory into two dictionaries.
 
