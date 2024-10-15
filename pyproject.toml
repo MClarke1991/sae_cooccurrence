@@ -6,7 +6,7 @@ authors = ["MClarke1991 <matthewaclarke1991@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.10"
 sae-lens = "^3.23.4"
 toml = "^0.10.2"
 gdown = "^5.2.0"
