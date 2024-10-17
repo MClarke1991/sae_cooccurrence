@@ -25,7 +25,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import MinMaxScaler
 from tqdm.auto import tqdm
 
-from sae_cooccurence.graph_generation import load_subgraph, plot_subgraph_static
+from sae_cooccurrence.graph_generation import load_subgraph, plot_subgraph_static
 
 
 def assign_category(row, fs_splitting_cluster, order_other_subgraphs=False):

@@ -3,7 +3,7 @@ from typing import NamedTuple
 import pytest
 import torch
 
-from sae_cooccurence.normalised_cooc_functions import check_if_sae_has_threshold
+from sae_cooccurrence.normalised_cooc_functions import check_if_sae_has_threshold
 
 
 # Mock SAE class

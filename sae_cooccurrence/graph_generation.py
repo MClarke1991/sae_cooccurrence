@@ -18,7 +18,7 @@ from scipy.spatial.distance import euclidean
 from torch import topk as torch_topk
 from tqdm.autonotebook import tqdm
 
-from sae_cooccurence.utils.mc_neuronpedia import (
+from sae_cooccurrence.utils.mc_neuronpedia import (
     get_neuronpedia_feature_dashboard_no_open,
     get_neuronpedia_quick_list_no_open,
 )

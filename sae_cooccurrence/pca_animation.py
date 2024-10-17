@@ -1,7 +1,7 @@
 import plotly.express as px
 import plotly.graph_objects as go
 
-from sae_cooccurence.pca import ProcessedExamples, prepare_data
+from sae_cooccurrence.pca import ProcessedExamples, prepare_data
 
 
 def get_point_result(results, idx):

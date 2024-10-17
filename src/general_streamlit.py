@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import streamlit_plotly_events as spe
 
-from sae_cooccurence.utils.set_paths import get_git_root
+from sae_cooccurrence.utils.set_paths import get_git_root
 
 
 def generate_color_palette(n_colors):

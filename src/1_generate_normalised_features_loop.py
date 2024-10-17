@@ -7,12 +7,12 @@ import toml
 import torch
 from tqdm.auto import tqdm
 
-from sae_cooccurence.normalised_cooc_functions import (
+from sae_cooccurrence.normalised_cooc_functions import (
     generate_normalised_features,
     setup_logging,
 )
-from sae_cooccurence.utils.saving_loading import set_device
-from sae_cooccurence.utils.set_paths import get_git_root
+from sae_cooccurrence.utils.saving_loading import set_device
+from sae_cooccurrence.utils.set_paths import get_git_root
 
 
 # Function to split activation_thresholds into batches of 4
