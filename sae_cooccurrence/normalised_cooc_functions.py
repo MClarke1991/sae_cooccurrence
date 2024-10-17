@@ -44,7 +44,6 @@ def generate_normalised_features(
     tar_name: str,
     activation_thresholds: list[float | int],
     n_batches: int = 100,
-    half_precision: bool = False,
     generate_jaccard: bool = True,
     generate_tar: bool = True,
     n_batches_in_buffer: int = 32,
@@ -68,7 +67,6 @@ def generate_normalised_features(
     the threshold is the minimum activation value for a feature to be considered active.
     - n_batches (int, optional): The number of batches of the Activations Store to use for computing co-occurrence matrices.
     Defaults to 100.
-    - half_precision (bool, optional): Whether to use half precision for computations. Defaults to False.
     - generate_jaccard (bool, optional): Whether to generate Jaccard matrices. Defaults to True.
     - generate_tar (bool, optional): Whether to compress the results directory to a tar file. Defaults to True.
     - n_batches_in_buffer (int, optional): The number of batches to keep in memory for processing. Defaults to 32.
@@ -125,13 +123,11 @@ def generate_normalised_features(
 
     if not check_all_files_exist(results_path, activation_thresholds, "total"):
         total_matrices = compute_cooccurrence_matrices(
-            sae,
-            sae_id,
-            activation_store,
-            n_batches,
-            activation_thresholds,
-            device,
-            half_precision=half_precision,
+            sae=sae,
+            activation_store=activation_store,
+            n_batches=n_batches,
+            activation_thresholds=activation_thresholds,
+            device=device,
         )
         logging.info("Co-occurrence matrices calculated.")
         if save:
@@ -156,14 +152,9 @@ def generate_normalised_features(
             if os.path.exists(file_path):
                 with np.load(file_path) as data:
                     array_name = list(data.keys())[0]
-                    if half_precision:
-                        total_matrices[threshold] = torch.tensor(
-                            data[array_name], device=device
-                        ).to(torch.float16)
-                    else:
-                        total_matrices[threshold] = torch.tensor(
-                            data[array_name], device=device
-                        )
+                    total_matrices[threshold] = torch.tensor(
+                        data[array_name], device=device
+                    )
                 print(f"Loaded matrix for threshold {threshold}")
             else:
                 print(f"Warning: No file found for threshold {threshold}")
@@ -313,12 +304,10 @@ def get_sae_threshold(sae: SAE, device: str) -> torch.Tensor:
 
 def compute_cooccurrence_matrices(
     sae: SAE,
-    sae_id: str,
     activation_store: ActivationsStore,
     n_batches: int,
     activation_thresholds: list[float],
     device: str,
-    half_precision: bool = False,
 ) -> dict[float, torch.Tensor]:
     """
     Computes co-occurrence matrices for given activation thresholds and precision.
@@ -326,7 +315,6 @@ def compute_cooccurrence_matrices(
     This function iterates over a specified number of batches from the activation store,
     processes each batch through a given SAE model, and computes co-occurrence matrices
     for each specified activation threshold. The matrices are accumulated over all batches.
-    The function can operate in either full or half precision, depending on the `half_precision` parameter.
 
     Args:
     - sae (SAE): The SAE model to use for encoding activations.
@@ -336,7 +324,6 @@ def compute_cooccurrence_matrices(
     - activation_thresholds (list[float]): A list of thresholds for which to compute co-occurrence matrices,
     where the threshold is the minimum activation value for a feature to be considered active.
     - device (str): The device on which to perform computations (e.g. 'cpu', 'cuda', 'mps').
-    - half_precision (bool, optional): If True, computations are performed in half precision. Defaults to False.
 
     Returns:
     - dict[float, torch.Tensor]: A dictionary where each key is an activation threshold and
@@ -345,44 +332,22 @@ def compute_cooccurrence_matrices(
 
     sae_threshold = get_sae_threshold(sae, device)
 
-    if half_precision:
-        feature_acts_cooc_totals = {
-            t: torch.zeros(
-                (sae.cfg.d_sae, sae.cfg.d_sae), dtype=torch.float16, device=device
-            )
-            for t in activation_thresholds
-        }
-        for _ in tqdm(range(n_batches), desc=f"Processing {sae_id}", leave=False):
-            activations_batch = (
-                activation_store.next_batch().half()
-            )  # Convert to half-precision
-            feature_acts = sae.encode(activations_batch).squeeze()
+    feature_acts_cooc_totals = {
+        t: torch.zeros((sae.cfg.d_sae, sae.cfg.d_sae), dtype=torch.float, device=device)
+        for t in activation_thresholds
+    }
+    for _ in tqdm(
+        range(n_batches), desc=f"Processing {sae.cfg.neuronpedia_id}", leave=False
+    ):
+        activations_batch = activation_store.next_batch()
+        feature_acts = sae.encode(activations_batch).squeeze()
 
-            for threshold in activation_thresholds:
-                feature_acts_bool = apply_activation_threshold(
-                    feature_acts, threshold, sae_threshold
-                )
-                feature_acts_cooc = feature_acts_bool.T @ feature_acts_bool
-                feature_acts_cooc_totals[threshold] += (
-                    feature_acts_cooc.half()
-                )  # Convert to half-precision
-    else:
-        feature_acts_cooc_totals = {
-            t: torch.zeros(
-                (sae.cfg.d_sae, sae.cfg.d_sae), dtype=torch.float, device=device
+        for threshold in activation_thresholds:
+            feature_acts_bool = apply_activation_threshold(
+                feature_acts, threshold, sae_threshold
             )
-            for t in activation_thresholds
-        }
-        for _ in tqdm(range(n_batches), leave=False):
-            activations_batch = activation_store.next_batch()
-            feature_acts = sae.encode(activations_batch).squeeze()
-
-            for threshold in activation_thresholds:
-                feature_acts_bool = apply_activation_threshold(
-                    feature_acts, threshold, sae_threshold
-                )
-                feature_acts_cooc = feature_acts_bool.T @ feature_acts_bool
-                feature_acts_cooc_totals[threshold] += feature_acts_cooc
+            feature_acts_cooc = feature_acts_bool.T @ feature_acts_bool
+            feature_acts_cooc_totals[threshold] += feature_acts_cooc
 
     return feature_acts_cooc_totals
 

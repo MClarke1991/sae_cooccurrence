@@ -21,7 +21,9 @@ def mock_environment():
 
     class MockSAE:
         def __init__(self):
-            self.cfg = type("obj", (object,), {"d_sae": 10})
+            self.cfg = type(
+                "obj", (object,), {"d_sae": 10, "neuronpedia_id": "mock_sae_id"}
+            )
 
         def encode(self, x):
             return torch.rand(x.shape[0], self.cfg.d_sae)  # type: ignore
@@ -47,7 +49,7 @@ def test_compute_cooccurrence_matrices(mock_environment, snapshot):
 
     # Compute actual results
     actual_results = compute_cooccurrence_matrices(
-        sae, sae_id, activation_store, n_batches, activation_thresholds, device
+        sae, activation_store, n_batches, activation_thresholds, device
     )
 
     # Serialize results
