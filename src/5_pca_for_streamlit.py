@@ -9,9 +9,9 @@ import torch
 from sae_lens import ActivationsStore
 from tqdm.autonotebook import tqdm
 
-from sae_cooccurence.pca import perform_pca_on_results, process_examples
-from sae_cooccurence.utils.saving_loading import load_model_and_sae, set_device
-from sae_cooccurence.utils.set_paths import get_git_root
+from sae_cooccurrence.pca import perform_pca_on_results, process_examples
+from sae_cooccurrence.utils.saving_loading import load_model_and_sae, set_device
+from sae_cooccurrence.utils.set_paths import get_git_root
 
 
 def process_graph_for_pca(

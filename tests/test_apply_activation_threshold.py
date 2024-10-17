@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from sae_cooccurence.normalised_cooc_functions import apply_activation_threshold
+from sae_cooccurrence.normalised_cooc_functions import apply_activation_threshold
 
 
 def test_apply_activation_threshold_basic():

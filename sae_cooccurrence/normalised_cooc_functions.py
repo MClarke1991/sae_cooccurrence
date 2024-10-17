@@ -9,11 +9,11 @@ from sae_lens import SAE, ActivationsStore
 from tqdm.auto import tqdm
 from transformer_lens import HookedTransformer
 
-from sae_cooccurence.utils.saving_loading import (
+from sae_cooccurrence.utils.saving_loading import (
     compress_directory_to_tar,
     load_npz_files,
 )
-from sae_cooccurence.utils.set_paths import get_git_root
+from sae_cooccurrence.utils.set_paths import get_git_root
 
 
 def setup_logging(

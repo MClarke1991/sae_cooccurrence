@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from sae_cooccurence.normalised_cooc_functions import compute_cooccurrence_matrices
+from sae_cooccurrence.normalised_cooc_functions import compute_cooccurrence_matrices
 
 
 def numpy_serializer(obj):

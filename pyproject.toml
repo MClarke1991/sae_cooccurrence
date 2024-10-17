@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "sae-cooccurence"
+name = "sae-cooccurrence"
 version = "0.1.0"
 description = ""
 authors = ["MClarke1991 <matthewaclarke1991@gmail.com>"]

@@ -6,7 +6,9 @@ import numpy as np
 import pytest
 import torch
 
-from sae_cooccurence.normalised_cooc_functions import calculate_jaccard_matrices_chunked
+from sae_cooccurrence.normalised_cooc_functions import (
+    calculate_jaccard_matrices_chunked,
+)
 
 
 @pytest.fixture

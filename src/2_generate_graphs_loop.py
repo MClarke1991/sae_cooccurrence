@@ -16,7 +16,7 @@ from sae_lens import SAE
 from tqdm.auto import tqdm
 from transformer_lens import HookedTransformer
 
-from sae_cooccurence.graph_generation import (
+from sae_cooccurrence.graph_generation import (
     calculate_token_factors_inds_efficient,
     create_graph_from_matrix,
     create_node_info_dataframe,
@@ -27,15 +27,15 @@ from sae_cooccurence.graph_generation import (
     remove_low_weight_edges,
     remove_self_loops_inplace,
 )
-from sae_cooccurence.normalised_cooc_functions import setup_logging
-from sae_cooccurence.utils.saving_loading import (
+from sae_cooccurrence.normalised_cooc_functions import setup_logging
+from sae_cooccurrence.utils.saving_loading import (
     load_model_and_sae,
     load_npz_files,
     log_config_variables,
     notify,
     set_device,
 )
-from sae_cooccurence.utils.set_paths import get_git_root
+from sae_cooccurrence.utils.set_paths import get_git_root
 
 
 def process_sae_for_graph(sae_id: str, config: dict, device: str) -> None:
