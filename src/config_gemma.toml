@@ -13,6 +13,7 @@ sae_ids = [
 ]
 activation_thresholds = [10]
 n_batches_in_buffer = 4
+remove_first_token = true
 
 ['analysis']
 random_seed = 1234
