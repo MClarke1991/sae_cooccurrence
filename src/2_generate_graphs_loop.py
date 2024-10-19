@@ -337,7 +337,7 @@ def main():
     global start_time
     start_time = time.time()
 
-    config = toml.load(pj(git_root, "src", "cooc", "config_gemma.toml"))
+    config = toml.load(pj(git_root, "src", "config_gemma.toml"))
 
     for sae_id in tqdm(config["generation"]["sae_ids"], desc="Processing SAE IDs"):
         process_sae_for_graph(sae_id, config, device)
