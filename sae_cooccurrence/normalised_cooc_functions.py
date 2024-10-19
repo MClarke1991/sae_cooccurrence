@@ -48,6 +48,7 @@ def generate_normalised_features(
     generate_tar: bool = True,
     n_batches_in_buffer: int = 32,
     save: bool = True,
+    remove_first_token: bool = False,
 ) -> None | dict[str, dict[float, torch.Tensor] | dict[float, np.ndarray]]:
     """
     Generates normalised features co-occurrence matrices for a given model, SAE release, and SAE ID.
@@ -71,7 +72,7 @@ def generate_normalised_features(
     - generate_tar (bool, optional): Whether to compress the results directory to a tar file. Defaults to True.
     - n_batches_in_buffer (int, optional): The number of batches to keep in memory for processing. Defaults to 32.
     - save (bool, optional): Whether to save the results to disk. Defaults to True.
-
+    - remove_first_token (bool, optional): Whether to remove the first token from each sequence. Defaults to False.
     Returns:
     - Union[None, dict[str, Union[dict[float, torch.Tensor], dict[float, np.ndarray]]]]:
     If save is False, returns a dictionary containing the total matrices and feature activations. Otherwise, returns None.
@@ -128,6 +129,7 @@ def generate_normalised_features(
             n_batches=n_batches,
             activation_thresholds=activation_thresholds,
             device=device,
+            remove_first_token=remove_first_token,
         )
         logging.info("Co-occurrence matrices calculated.")
         if save:
@@ -302,12 +304,73 @@ def get_sae_threshold(sae: SAE, device: str) -> torch.Tensor:
     return sae_threshold
 
 
+def get_feature_activations_for_batch(
+    activation_store: ActivationsStore,
+    remove_first_token: bool = False,
+) -> torch.Tensor:
+    """
+    Get feature activations for a batch of tokens from an ActivationsStore.
+
+    This function retrieves a batch of activations from the ActivationsStore,
+    optionally removes the first token (typically the beginning-of-sequence token),
+    and encodes the activations using the provided SAE (Sparse Autoencoder).
+
+    Args:
+        activation_store (ActivationsStore): The ActivationsStore object to get activations from.
+        sae (SAE): The Sparse Autoencoder used to encode the activations.
+        remove_first_token (bool, optional): Whether to remove the first token from each sequence.
+                                             Defaults to False.
+
+    Returns:
+        torch.Tensor: Encoded feature activations, shape (batch_size * context_size, d_sae).
+
+    Note:
+        - If remove_first_token is True, the function uses get_flattened_activations_wout_first
+          to retrieve activations without the first token.
+        - The returned tensor is squeezed to remove any singleton dimensions.
+    """
+    if not remove_first_token:
+        activations_batch = activation_store.next_batch()
+    else:
+        activations_batch = get_flattened_activations_wout_first(activation_store)
+    return activations_batch
+
+
+def get_flattened_activations_wout_first(
+    activation_store: ActivationsStore,
+) -> torch.Tensor:
+    """
+    NOTE: this will be a different size from normal activation store batch as we do not get additional tokens to replace the BOS
+    Get flattened activations without the first token (BOS) from an ActivationsStore.
+
+    This function retrieves a batch of tokens, gets their activations, removes the first token
+    (typically the beginning-of-sequence token), and flattens the resulting activations.
+
+    Args:
+        activation_store (ActivationsStore): The ActivationsStore object to get activations from.
+
+    Returns:
+        torch.Tensor: Flattened activations without the first token, shape (batch_size * (context_size - 1), d_in).
+
+    Note:
+        - The function assumes that the first token in each sequence is a BOS token.
+        - The returned tensor is reshaped to match the format of activation_store.next_batch().
+    """
+    batch_size = activation_store.train_batch_size_tokens
+    batch_tokens = activation_store.get_batch_tokens(batch_size)
+    activations = activation_store.get_activations(batch_tokens)
+    activations_wout_bos = activations[:, 1:, ...]
+    flattened_activations = activations_wout_bos.view(-1, activation_store.d_in)
+    return flattened_activations
+
+
 def compute_cooccurrence_matrices(
     sae: SAE,
     activation_store: ActivationsStore,
     n_batches: int,
     activation_thresholds: list[float],
     device: str,
+    remove_first_token: bool = False,
 ) -> dict[float, torch.Tensor]:
     """
     Computes co-occurrence matrices for given activation thresholds and precision.
@@ -324,7 +387,7 @@ def compute_cooccurrence_matrices(
     - activation_thresholds (list[float]): A list of thresholds for which to compute co-occurrence matrices,
     where the threshold is the minimum activation value for a feature to be considered active.
     - device (str): The device on which to perform computations (e.g. 'cpu', 'cuda', 'mps').
-
+    - remove_first_token (bool, optional): Whether to remove the first token from each sequence. Defaults to False.
     Returns:
     - dict[float, torch.Tensor]: A dictionary where each key is an activation threshold and
     the value is the accumulated co-occurrence matrix for that threshold.
@@ -339,7 +402,9 @@ def compute_cooccurrence_matrices(
     for _ in tqdm(
         range(n_batches), desc=f"Processing {sae.cfg.neuronpedia_id}", leave=False
     ):
-        activations_batch = activation_store.next_batch()
+        activations_batch = get_feature_activations_for_batch(
+            activation_store, remove_first_token=remove_first_token
+        )
         feature_acts = sae.encode(activations_batch).squeeze()
 
         for threshold in activation_thresholds:
