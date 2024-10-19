@@ -332,36 +332,53 @@ def get_feature_activations_for_batch(
     if not remove_first_token:
         activations_batch = activation_store.next_batch()
     else:
-        activations_batch = get_flattened_activations_wout_first(activation_store)
+        activations_batch = get_batch_without_first_token(activation_store)
     return activations_batch
 
 
-def get_flattened_activations_wout_first(
-    activation_store: ActivationsStore,
-) -> torch.Tensor:
+def get_batch_without_first_token(activations_store):
     """
-    NOTE: this will be a different size from normal activation store batch as we do not get additional tokens to replace the BOS
-    Get flattened activations without the first token (BOS) from an ActivationsStore.
-
-    This function retrieves a batch of tokens, gets their activations, removes the first token
-    (typically the beginning-of-sequence token), and flattens the resulting activations.
+    Get a batch of activations from the ActivationsStore, removing the first token of every prompt.
 
     Args:
-        activation_store (ActivationsStore): The ActivationsStore object to get activations from.
+    activations_store (ActivationsStore): An instance of the ActivationsStore class.
 
     Returns:
-        torch.Tensor: Flattened activations without the first token, shape (batch_size * (context_size - 1), d_in).
-
-    Note:
-        - The function assumes that the first token in each sequence is a BOS token.
-        - The returned tensor is reshaped to match the format of activation_store.next_batch().
+    torch.Tensor: A tensor of shape [train_batch_size, 1, d_in] containing activations,
+                  with the first token of each prompt removed.
     """
-    batch_size = activation_store.train_batch_size_tokens
-    batch_tokens = activation_store.get_batch_tokens(batch_size)
-    activations = activation_store.get_activations(batch_tokens)
-    activations_wout_bos = activations[:, 1:, ...]
-    flattened_activations = activations_wout_bos.view(-1, activation_store.d_in)
-    return flattened_activations
+    # Get a batch of tokens
+    batch_tokens = activations_store.get_batch_tokens()
+
+    # Get activations for these tokens
+    with torch.no_grad():
+        activations = activations_store.get_activations(batch_tokens)
+
+    # Remove the first token's activation from each prompt
+    activations = activations[:, 1:, ...]
+
+    # Note I believe that this is necessary because ActivationsStore.next_batch() gets `train_batch_size_tokens` tokens
+    # whereas ActivationsStore.get_batch_tokens() gets `store_batch_size_prompts` i.e. n `prompts of context_size` tokens each.
+    # However, normally the ActivationsStore is initialised such that
+    # train_batch_size_tokens` = `store_batch_size_prompts` * `context_size` and ActivationsStore.get_batch_tokens() defaults to
+    # `store_batch_size_prompts` i.e. the same number of tokens as next_batch()
+
+    # Reshape to match the output of next_batch() because the batch of tokens are stored as seperate prompts whereas next_batch()
+    # returns a single batch of tokens from the prompts shuffled together
+    activations = activations.reshape(-1, 1, activations.shape[-1])
+
+    # If there's any normalization applied in the original next_batch(), apply it here
+    if activations_store.normalize_activations == "expected_average_only_in":
+        activations = activations_store.apply_norm_scaling_factor(activations)
+
+    # Shuffle the activations
+    # activations = activations[torch.randperm(activations.shape[0])]
+
+    # Get the correct batch size
+    train_batch_size = activations_store.train_batch_size_tokens
+
+    # Return only the required number of activations
+    return activations[:train_batch_size]
 
 
 def compute_cooccurrence_matrices(
