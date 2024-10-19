@@ -306,6 +306,7 @@ def get_sae_threshold(sae: SAE, device: str) -> torch.Tensor:
 
 def get_feature_activations_for_batch(
     activation_store: ActivationsStore,
+    device: str,
     remove_first_token: bool = False,
 ) -> torch.Tensor:
     """
@@ -332,11 +333,13 @@ def get_feature_activations_for_batch(
     if not remove_first_token:
         activations_batch = activation_store.next_batch()
     else:
-        activations_batch = get_batch_without_first_token(activation_store)
+        activations_batch = get_batch_without_first_token(activation_store, device)
     return activations_batch
 
 
-def get_batch_without_first_token(activations_store):
+def get_batch_without_first_token(
+    activations_store: ActivationsStore, device: str
+) -> torch.Tensor:
     """
     Get a batch of activations from the ActivationsStore, removing the first token of every prompt.
 
@@ -348,11 +351,11 @@ def get_batch_without_first_token(activations_store):
                   with the first token of each prompt removed.
     """
     # Get a batch of tokens
-    batch_tokens = activations_store.get_batch_tokens()
+    batch_tokens = activations_store.get_batch_tokens().to(device)
 
     # Get activations for these tokens
     with torch.no_grad():
-        activations = activations_store.get_activations(batch_tokens)
+        activations = activations_store.get_activations(batch_tokens).to(device)
 
     # Remove the first token's activation from each prompt
     activations = activations[:, 1:, ...]
@@ -420,7 +423,7 @@ def compute_cooccurrence_matrices(
         range(n_batches), desc=f"Processing {sae.cfg.neuronpedia_id}", leave=False
     ):
         activations_batch = get_feature_activations_for_batch(
-            activation_store, remove_first_token=remove_first_token
+            activation_store, device, remove_first_token=remove_first_token
         )
         feature_acts = sae.encode(activations_batch).squeeze()
 

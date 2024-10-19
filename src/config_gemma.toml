@@ -1,5 +1,5 @@
 ['generation']
-n_batches = 50
+n_batches = 10
 model_name = "gemma-2-2b"
 sae_release = "gemma-scope-2b-pt-res-canonical"
 sae_release_short = "gemma-scope-2b-pt-res-canonical"
