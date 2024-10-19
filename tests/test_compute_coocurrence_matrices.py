@@ -43,11 +43,11 @@ def mock_environment():
         def get_batch_tokens(self):
             return torch.randint(0, 1000, (8, 13))  # 8 prompts, 13 tokens each
 
-        def get_activations(self, batch_tokens=None):
-            # Ignore the batch_tokens argument for the mock
-            if batch_tokens is not None:
-                raise ValueError("batch_tokens argument is not supported in the mock")
-            return torch.rand(8, 13, 50)  # 8 prompts, 13 tokens, 50 features
+        def get_activations(self, batch_tokens):
+            n_batches, n_context = batch_tokens.shape
+            return torch.rand(
+                n_batches, n_context, 1, 50
+            )  # n_batches prompts, n_context tokens, 1, 50 features
 
     sae = MockSAE()
     activation_store = MockActivationStore()
