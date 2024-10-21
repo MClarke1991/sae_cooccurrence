@@ -7,7 +7,7 @@ sae_release_short = "res-jb"
 sae_ids = ["blocks.7.hook_resid_pre"]
 # activation_thresholds = [0.0, 0.1, 0.5, 1.5]
 activation_thresholds = [1.5]
-remove_first_token = false
+remove_special_tokens = false
 
 ['analysis']
 random_seed = 1234
