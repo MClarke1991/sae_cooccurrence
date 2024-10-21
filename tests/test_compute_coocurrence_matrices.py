@@ -55,15 +55,32 @@ def mock_environment():
     n_batches = 5
     activation_thresholds = [0.1, 0.5]
     device = "cpu"
+    special_tokens = {0, 1, 2}  # Mock special tokens
 
-    return sae, activation_store, sae_id, n_batches, activation_thresholds, device
-
-
-@pytest.mark.parametrize("remove_first_token", [False, True])
-def test_compute_cooccurrence_matrices(mock_environment, snapshot, remove_first_token):
-    sae, activation_store, sae_id, n_batches, activation_thresholds, device = (
-        mock_environment
+    return (
+        sae,
+        activation_store,
+        sae_id,
+        n_batches,
+        activation_thresholds,
+        device,
+        special_tokens,
     )
+
+
+@pytest.mark.parametrize("remove_special_tokens", [False, True])
+def test_compute_cooccurrence_matrices(
+    mock_environment, snapshot, remove_special_tokens
+):
+    (
+        sae,
+        activation_store,
+        sae_id,
+        n_batches,
+        activation_thresholds,
+        device,
+        special_tokens,
+    ) = mock_environment
 
     # Compute actual results
     actual_results = compute_cooccurrence_matrices(
@@ -72,7 +89,8 @@ def test_compute_cooccurrence_matrices(mock_environment, snapshot, remove_first_
         n_batches,
         activation_thresholds,
         device,
-        remove_first_token=remove_first_token,
+        remove_special_tokens_acts=remove_special_tokens,
+        special_tokens=special_tokens,
     )
 
     # Serialize results
@@ -84,11 +102,11 @@ def test_compute_cooccurrence_matrices(mock_environment, snapshot, remove_first_
     for threshold, serialized_matrix in serialized_results.items():
         snapshot.assert_match(
             serialized_matrix,
-            f"cooccurrence_matrix_{threshold}_remove_first_{remove_first_token}",
+            f"cooccurrence_matrix_{threshold}_remove_special_{remove_special_tokens}",
         )
 
     print(
-        f"Snapshot test completed successfully for remove_first_token={remove_first_token}!"
+        f"Snapshot test completed successfully for remove_special_tokens={remove_special_tokens}!"
     )
 
 
