@@ -172,6 +172,14 @@ def plot_max_activations(
         ax1.set_ylabel("Count")
         ax1.set_yscale("log")
         ax1.grid(True, which="both", ls="-", alpha=0.2)
+        # Add vertical line for activation threshold
+        ax1.axvline(
+            x=activation_threshold,
+            color="r",
+            linestyle="--",
+            label=f"Activation Threshold ({activation_threshold})",
+        )
+        ax1.legend()
 
         # Find the first bin with zero entries
         non_zero_bins = np.where(counts == 0)[0]
@@ -189,6 +197,14 @@ def plot_max_activations(
         ax2.set_ylabel("Count")
         ax2.set_yscale("log")
         ax2.grid(True, which="both", ls="-", alpha=0.2)
+        # Add vertical line for activation threshold
+        ax2.axvline(
+            x=activation_threshold,
+            color="r",
+            linestyle="--",
+            label=f"Activation Threshold ({activation_threshold})",
+        )
+        ax2.legend()
 
         # Fraction of features observed more than threshold times over batches
         ax3.plot(batch_numbers, fraction_features_observed, marker="o")
@@ -215,3 +231,36 @@ def plot_max_activations(
         gc.collect()
 
         print("PyTorch memory cleared.")
+
+
+# # Temp for debug ----------------------------
+
+# if __name__ == "__main__":
+
+#     model_name_gemma22b = "gemma-2-2b"
+
+#     sae_release_short_gemma22b = "gemma-scope-2b-pt-res-canonical"
+
+#     gemma_batches = 4
+
+#     sae_ids_gemma22b = [
+#         # "layer_0/width_16k/canonical",
+#     # "layer_12/width_16k/canonical",
+#     # "layer_18/width_16k/canonical",
+#     "layer_21/width_16k/canonical",
+#     # "layer_25/width_16k/canonical"
+# ]
+
+#     plot_max_activations(
+#         sae_ids_gemma22b,
+#         model_name_gemma22b,
+#         sae_release_short_gemma22b,
+#         n_batches=10,
+#         n_bins=100,
+#         activation_threshold=1.5,
+#         observation_threshold=10,
+#         n_batches_in_buffer=gemma_batches,
+#         remove_special_tokens=True,
+#         normalise_internal_threshold=True,
+#         apply_internal_activation_threshold=False,
+# )
