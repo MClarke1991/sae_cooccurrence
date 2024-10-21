@@ -59,7 +59,7 @@ def generate_normalised_features(
     generate_tar: bool = True,
     n_batches_in_buffer: int = 32,
     save: bool = True,
-    remove_special_tokens: bool = False,
+    remove_special_token_acts: bool = False,
 ) -> None | dict[str, dict[float, torch.Tensor] | dict[float, np.ndarray]]:
     """
     Generates normalised features co-occurrence matrices for a given model, SAE release, and SAE ID.
@@ -83,7 +83,7 @@ def generate_normalised_features(
     - generate_tar (bool, optional): Whether to compress the results directory to a tar file. Defaults to True.
     - n_batches_in_buffer (int, optional): The number of batches to keep in memory for processing. Defaults to 32.
     - save (bool, optional): Whether to save the results to disk. Defaults to True.
-    - remove_special_tokens (bool, optional): Whether to remove the special tokens from the batch. Defaults to False.
+    - remove_special_tokens_acts (bool, optional): Whether to remove the activations of special tokens from the batch. Defaults to False.
     Returns:
     - Union[None, dict[str, Union[dict[float, torch.Tensor], dict[float, np.ndarray]]]]:
     If save is False, returns a dictionary containing the total matrices and feature activations. Otherwise, returns None.
@@ -142,7 +142,7 @@ def generate_normalised_features(
             n_batches=n_batches,
             activation_thresholds=activation_thresholds,
             device=device,
-            remove_special_tokens=remove_special_tokens,
+            remove_special_tokens_acts=remove_special_token_acts,
             special_tokens=special_tokens,
         )
         logging.info("Co-occurrence matrices calculated.")
@@ -321,7 +321,7 @@ def get_sae_threshold(sae: SAE, device: str) -> torch.Tensor:
 def get_feature_activations_for_batch(
     activation_store: ActivationsStore,
     device: str,
-    remove_special_tokens: bool,
+    remove_special_tokens_acts: bool,
     special_tokens: set[int | None],
 ) -> torch.Tensor:
     """
@@ -334,8 +334,9 @@ def get_feature_activations_for_batch(
     Args:
         activation_store (ActivationsStore): The ActivationsStore object to get activations from.
         sae (SAE): The Sparse Autoencoder used to encode the activations.
-        remove_first_token (bool, optional): Whether to remove the first token from each sequence.
-                                             Defaults to False.
+        remove_special_tokens_acts (bool, optional): Whether to remove the activations of special tokens from the batch.
+                                                     Defaults to False.
+        special_tokens (set[int | None]): A set of special tokens to remove from the batch e.g. bos, eos, pad.
 
     Returns:
         torch.Tensor: Encoded feature activations, shape (batch_size * context_size, d_sae).
@@ -345,7 +346,7 @@ def get_feature_activations_for_batch(
           to retrieve activations without the first token.
         - The returned tensor is squeezed to remove any singleton dimensions.
     """
-    if not remove_special_tokens:
+    if not remove_special_tokens_acts:
         activations_batch = activation_store.next_batch()
     else:
         activations_batch = get_batch_without_special_token_activations(
@@ -414,7 +415,7 @@ def compute_cooccurrence_matrices(
     n_batches: int,
     activation_thresholds: list[float],
     device: str,
-    remove_special_tokens: bool,
+    remove_special_tokens_acts: bool,
     special_tokens: set[int | None],
 ) -> dict[float, torch.Tensor]:
     """
@@ -432,7 +433,7 @@ def compute_cooccurrence_matrices(
     - activation_thresholds (list[float]): A list of thresholds for which to compute co-occurrence matrices,
     where the threshold is the minimum activation value for a feature to be considered active.
     - device (str): The device on which to perform computations (e.g. 'cpu', 'cuda', 'mps').
-    - remove_special_tokens (bool, optional): Whether to remove the first token from each sequence. Defaults to False.
+    - remove_special_tokens_acts (bool, optional): Whether to remove the activations of special tokens from the batch. Defaults to False.
     - special_tokens (set[int | None]): A set of special tokens to remove from the batch e.g. bos, eos, pad.
     Returns:
     - dict[float, torch.Tensor]: A dictionary where each key is an activation threshold and
@@ -449,7 +450,7 @@ def compute_cooccurrence_matrices(
         range(n_batches), desc=f"Processing {sae.cfg.neuronpedia_id}", leave=False
     ):
         activations_batch = get_feature_activations_for_batch(
-            activation_store, device, remove_special_tokens, special_tokens
+            activation_store, device, remove_special_tokens_acts, special_tokens
         )
         feature_acts = sae.encode(activations_batch).squeeze()
 

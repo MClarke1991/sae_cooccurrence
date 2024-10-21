@@ -46,7 +46,7 @@ def test_get_feature_activations_for_batch(
     result = get_feature_activations_for_batch(
         mock_activation_store,
         device=device,
-        remove_special_tokens=remove_special_tokens,
+        remove_special_tokens_acts=remove_special_tokens,
         special_tokens=mock_special_tokens,
     )
 
@@ -75,7 +75,7 @@ def test_get_feature_activations_for_batch_returns_tensor(
     result = get_feature_activations_for_batch(
         mock_activation_store,
         device=device,
-        remove_special_tokens=False,
+        remove_special_tokens_acts=False,
         special_tokens=mock_special_tokens,
     )
     assert torch.is_tensor(result)
@@ -97,7 +97,7 @@ def test_get_feature_activations_for_batch_device_consistency(
         result = get_feature_activations_for_batch(
             mock_activation_store,
             device=device,
-            remove_special_tokens=remove_special_tokens,
+            remove_special_tokens_acts=remove_special_tokens,
             special_tokens=mock_special_tokens,
         )
 

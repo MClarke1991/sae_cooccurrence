@@ -95,7 +95,7 @@ def process_sae(
             tar_name=tar_name,
             activation_thresholds=threshold_batch,
             n_batches_in_buffer=n_batches_in_buffer,
-            remove_special_tokens=remove_special_tokens,
+            remove_special_token_acts=remove_special_tokens,
             save=True,
         )
 

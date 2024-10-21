@@ -89,7 +89,7 @@ def test_compute_cooccurrence_matrices(
         n_batches,
         activation_thresholds,
         device,
-        remove_special_tokens=remove_special_tokens,
+        remove_special_tokens_acts=remove_special_tokens,
         special_tokens=special_tokens,
     )
 
