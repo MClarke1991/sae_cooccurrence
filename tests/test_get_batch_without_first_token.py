@@ -153,7 +153,7 @@ def test_get_batch_without_special_tokens_correct_batch_size(
 
 
 @pytest.mark.parametrize("device", available_devices)
-def test_get_batch_without_first_token_shape(
+def test_get_batch_without_special_token_activations_shape(
     mock_activations_store, special_tokens, device
 ):
     mock_activations_store.get_batch_tokens.return_value = torch.randint(
@@ -207,7 +207,7 @@ def test_get_batch_without_first_token_shape(
 
 
 @pytest.mark.parametrize("device", available_devices)
-def test_get_batch_without_first_token_normalization(
+def test_get_batch_without_special_token_activations_normalization(
     mock_activations_store, special_tokens, device
 ):
     mock_activations_store.get_batch_tokens.return_value = torch.randint(
@@ -230,7 +230,7 @@ def test_get_batch_without_first_token_normalization(
 
 
 @pytest.mark.parametrize("device", available_devices)
-def test_get_batch_without_first_token_no_normalization(
+def test_get_batch_without_special_token_activations_no_normalization(
     mock_activations_store, special_tokens, device
 ):
     mock_activations_store.normalize_activations = None
@@ -251,7 +251,7 @@ def test_get_batch_without_first_token_no_normalization(
 
 
 @pytest.mark.parametrize("device", available_devices)
-def test_get_batch_without_first_token_correct_batch_size(
+def test_get_batch_without_special_token_activations_correct_batch_size(
     mock_activations_store, special_tokens, device
 ):
     mock_activations_store.train_batch_size_tokens = 50
@@ -274,7 +274,7 @@ def test_get_batch_without_first_token_correct_batch_size(
 
 
 @pytest.mark.parametrize("device", available_devices)
-def test_get_batch_without_first_token_no_shuffle(
+def test_get_batch_without_special_token_activations_no_shuffle(
     mock_activations_store, special_tokens, device
 ):
     with patch("torch.randperm") as mock_randperm:
