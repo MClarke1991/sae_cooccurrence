@@ -111,7 +111,9 @@ def plot_max_activations(
             )
             feature_acts = sae.encode(activations_batch).squeeze()
             if normalise_internal_threshold and not apply_internal_activation_threshold:
-                feature_acts = feature_acts - sae_threshold
+                feature_acts = torch.where(
+                    feature_acts != 0, feature_acts - sae_threshold, feature_acts
+                )
             elif (
                 apply_internal_activation_threshold and not normalise_internal_threshold
             ):
