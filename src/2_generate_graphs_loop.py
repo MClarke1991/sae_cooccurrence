@@ -57,8 +57,13 @@ def process_sae_for_graph(sae_id: str, config: dict, device: str) -> None:
         if config["generation"]["model_name"] == "gemma-2-2b"
         else f"{config['generation']['model_name']}-{config['generation']['sae_release_short']}"
     )
-    results_dir = f"results/cooc/{config['generation']['model_name']}/{config['generation']['sae_release_short']}/{sae_id_neat}"
+    results_dir = f"results/{config['generation']['model_name']}/{config['generation']['sae_release_short']}/{sae_id_neat}"
     results_path = pj(get_git_root(), results_dir)
+
+    if not os.path.exists(results_path):
+        raise FileNotFoundError(
+            f"The results path '{results_path}' does not exist. Check correctly specified/that data generation has been run."
+        )
 
     setup_logging(
         results_path,
