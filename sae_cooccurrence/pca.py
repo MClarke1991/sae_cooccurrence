@@ -2247,17 +2247,11 @@ def create_combined_subgraph_bar_plot(
             node_colors.append(plt.cm.viridis(normalized_activation))  # type: ignore
 
     edge_weights = [subgraph[u][v]["weight"] for u, v in subgraph.edges()]
-    max_weight = (
-        max(edge_weights, key=lambda x: x["weight"])["weight"] if edge_weights else 1
-    )
-    min_weight = (
-        min(edge_weights, key=lambda x: x["weight"])["weight"] if edge_weights else 0
-    )
-    normalized_weights = (
-        [(w["weight"] - min_weight) / (max_weight - min_weight) for w in edge_weights]
-        if max_weight != min_weight
-        else [1] * len(edge_weights)
-    )
+    max_weight = max(edge_weights)
+    min_weight = min(edge_weights)
+    normalized_weights = [
+        (w - min_weight) / (max_weight - min_weight) for w in edge_weights
+    ]
     edge_thickness = [0.5 + 4.5 * w for w in normalized_weights]
 
     nx.draw(
