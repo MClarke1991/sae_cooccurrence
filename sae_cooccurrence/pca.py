@@ -2073,25 +2073,33 @@ def create_comprehensive_plot_subgraph_matplotlib(
                 )
                 node_colors.append(plt.cm.Blues(normalized_activation))  # type: ignore
 
-        edge_weights = [subgraph[u][v]["weight"] for u, v in subgraph.edges()]
-        max_weight = (
-            max(edge_weights, key=lambda x: x["weight"])["weight"]
-            if edge_weights
-            else 1
-        )
-        min_weight = (
-            min(edge_weights, key=lambda x: x["weight"])["weight"]
-            if edge_weights
-            else 0
-        )
-        normalized_weights = (
-            [
-                (w["weight"] - min_weight) / (max_weight - min_weight)
-                for w in edge_weights
-            ]
-            if max_weight != min_weight
-            else [1] * len(edge_weights)
-        )
+        # potential fix
+        # edge_weights = []
+        # for edge in subgraph.edges():
+        #     weight_data = subgraph.get_edge_data(*edge)
+        #     if weight_data and 'weight' in weight_data:
+        #         try:
+        #             weight_value = float(weight_data['weight'])
+        #             edge_weights.append(weight_value)
+        #         except (ValueError, TypeError):
+        #             # If conversion fails, use a default weight
+        #             edge_weights.append(1.0)
+        #     else:
+        #         edge_weights.append(1.0)
+
+        edge_weights = [float(subgraph[u][v]["weight"]) for u, v in subgraph.edges()]  # type: ignore
+        if edge_weights:
+            max_weight = max(edge_weights)
+            min_weight = min(edge_weights)
+            if max_weight != min_weight:
+                normalized_weights = [
+                    (w - min_weight) / (max_weight - min_weight) for w in edge_weights
+                ]
+            else:
+                normalized_weights = [1.0] * len(edge_weights)
+        else:
+            normalized_weights = []
+
         edge_thickness = [0.5 + 4.5 * w for w in normalized_weights]
 
         nx.draw(
