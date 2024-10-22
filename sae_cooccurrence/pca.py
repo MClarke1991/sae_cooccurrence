@@ -1847,11 +1847,16 @@ def analyze_specific_points(
                 pj(point_path, f"pie_charts_point_{point_id}.png"), scale=4.0
             )
             pie_fig.write_html(pj(point_path, f"pie_charts_point_{point_id}.html"))
-        else:
-            bar_fig.show()
-            pie_fig.show()
-            for fig in subgraph_figs:
+
+        bar_fig.show()
+        pie_fig.show()
+        for fig in subgraph_figs:
+            if fig is not None:
                 fig.show()
+            else:
+                print(
+                    "Subgraph figure is None. Likely no latents are within a subgraph."
+                )
 
         # Print statistics for this point
         # print_statistics(df, fs_splitting_nodes, activation_threshold)
