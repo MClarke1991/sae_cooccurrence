@@ -199,12 +199,16 @@ def main():
     st.title("PCA Visualization with Feature Activations")
 
     git_root = get_git_root()
+    sae_id = "blocks.8.hook_resid_pre_24576"
+    sae_id_neat = sae_id.replace(".", "_").replace("/", "_")
     results_root = pj(
         git_root,
-        "results/cooc/gpt2-small/res-jb-feature-splitting/blocks_8_hook_resid_pre_24576/",
+        "results/gpt2-small/res-jb-feature-splitting/blocks_8_hook_resid_pre_24576/",
     )
     pca_results_path = pj(
-        results_root, "pca_for_streamlit", "graph_analysis_results_size_51.h5"
+        results_root,
+        f"{sae_id_neat}_pca_for_streamlit",
+        "graph_analysis_results_size_51.h5",
     )
 
     # Load available subgraphs
