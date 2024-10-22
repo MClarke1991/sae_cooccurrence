@@ -221,8 +221,8 @@ flycheck_*.el
 **/*.npz
 **/*.npy.npz
 **/*.pickle
+**/*.pkl
 **/*.tar.gz
 *.html
 *.parquet
 *.h5
-
