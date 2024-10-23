@@ -35,29 +35,9 @@ def setup_logging(
     )
 
 
-# def get_sae_release(model_name: str, sae_release_short: str) -> str:
-#     """
-#     Determine the SAE release based on the model name.
-
-#     Args:
-#     model_name (str): The name of the model.
-#     sae_release_short (str): A shortened version of the SAE release.
-
-#     Returns:
-#     str: The full SAE release string.
-#     """
-#     if model_name == "gemma-2-2b":
-#         if sae_release_short == "res-canonical":
-#             return "gemma-scope-2b-pt-res-canonical"
-#     elif sae_release_short == "gemma-scope-2b-pt-res":
-#             return "gemma-scope-2b-pt-res"
-#     else:
-#         return f"{model_name}-{sae_release_short}"
-
-
 def get_sae_release(model_name: str, sae_release_short: str) -> str:
     """
-    Determine the SAE release based on the model name. This is used because we do not use the id from sae.cfg.
+    Determine the SAE release based on the model name.
 
     Args:
     model_name (str): The name of the model.
@@ -67,7 +47,12 @@ def get_sae_release(model_name: str, sae_release_short: str) -> str:
     str: The full SAE release string.
     """
     if model_name == "gemma-2-2b":
-        return "gemma-scope-2b-pt-res-canonical"
+        if sae_release_short == "gemma-scope-2b-pt-res-canonical":
+            return "gemma-scope-2b-pt-res-canonical"
+        elif sae_release_short == "gemma-scope-2b-pt-res":
+            return "gemma-scope-2b-pt-res"
+        else:
+            raise ValueError("SAE Release Short unsupported.")
     else:
         return f"{model_name}-{sae_release_short}"
 
