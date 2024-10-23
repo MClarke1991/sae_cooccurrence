@@ -100,7 +100,6 @@ def generate_normalised_features(
     - Union[None, dict[str, Union[dict[float, torch.Tensor], dict[float, np.ndarray]]]]:
     If save is False, returns a dictionary containing the total matrices and feature activations. Otherwise, returns None.
     """
-    sae_release = f"{model_name}-{sae_release_short}"
 
     np.random.seed(1234)
 
