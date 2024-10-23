@@ -46,6 +46,28 @@ def get_special_tokens(model: HookedTransformer) -> set[int | None]:
     return special_tokens
 
 
+def get_sae_release(model_name: str, sae_release_short: str) -> str:
+    """
+    Determine the SAE release based on the model name.
+
+    Args:
+    model_name (str): The name of the model.
+    sae_release_short (str): A shortened version of the SAE release.
+
+    Returns:
+    str: The full SAE release string.
+    """
+    if model_name == "gemma-2-2b":
+        if sae_release_short == "gemma-scope-2b-pt-res-canonical":
+            return "gemma-scope-2b-pt-res-canonical"
+        elif sae_release_short == "gemma-scope-2b-pt-res":
+            return "gemma-scope-2b-pt-res"
+        else:
+            raise ValueError("SAE Release Short unsupported.")
+    else:
+        return f"{model_name}-{sae_release_short}"
+
+
 def generate_normalised_features(
     model_name: str,
     sae_release_short: str,
@@ -88,7 +110,6 @@ def generate_normalised_features(
     - Union[None, dict[str, Union[dict[float, torch.Tensor], dict[float, np.ndarray]]]]:
     If save is False, returns a dictionary containing the total matrices and feature activations. Otherwise, returns None.
     """
-    sae_release = f"{model_name}-{sae_release_short}"
 
     np.random.seed(1234)
 
@@ -107,10 +128,7 @@ def generate_normalised_features(
     ## Model ------
     # Load model and SAE
 
-    if model_name == "gemma-2-2b":
-        sae_release = "gemma-scope-2b-pt-res-canonical"
-    else:
-        sae_release = f"{model_name}-{sae_release_short}"
+    sae_release = get_sae_release(model_name, sae_release_short)
 
     model = HookedTransformer.from_pretrained(model_name, device=device)
     sae, _, _ = SAE.from_pretrained(release=sae_release, sae_id=sae_id, device=device)

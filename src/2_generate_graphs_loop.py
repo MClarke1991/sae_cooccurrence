@@ -27,7 +27,10 @@ from sae_cooccurrence.graph_generation import (
     remove_low_weight_edges,
     remove_self_loops_inplace,
 )
-from sae_cooccurrence.normalised_cooc_functions import setup_logging
+from sae_cooccurrence.normalised_cooc_functions import (
+    get_sae_release,
+    setup_logging,
+)
 from sae_cooccurrence.utils.saving_loading import (
     load_model_and_sae,
     load_npz_files,
@@ -52,13 +55,18 @@ def process_sae_for_graph(sae_id: str, config: dict, device: str) -> None:
     device (str): The device to use for computations (e.g., 'cpu', 'mps', 'cuda').
     """
     sae_id_neat = sae_id.replace(".", "_").replace("/", "_")
-    sae_release = (
-        "gemma-scope-2b-pt-res-canonical"
-        if config["generation"]["model_name"] == "gemma-2-2b"
-        else f"{config['generation']['model_name']}-{config['generation']['sae_release_short']}"
+    sae_release = get_sae_release(
+        config["generation"]["model_name"], config["generation"]["sae_release_short"]
     )
-    results_dir = f"results/cooc/{config['generation']['model_name']}/{config['generation']['sae_release_short']}/{sae_id_neat}"
+    results_dir = (
+        f"results/{config['generation']['model_name']}/{sae_release}/{sae_id_neat}"
+    )
     results_path = pj(get_git_root(), results_dir)
+
+    if not os.path.exists(results_path):
+        raise FileNotFoundError(
+            f"The results path '{results_path}' does not exist. Check correctly specified/that data generation has been run."
+        )
 
     setup_logging(
         results_path,
