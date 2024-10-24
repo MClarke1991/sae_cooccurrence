@@ -129,6 +129,22 @@ def load_data(results_path: str) -> tuple:
     )
 
 
+def save_thresholded_matrices(thresholded_matrices: dict, results_path: str) -> None:
+    """
+    Save thresholded matrices to compressed npz files.
+
+    Args:
+        thresholded_matrices (dict): A dictionary of thresholded matrices.
+        results_path (str): The path where the matrices will be saved.
+    """
+    for threshold, matrix in thresholded_matrices.items():
+        filepath_safe_threshold = str(threshold).replace(".", "_")
+        np.savez_compressed(
+            f"{results_path}/thresholded_matrix_{filepath_safe_threshold}.npz", matrix
+        )
+    logging.info("Thresholded matrices saved.")
+
+
 def process_matrices(
     matrices: dict,
     config: dict,
@@ -158,6 +174,8 @@ def process_matrices(
 
     # Create thresholded matrices by removing edges below the calculated thresholds
     thresholded_matrices = create_thresholded_matrices(matrices, edge_thresholds)
+
+    save_thresholded_matrices(thresholded_matrices, results_path)
 
     # Convert thresholded matrices to graphs
     thresholded_graphs = create_thresholded_graphs(thresholded_matrices)
