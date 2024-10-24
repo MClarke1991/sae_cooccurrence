@@ -119,38 +119,28 @@ def make_token_df(tokens, model, len_prefix=10, len_suffix=10):
         [f"{s}/{i}" for i, s in enumerate(str_tok)] for str_tok in str_tokens
     ]
 
-    context = []
-    batch = []
-    pos = []
-    label = []
+    context, batch, pos, label = [], [], [], []
     for b in range(tokens.shape[0]):
-        # context.append([])
-        # batch.append([])
-        # pos.append([])
-        # label.append([])
         for p in range(tokens.shape[1]):
-            prefix = "".join(str_tokens[b][max(0, p - len_prefix) : p])  # type: ignore
-            if p == tokens.shape[1] - 1:
-                suffix = ""
-            else:
-                suffix = "".join(
-                    str_tokens[b][p + 1 : min(tokens.shape[1] - 1, p + 1 + len_suffix)]
-                )  # type: ignore
+            prefix = "".join(str_tokens[b][max(0, p - len_prefix) : p])
+            suffix = "".join(
+                str_tokens[b][p + 1 : min(tokens.shape[1], p + 1 + len_suffix)]
+            )
             current = str_tokens[b][p]
             context.append(f"{prefix}|{current}|{suffix}")
             batch.append(b)
             pos.append(p)
             label.append(f"{b}/{p}")
-    # print(len(batch), len(pos), len(context), len(label))
+
     return pd.DataFrame(
-        dict(
-            str_tokens=list_flatten(str_tokens),
-            unique_token=list_flatten(unique_token),
-            context=context,
-            batch=batch,
-            pos=pos,
-            label=label,
-        )
+        {
+            "str_tokens": list_flatten(str_tokens),
+            "unique_token": list_flatten(unique_token),
+            "context": context,
+            "batch": batch,
+            "pos": pos,
+            "label": label,
+        }
     )
 
 
