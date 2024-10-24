@@ -28,6 +28,24 @@ from sae_cooccurrence.graph_generation import load_subgraph, plot_subgraph_stati
 
 
 def assign_category(row, fs_splitting_cluster, order_other_subgraphs=False):
+    """
+    Determines if a node is in or out of the subgraph of interest.
+
+    Args:
+        row (dict): A dictionary representing a node with 'subgraph_id' and 'subgraph_size' keys.
+        fs_splitting_cluster (str): The ID of the subgraph of interest.
+        order_other_subgraphs (bool, optional): If True, distinguishes between other subgraphs and isolated nodes. Defaults to False.
+
+    Returns:
+        int: 0 if the node is in the subgraph of interest,
+             1 if the node is in another subgraph (when order_other_subgraphs is True),
+             2 if the node is not in any subgraph or in a subgraph of size 1.
+
+    This function categorizes nodes based on their subgraph membership:
+    - Category 0: Nodes in the subgraph of interest (fs_splitting_cluster)
+    - Category 1: Nodes in other subgraphs (if order_other_subgraphs is True)
+    - Category 2: Nodes not in any subgraph or in subgraphs of size 1
+    """
     if row["subgraph_id"] == fs_splitting_cluster:
         return 0
     elif (
@@ -54,10 +72,48 @@ def load_data_from_pickle(file_path: str) -> dict[str, Any]:
 
 
 def list_flatten(nested_list):
+    """
+    Flattens a nested list into a single-level list.
+
+    Args:
+        nested_list (list): A list that may contain other lists as elements.
+
+    Returns:
+        list: A flattened list containing all elements from the nested structure.
+
+    Example:
+        >>> nested = [[1, 2], [3, 4, [5, 6]], 7]
+        >>> list_flatten(nested)
+        [1, 2, 3, 4, 5, 6, 7]
+    """
     return [x for y in nested_list for x in y]
 
 
-def make_token_df(tokens, model, len_prefix=5, len_suffix=5):
+def make_token_df(tokens, model, len_prefix=10, len_suffix=10):
+    """
+    Create a DataFrame containing token information and context for each token in the input.
+
+    Args:
+        tokens (torch.Tensor): Input tensor of token ids.
+        model (HookedTransformer): The transformer model used for tokenization.
+        len_prefix (int, optional): Length of the prefix context. Defaults to 5.
+        len_suffix (int, optional): Length of the suffix context. Defaults to 5.
+
+    Returns:
+        pd.DataFrame: A DataFrame with columns:
+            - str_tokens: String representation of each token.
+            - unique_token: Unique identifier for each token (format: "token/position").
+            - context: Context string for each token (format: "prefix|current|suffix").
+            - batch: Batch index for each token.
+            - pos: Position of each token within its sequence.
+            - label: Unique label for each token (format: "batch/position").
+
+    The function processes the input tokens to create a detailed DataFrame, including:
+    - Converting tokens to strings
+    - Creating unique identifiers for each token
+    - Generating context strings for each token
+    - Tracking batch and position information
+    """
     str_tokens = [model.to_str_tokens(t) for t in tokens]
     unique_token = [
         [f"{s}/{i}" for i, s in enumerate(str_tok)] for str_tok in str_tokens
