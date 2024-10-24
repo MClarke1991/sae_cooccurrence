@@ -27,7 +27,10 @@ from sae_cooccurrence.graph_generation import (
     remove_low_weight_edges,
     remove_self_loops_inplace,
 )
-from sae_cooccurrence.normalised_cooc_functions import setup_logging
+from sae_cooccurrence.normalised_cooc_functions import (
+    get_sae_release,
+    setup_logging,
+)
 from sae_cooccurrence.utils.saving_loading import (
     load_model_and_sae,
     load_npz_files,
@@ -52,12 +55,12 @@ def process_sae_for_graph(sae_id: str, config: dict, device: str) -> None:
     device (str): The device to use for computations (e.g., 'cpu', 'mps', 'cuda').
     """
     sae_id_neat = sae_id.replace(".", "_").replace("/", "_")
-    sae_release = (
-        "gemma-scope-2b-pt-res-canonical"
-        if config["generation"]["model_name"] == "gemma-2-2b"
-        else f"{config['generation']['model_name']}-{config['generation']['sae_release_short']}"
+    sae_release = get_sae_release(
+        config["generation"]["model_name"], config["generation"]["sae_release_short"]
     )
-    results_dir = f"results/{config['generation']['model_name']}/{config['generation']['sae_release_short']}/{sae_id_neat}"
+    results_dir = (
+        f"results/{config['generation']['model_name']}/{sae_release}/{sae_id_neat}"
+    )
     results_path = pj(get_git_root(), results_dir)
 
     if not os.path.exists(results_path):
@@ -129,6 +132,31 @@ def load_data(results_path: str) -> tuple:
     )
 
 
+def save_thresholded_matrices(thresholded_matrices: dict, results_path: str) -> None:
+    """
+    Save thresholded matrices to compressed npz files in a subdirectory.
+
+    Args:
+        thresholded_matrices (dict): A dictionary of thresholded matrices.
+        results_path (str): The path where the matrices will be saved.
+    """
+    thresholded_matrices_dir = os.path.join(results_path, "thresholded_matrices")
+    os.makedirs(thresholded_matrices_dir, exist_ok=True)
+
+    for threshold, matrix in tqdm(
+        thresholded_matrices.items(), leave=False, desc="Saving thresholded matrices"
+    ):
+        filepath_safe_threshold = str(threshold).replace(".", "_")
+        np.savez_compressed(
+            os.path.join(
+                thresholded_matrices_dir,
+                f"thresholded_matrix_{filepath_safe_threshold}.npz",
+            ),
+            matrix,
+        )
+    logging.info("Thresholded matrices saved in 'thresholded_matrices' subdirectory.")
+
+
 def process_matrices(
     matrices: dict,
     config: dict,
@@ -156,8 +184,13 @@ def process_matrices(
     # Calculate edge thresholds for each matrix based on configuration
     edge_thresholds = calculate_edge_thresholds(matrices, config)
 
+    # Save edge thresholds
+    save_edge_thresholds(edge_thresholds, results_path)
+
     # Create thresholded matrices by removing edges below the calculated thresholds
     thresholded_matrices = create_thresholded_matrices(matrices, edge_thresholds)
+
+    save_thresholded_matrices(thresholded_matrices, results_path)
 
     # Convert thresholded matrices to graphs
     thresholded_graphs = create_thresholded_graphs(thresholded_matrices)
@@ -335,6 +368,25 @@ def save_profiling_results(pr, results_path, sae_id_neat):
         f.write(s.getvalue())
 
 
+def save_edge_thresholds(edge_thresholds: dict, results_path: str) -> None:
+    """
+    Save edge thresholds to a CSV file.
+
+    Args:
+        edge_thresholds (dict): A dictionary of edge thresholds for each activation threshold.
+        results_path (str): The path where the thresholds will be saved.
+    """
+    import pandas as pd
+
+    thresholds_data = [
+        {"activation_threshold": k, "edge_threshold": v[0]}
+        for k, v in edge_thresholds.items()
+    ]
+    thresholds_df = pd.DataFrame(thresholds_data)
+    thresholds_df.to_csv(f"{results_path}/edge_thresholds.csv", index=False)
+    logging.info("Edge thresholds saved.")
+
+
 def main():
     torch.set_grad_enabled(False)
     device = set_device()
@@ -342,7 +394,7 @@ def main():
     global start_time
     start_time = time.time()
 
-    config = toml.load(pj(git_root, "src", "cooc", "config_gemma.toml"))
+    config = toml.load(pj(git_root, "src", "config_feature_split.toml"))
 
     for sae_id in tqdm(config["generation"]["sae_ids"], desc="Processing SAE IDs"):
         process_sae_for_graph(sae_id, config, device)
