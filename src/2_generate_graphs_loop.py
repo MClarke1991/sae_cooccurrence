@@ -131,20 +131,27 @@ def load_data(results_path: str) -> tuple:
 
 def save_thresholded_matrices(thresholded_matrices: dict, results_path: str) -> None:
     """
-    Save thresholded matrices to compressed npz files.
+    Save thresholded matrices to compressed npz files in a subdirectory.
 
     Args:
         thresholded_matrices (dict): A dictionary of thresholded matrices.
         results_path (str): The path where the matrices will be saved.
     """
+    thresholded_matrices_dir = os.path.join(results_path, "thresholded_matrices")
+    os.makedirs(thresholded_matrices_dir, exist_ok=True)
+
     for threshold, matrix in tqdm(
         thresholded_matrices.items(), leave=False, desc="Saving thresholded matrices"
     ):
         filepath_safe_threshold = str(threshold).replace(".", "_")
         np.savez_compressed(
-            f"{results_path}/thresholded_matrix_{filepath_safe_threshold}.npz", matrix
+            os.path.join(
+                thresholded_matrices_dir,
+                f"thresholded_matrix_{filepath_safe_threshold}.npz",
+            ),
+            matrix,
         )
-    logging.info("Thresholded matrices saved.")
+    logging.info("Thresholded matrices saved in 'thresholded_matrices' subdirectory.")
 
 
 def process_matrices(
