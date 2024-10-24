@@ -137,7 +137,9 @@ def save_thresholded_matrices(thresholded_matrices: dict, results_path: str) -> 
         thresholded_matrices (dict): A dictionary of thresholded matrices.
         results_path (str): The path where the matrices will be saved.
     """
-    for threshold, matrix in thresholded_matrices.items():
+    for threshold, matrix in tqdm(
+        thresholded_matrices.items(), leave=False, desc="Saving thresholded matrices"
+    ):
         filepath_safe_threshold = str(threshold).replace(".", "_")
         np.savez_compressed(
             f"{results_path}/thresholded_matrix_{filepath_safe_threshold}.npz", matrix
@@ -171,6 +173,9 @@ def process_matrices(
 
     # Calculate edge thresholds for each matrix based on configuration
     edge_thresholds = calculate_edge_thresholds(matrices, config)
+
+    # Save edge thresholds
+    save_edge_thresholds(edge_thresholds, results_path)
 
     # Create thresholded matrices by removing edges below the calculated thresholds
     thresholded_matrices = create_thresholded_matrices(matrices, edge_thresholds)
@@ -353,6 +358,25 @@ def save_profiling_results(pr, results_path, sae_id_neat):
         f.write(s.getvalue())
 
 
+def save_edge_thresholds(edge_thresholds: dict, results_path: str) -> None:
+    """
+    Save edge thresholds to a CSV file.
+
+    Args:
+        edge_thresholds (dict): A dictionary of edge thresholds for each activation threshold.
+        results_path (str): The path where the thresholds will be saved.
+    """
+    import pandas as pd
+
+    thresholds_data = [
+        {"activation_threshold": k, "edge_threshold": v[0]}
+        for k, v in edge_thresholds.items()
+    ]
+    thresholds_df = pd.DataFrame(thresholds_data)
+    thresholds_df.to_csv(f"{results_path}/edge_thresholds.csv", index=False)
+    logging.info("Edge thresholds saved.")
+
+
 def main():
     torch.set_grad_enabled(False)
     device = set_device()
@@ -360,7 +384,7 @@ def main():
     global start_time
     start_time = time.time()
 
-    config = toml.load(pj(git_root, "src", "cooc", "config_gemma.toml"))
+    config = toml.load(pj(git_root, "src", "config_feature_split.toml"))
 
     for sae_id in tqdm(config["generation"]["sae_ids"], desc="Processing SAE IDs"):
         process_sae_for_graph(sae_id, config, device)
