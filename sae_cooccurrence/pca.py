@@ -146,6 +146,20 @@ def make_token_df(tokens, model, len_prefix=10, len_suffix=10):
 
 @dataclass
 class ProcessedExamples:
+    """
+    A data class to store processed examples from the model.
+
+    Attributes:
+        - all_token_dfs (pd.DataFrame): DataFrame containing token information for all examples.
+        - all_fired_tokens (list): List of tokens that fired during processing.
+        - all_reconstructions (torch.Tensor): Tensor containing reconstructions of the fired tokens.
+        - all_graph_feature_acts (torch.Tensor): Tensor containing graph feature activations.
+        - all_feature_acts (torch.Tensor): Tensor containing feature activations.
+        - all_max_feature_info (torch.Tensor): Tensor containing maximum feature information
+            (i.e. whether the graph features were the maximally active).
+        - all_examples_found (int): Total number of examples found.
+    """
+
     all_token_dfs: pd.DataFrame
     all_fired_tokens: list
     all_reconstructions: torch.Tensor
@@ -158,6 +172,21 @@ class ProcessedExamples:
 def process_examples(
     activation_store, model, sae, feature_list, n_batches_reconstruction
 ):
+    """
+    Process examples from the activation store using the given model and SAE, extract the tokens that the
+    features of the cluster/subgraph fire on, with context, as well as the reconstruction of the activations
+    by the SAE in these instances. Also extract the maximum feature activation for each token.
+
+    Args:
+    - activation_store: The store containing activation data.
+    - model: The model used for processing.
+    - sae: The SAE model instance.
+    - feature_list: List of features to be considered i.e. those within a cluster/subgraph.
+    - n_batches_reconstruction: Number of batches to process for reconstruction from the activation store.
+
+    Returns:
+    - ProcessedExamples: A data class containing processed examples and related information.
+    """
     examples_found = 0
     all_fired_tokens = []
     all_graph_feature_acts = []
@@ -213,7 +242,7 @@ def process_examples(
         examples_found += len(fired_tokens)
         pbar.set_description(f"Examples found: {examples_found}")
 
-    # flatten the list of lists
+    # Flatten the list of lists
     all_token_dfs = pd.concat(all_token_dfs)
     all_fired_tokens = list_flatten(all_fired_tokens)
     all_reconstructions = torch.cat(all_reconstructions)
