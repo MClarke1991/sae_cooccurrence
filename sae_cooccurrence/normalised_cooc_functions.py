@@ -373,6 +373,14 @@ def get_feature_activations_for_batch(
     return activations_batch
 
 
+def get_batch_without_special_token_activations_mask(
+    batch_tokens: torch.Tensor,
+    special_tokens: set[int | None],
+    device: str,
+) -> torch.Tensor:
+    return ~torch.isin(batch_tokens, torch.tensor(list(special_tokens), device=device))
+
+
 def get_batch_without_special_token_activations(
     activations_store: ActivationsStore,
     special_tokens: set[int | None],
@@ -395,8 +403,8 @@ def get_batch_without_special_token_activations(
     with torch.no_grad():
         activations = activations_store.get_activations(batch_tokens).to(device)
 
-    non_special_mask = ~torch.isin(
-        batch_tokens, torch.tensor(list(special_tokens), device=device)
+    non_special_mask = get_batch_without_special_token_activations_mask(
+        batch_tokens, special_tokens, device
     )
 
     # Remove the first token's activation from each prompt
