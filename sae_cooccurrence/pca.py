@@ -25,6 +25,11 @@ from sklearn.preprocessing import MinMaxScaler
 from tqdm.auto import tqdm
 
 from sae_cooccurrence.graph_generation import load_subgraph, plot_subgraph_static
+from sae_cooccurrence.normalised_cooc_functions import (
+    get_batch_without_special_token_activations_mask,
+    get_special_tokens,
+)
+from sae_cooccurrence.utils.saving_loading import set_device
 
 
 def assign_category(row, fs_splitting_cluster, order_other_subgraphs=False):
@@ -226,7 +231,13 @@ def get_max_feature_info(feature_acts, fired_mask, feature_list_tensor):
 
 
 def process_examples(
-    activation_store, model, sae, feature_list, n_batches_reconstruction
+    activation_store,
+    model,
+    sae,
+    feature_list,
+    n_batches_reconstruction,
+    device=None,
+    remove_special_tokens=False,
 ):
     """
     Process examples from the activation store using the given model and SAE, extract the tokens that the
@@ -251,6 +262,9 @@ def process_examples(
     all_reconstructions = []
     all_token_dfs = []
 
+    if device is None:
+        device = set_device()
+
     feature_list_tensor = torch.tensor(feature_list, device=sae.W_dec.device)
 
     pbar = tqdm(range(n_batches_reconstruction), leave=False)
@@ -261,11 +275,18 @@ def process_examples(
         # Create a DataFrame containing token information
         tokens_df = make_token_df(tokens, model)
 
-        # Flatten the tokens tensor for easier processing
-        flat_tokens = tokens.flatten()
-
         # Run the model and get activations
         sae_in = run_model_with_cache(model, tokens, sae)
+
+        if remove_special_tokens:
+            special_tokens = get_special_tokens(model)
+            non_special_mask = get_batch_without_special_token_activations_mask(
+                tokens.to(device), special_tokens, device
+            ).cpu()
+            sae_in[~non_special_mask] = 0
+
+        flat_tokens = tokens.flatten()
+
         # Encode the activations using the SAE
         feature_acts = sae.encode(sae_in).squeeze()
         # Flatten the feature activations to 2D
@@ -365,9 +386,18 @@ def generate_data(
     fs_splitting_nodes,
     n_batches_reconstruction,
     decoder=False,
+    device=None,
 ):
+    if device is None:
+        device = set_device()
+
     results = process_examples(
-        activation_store, model, sae, fs_splitting_nodes, n_batches_reconstruction
+        activation_store,
+        model,
+        sae,
+        fs_splitting_nodes,
+        n_batches_reconstruction,
+        device,
     )
     pca_df, pca = perform_pca_on_results(results, n_components=3)
     if decoder:

@@ -15,10 +15,15 @@ from sae_cooccurrence.utils.set_paths import get_git_root
 
 
 def process_graph_for_pca(
-    model, sae, activation_store, fs_splitting_nodes, n_batches_reconstruction
+    model, sae, activation_store, fs_splitting_nodes, n_batches_reconstruction, device
 ):
     results = process_examples(
-        activation_store, model, sae, fs_splitting_nodes, n_batches_reconstruction
+        activation_store,
+        model,
+        sae,
+        fs_splitting_nodes,
+        n_batches_reconstruction,
+        device,
     )
     pca_df, _ = perform_pca_on_results(results, n_components=3)
     return results, pca_df
@@ -146,6 +151,7 @@ def main():
                 activation_store,
                 fs_splitting_nodes,
                 n_batches_reconstruction,
+                device,
             )
             results_dict[subgraph_id] = (results, pca_df)
 
