@@ -25,6 +25,9 @@ from sklearn.preprocessing import MinMaxScaler
 from tqdm.auto import tqdm
 
 from sae_cooccurrence.graph_generation import load_subgraph, plot_subgraph_static
+from sae_cooccurrence.normalised_cooc_functions import (
+    get_special_tokens,
+)
 
 
 def assign_category(row, fs_splitting_cluster, order_other_subgraphs=False):
@@ -226,7 +229,12 @@ def get_max_feature_info(feature_acts, fired_mask, feature_list_tensor):
 
 
 def process_examples(
-    activation_store, model, sae, feature_list, n_batches_reconstruction
+    activation_store,
+    model,
+    sae,
+    feature_list,
+    n_batches_reconstruction,
+    remove_special_tokens=False,
 ):
     """
     Process examples from the activation store using the given model and SAE, extract the tokens that the
@@ -239,6 +247,7 @@ def process_examples(
     - sae: The SAE model instance.
     - feature_list: List of features to be considered i.e. those within a cluster/subgraph.
     - n_batches_reconstruction: Number of batches to process for reconstruction from the activation store.
+    - remove_special_tokens: Whether to remove special tokens from the processed examples e.g. BOS, EOS, PAD.
 
     Returns:
     - ProcessedExamples: A data class containing processed examples and related information.
@@ -273,6 +282,20 @@ def process_examples(
 
         # Create a mask for tokens where any feature in the feature_list is activated
         fired_mask = (feature_acts[:, feature_list]).sum(dim=-1) > 0
+
+        if remove_special_tokens:
+            special_tokens = get_special_tokens(model)
+            # Create a mask for non-special tokens
+            # non_special_mask = ~torch.tensor(
+            #     [token in special_tokens for token in flat_tokens],
+            #     device=fired_mask.device,
+            # )
+            non_special_mask = ~torch.isin(
+                flat_tokens,
+                torch.tensor(list(special_tokens), device=fired_mask.device),
+            )
+            # Combine the fired_mask with the non_special_mask
+            fired_mask = fired_mask & non_special_mask
 
         # Convert the fired tokens to string representations
         fired_tokens = model.to_str_tokens(flat_tokens[fired_mask])
@@ -365,9 +388,15 @@ def generate_data(
     fs_splitting_nodes,
     n_batches_reconstruction,
     decoder=False,
+    remove_special_tokens=False,
 ):
     results = process_examples(
-        activation_store, model, sae, fs_splitting_nodes, n_batches_reconstruction
+        activation_store,
+        model,
+        sae,
+        fs_splitting_nodes,
+        n_batches_reconstruction,
+        remove_special_tokens,
     )
     pca_df, pca = perform_pca_on_results(results, n_components=3)
     if decoder:
