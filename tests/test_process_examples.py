@@ -182,3 +182,16 @@ def test_process_examples():
     assert not torch.isnan(
         results_with_special_tokens_removed.all_reconstructions
     ).any()
+
+    # Test special tokens removed
+    special_token_strs = model.to_str_tokens(special_tokens)
+    assert all(
+        token not in results_with_special_tokens_removed.all_fired_tokens
+        for token in special_token_strs
+    ), "Special tokens should not be present in all_fired_tokens when remove_special_tokens is True"
+
+    assert all(
+        token
+        not in results_with_special_tokens_removed.all_token_dfs["str_tokens"].values
+        for token in special_token_strs
+    ), "Special tokens should not be present in all_token_dfs when remove_special_tokens is True"
