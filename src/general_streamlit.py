@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import streamlit_plotly_events as spe
 
+from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
 from sae_cooccurrence.utils.set_paths import get_git_root
 
 
@@ -200,7 +201,7 @@ def main():
 
     git_root = get_git_root()
     sae_id = "blocks.8.hook_resid_pre_24576"
-    sae_id_neat = sae_id.replace(".", "_").replace("/", "_")
+    sae_id_neat = neat_sae_id(sae_id)
     results_root = pj(
         git_root,
         "results/gpt2-small/res-jb-feature-splitting/blocks_8_hook_resid_pre_24576/",

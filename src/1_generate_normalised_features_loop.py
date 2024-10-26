@@ -9,6 +9,7 @@ from tqdm.auto import tqdm
 
 from sae_cooccurrence.normalised_cooc_functions import (
     generate_normalised_features,
+    neat_sae_id,
     setup_logging,
 )
 from sae_cooccurrence.utils.saving_loading import set_device
@@ -55,7 +56,7 @@ def process_sae(
     n_batches_in_buffer (int): The number of batches of the Activation Store to keep in memory for processing.
     device (torch.device): The device to use for processing (e.g., GPU or CPU).
     """
-    sae_id_neat = sae_id.replace(".", "_").replace("/", "_")
+    sae_id_neat = neat_sae_id(sae_id)
 
     results_dir = f"results/cooc/{model_name}/{sae_release_short}/{sae_id_neat}"
 

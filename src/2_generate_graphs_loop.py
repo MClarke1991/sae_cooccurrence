@@ -27,7 +27,10 @@ from sae_cooccurrence.graph_generation import (
     remove_low_weight_edges,
     remove_self_loops_inplace,
 )
-from sae_cooccurrence.normalised_cooc_functions import setup_logging
+from sae_cooccurrence.normalised_cooc_functions import (
+    neat_sae_id,
+    setup_logging,
+)
 from sae_cooccurrence.utils.saving_loading import (
     load_model_and_sae,
     load_npz_files,
@@ -51,7 +54,7 @@ def process_sae_for_graph(sae_id: str, config: dict, device: str) -> None:
     config (dict): The configuration dictionary containing model and analysis settings.
     device (str): The device to use for computations (e.g., 'cpu', 'mps', 'cuda').
     """
-    sae_id_neat = sae_id.replace(".", "_").replace("/", "_")
+    sae_id_neat = neat_sae_id(sae_id)
     sae_release = (
         "gemma-scope-2b-pt-res-canonical"
         if config["generation"]["model_name"] == "gemma-2-2b"
