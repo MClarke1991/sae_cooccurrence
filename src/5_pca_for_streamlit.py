@@ -15,10 +15,22 @@ from sae_cooccurrence.utils.set_paths import get_git_root
 
 
 def process_graph_for_pca(
-    model, sae, activation_store, fs_splitting_nodes, n_batches_reconstruction
+    model,
+    sae,
+    activation_store,
+    fs_splitting_nodes,
+    n_batches_reconstruction,
+    remove_special_tokens,
+    device,
 ):
     results = process_examples(
-        activation_store, model, sae, fs_splitting_nodes, n_batches_reconstruction
+        activation_store,
+        model,
+        sae,
+        fs_splitting_nodes,
+        n_batches_reconstruction,
+        remove_special_tokens,
+        device=device,
     )
     pca_df, _ = perform_pca_on_results(results, n_components=3)
     return results, pca_df
@@ -93,6 +105,7 @@ def main():
     model_name = "gpt2-small"
     sae_release_short = "res-jb-feature-splitting"
     sae_id = "blocks.8.hook_resid_pre_24576"
+    remove_special_tokens = False  # Set to True for Gemma
     n_batches_reconstruction = 100
     activation_threshold = 1.5
     subgraph_sizes_to_plot = [5, 6, 7]  # List of subgraph sizes to process
@@ -146,6 +159,8 @@ def main():
                 activation_store,
                 fs_splitting_nodes,
                 n_batches_reconstruction,
+                remove_special_tokens,
+                device=device,
             )
             results_dict[subgraph_id] = (results, pca_df)
 
