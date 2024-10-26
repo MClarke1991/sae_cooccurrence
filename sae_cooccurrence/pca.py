@@ -337,6 +337,7 @@ def process_examples(
         examples_found += len(fired_tokens)
         pbar.set_description(f"Examples found: {examples_found}")
 
+    print(f"Total examples found: {examples_found}")
     # Flatten the list of lists
     all_token_dfs = pd.concat(all_token_dfs)
     all_fired_tokens = list_flatten(all_fired_tokens)
