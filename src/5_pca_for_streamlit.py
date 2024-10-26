@@ -21,6 +21,7 @@ def process_graph_for_pca(
     fs_splitting_nodes,
     n_batches_reconstruction,
     remove_special_tokens,
+    device,
 ):
     results = process_examples(
         activation_store,
@@ -29,6 +30,7 @@ def process_graph_for_pca(
         fs_splitting_nodes,
         n_batches_reconstruction,
         remove_special_tokens,
+        device=device,
     )
     pca_df, _ = perform_pca_on_results(results, n_components=3)
     return results, pca_df
@@ -158,6 +160,7 @@ def main():
                 fs_splitting_nodes,
                 n_batches_reconstruction,
                 remove_special_tokens,
+                device=device,
             )
             results_dict[subgraph_id] = (results, pca_df)
 
