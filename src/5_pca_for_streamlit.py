@@ -9,6 +9,7 @@ import torch
 from sae_lens import ActivationsStore
 from tqdm.autonotebook import tqdm
 
+from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
 from sae_cooccurrence.pca import perform_pca_on_results, process_examples
 from sae_cooccurrence.utils.saving_loading import load_model_and_sae, set_device
 from sae_cooccurrence.utils.set_paths import get_git_root
@@ -99,7 +100,7 @@ def main():
     save_all_feature_acts = False
 
     # Paths and logging setup
-    sae_id_neat = sae_id.replace(".", "_").replace("/", "_")
+    sae_id_neat = neat_sae_id(sae_id)
     results_dir = f"results/cooc/{model_name}/{sae_release_short}/{sae_id_neat}"
     results_path = pj(git_root, results_dir)
 

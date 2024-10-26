@@ -16,6 +16,10 @@ from sae_cooccurrence.utils.saving_loading import (
 from sae_cooccurrence.utils.set_paths import get_git_root
 
 
+def neat_sae_id(sae_id: str) -> str:
+    return sae_id.replace(".", "_").replace("/", "_")
+
+
 def setup_logging(
     results_dir: str,
     model_name: str,
