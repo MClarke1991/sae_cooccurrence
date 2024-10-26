@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import pandas as pd
+import pytest
 import torch
 
 # Note this test can break easily as the shape of the tensors from the mocks is
@@ -59,13 +60,18 @@ class MockSAE:
         return torch.randn(batch_size, seq_len, self.W_dec.shape[0])
 
 
-def test_process_examples():
+@pytest.mark.parametrize("device", ["cpu", "cuda", "mps"])
+def test_process_examples(device):
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    if device == "mps" and not torch.backends.mps.is_available():
+        pytest.skip("MPS not available")
+
     # Setup test parameters
     batch_size = 2
     seq_len = 6  # Must be even
     hidden_dim = 10
     n_features = 5
-    device = "cpu"
 
     # Include special tokens in the batch
     special_tokens = [0, 1, 2]  # bos_token_id, eos_token_id, pad_token_id
@@ -99,6 +105,7 @@ def test_process_examples():
         sae=sae,
         feature_list=feature_list,
         n_batches_reconstruction=n_batches_reconstruction,
+        device=device,
     )
 
     # Test output types
@@ -141,6 +148,7 @@ def test_process_examples():
         feature_list=feature_list,
         n_batches_reconstruction=n_batches_reconstruction,
         remove_special_tokens=True,
+        device=device,
     )
 
     # Test output types
@@ -195,3 +203,9 @@ def test_process_examples():
         not in results_with_special_tokens_removed.all_token_dfs["str_tokens"].values
         for token in special_token_strs
     ), "Special tokens should not be present in all_token_dfs when remove_special_tokens is True"
+
+    # Additional device-specific checks
+    assert results.all_reconstructions.device.type == device
+    assert results.all_graph_feature_acts.device.type == device
+    assert results.all_feature_acts.device.type == device
+    assert results.all_max_feature_info.device.type == device

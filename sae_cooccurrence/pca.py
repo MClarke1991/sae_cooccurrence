@@ -196,7 +196,7 @@ def run_model_with_cache(model, tokens, sae):
     return cache[sae.cfg.hook_name]
 
 
-def get_max_feature_info(feature_acts, fired_mask, feature_list_tensor):
+def get_max_feature_info(feature_acts, fired_mask, feature_list_tensor, device="cpu"):
     """
     Calculate maximum feature information for fired tokens.
 
@@ -220,6 +220,7 @@ def get_max_feature_info(feature_acts, fired_mask, feature_list_tensor):
     max_feature_in_graph = torch.tensor(
         [float(idx in feature_list_tensor) for idx in max_feature_indices],
         dtype=torch.float32,
+        device=device,
     )
     max_feature_info = torch.stack(
         [max_feature_values, max_feature_indices.float(), max_feature_in_graph],
@@ -235,6 +236,7 @@ def process_examples(
     feature_list,
     n_batches_reconstruction,
     remove_special_tokens=False,
+    device="cpu",
 ):
     """
     Process examples from the activation store using the given model and SAE, extract the tokens that the
@@ -278,10 +280,11 @@ def process_examples(
         # Encode the activations using the SAE
         feature_acts = sae.encode(sae_in).squeeze()
         # Flatten the feature activations to 2D
-        feature_acts = feature_acts.flatten(0, 1)
+        feature_acts = feature_acts.flatten(0, 1).to(device)
 
         # Create a mask for tokens where any feature in the feature_list is activated
         fired_mask = (feature_acts[:, feature_list]).sum(dim=-1) > 0
+        fired_mask = fired_mask.to(device)
 
         if remove_special_tokens:
             special_tokens = get_special_tokens(model)
@@ -292,7 +295,7 @@ def process_examples(
             # )
             non_special_mask = ~torch.isin(
                 flat_tokens,
-                torch.tensor(list(special_tokens), device=fired_mask.device),
+                torch.tensor(list(special_tokens), device=device),
             )
             # Combine the fired_mask with the non_special_mask
             fired_mask = fired_mask & non_special_mask
@@ -307,7 +310,7 @@ def process_examples(
 
         # Get max feature info
         max_feature_info = get_max_feature_info(
-            feature_acts, fired_mask, feature_list_tensor
+            feature_acts, fired_mask, feature_list_tensor, device=device
         )
 
         # Append the rows of tokens_df where fired_mask is True
@@ -389,6 +392,7 @@ def generate_data(
     n_batches_reconstruction,
     decoder=False,
     remove_special_tokens=False,
+    device="cpu",
 ):
     results = process_examples(
         activation_store,
@@ -397,6 +401,7 @@ def generate_data(
         fs_splitting_nodes,
         n_batches_reconstruction,
         remove_special_tokens,
+        device=device,
     )
     pca_df, pca = perform_pca_on_results(results, n_components=3)
     if decoder:
