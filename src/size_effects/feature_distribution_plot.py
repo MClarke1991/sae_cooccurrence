@@ -364,7 +364,7 @@ def main():
     sae_sizes = [16, 32, 65]
     
     activation_thresholds = [0.0]
-    n_batches = 10
+    n_batches = 100
     
 
     input_dir = pj(

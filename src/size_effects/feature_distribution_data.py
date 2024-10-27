@@ -525,7 +525,8 @@ def main() -> None:
     # model_name = "gemma-2-2b"
     # sae_release_short = "gemma-scope-2b-pt-res"
     # # sae_sizes = [768, 1536, 3072, 6144, 12288, 24576]
-    # sae_sizes: list[int] = [176, 22, 41, 445, 82]
+    # # sae_sizes: list[int] = [176, 22, 41, 445, 82]
+    # sae_sizes: list[int] = [22, 41, 82, 176, 445]
     # # sae_sizes = [24576, 49152, 98304]
     # # sae_sizes: list[int] = [768]
     # # sae_sizes = [768]
@@ -542,7 +543,7 @@ def main() -> None:
     # sae_sizes: list[int] = [768]
     # sae_sizes = [768]
     activation_thresholds: list[float] = [0.0]
-    n_batches = 10
+    n_batches = 100
     remove_special_tokens = True
     
     
