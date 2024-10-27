@@ -12,7 +12,11 @@ from scipy import stats
 from tqdm.autonotebook import tqdm
 from transformer_lens import HookedTransformer
 
-from sae_cooccurrence.normalised_cooc_functions import get_sae_release
+from sae_cooccurrence.normalised_cooc_functions import (
+    get_feature_activations_for_batch,
+    get_sae_release,
+    get_special_tokens,
+)
 from sae_cooccurrence.utils.saving_loading import notify, set_device
 from sae_cooccurrence.utils.set_paths import get_git_root
 
@@ -56,18 +60,27 @@ def save_tensor_to_npz(tensor: torch.Tensor, filename: str) -> None:
 
 
 def calculate_feature_occurrences(
+    model: HookedTransformer,
     sae: SAE,
     activation_store: ActivationsStore,
     n_batches: int,
     device: str,
     activation_threshold: float,
     chunk_size: int = 1000,
+    remove_special_tokens: bool = False,
 ) -> tuple[torch.Tensor, int]:
     feature_occurrences = torch.zeros((sae.cfg.d_sae, sae.cfg.d_sae), device=device)
     total_tokens = 0
+    
+    if remove_special_tokens:
+        special_tokens = get_special_tokens(model)
+    else:
+        special_tokens = set()
 
     for _ in tqdm(range(n_batches), desc="Processing batches", leave=False):
-        activations_batch = activation_store.next_batch()
+        activations_batch = get_feature_activations_for_batch(
+            activation_store, device, remove_special_tokens, special_tokens
+        )
         feature_acts = sae.encode(activations_batch).squeeze()
 
         feature_activations = (feature_acts > activation_threshold).float()
@@ -151,6 +164,7 @@ def generate_data_tensors(
     n_batches_in_buffer,
     device,
     output_dir,
+    remove_special_tokens: bool = False,
     save_npz: bool = False,
     save_h5: bool = True,  # New parameter
 ):
@@ -190,7 +204,8 @@ def generate_data_tensors(
             # Calculate feature occurrences
             print(f"Calculating feature occurrences for SAE size {sae_size} and threshold {threshold}")
             feature_occurrences, total_tokens = calculate_feature_occurrences(
-                sae, activation_store, n_batches, device, threshold
+                model, sae, activation_store, n_batches, device, threshold,
+                remove_special_tokens
             )
 
             # Save feature occurrences file as HDF5 if requested
@@ -511,6 +526,7 @@ def main() -> None:
     # sae_sizes = [768]
     activation_thresholds: list[float] = [0.0]
     n_batches = 10
+    remove_special_tokens = True
     
     
 
@@ -523,7 +539,7 @@ def main() -> None:
 
     # Create output directory
     output_dir = pj(
-        git_root, f"results/cooc/cooccurrence_analysis/{model_name}/{sae_release_short}"
+        git_root, f"results/cooc/cooccurrence_analysis/{model_name}/{sae_release_short}/{n_batches}"
     )
     os.makedirs(output_dir, exist_ok=True)
 
@@ -541,6 +557,7 @@ def main() -> None:
             output_dir,
             save_npz,
             save_h5,
+            remove_special_tokens,
         )
         print("Generated data tensors")
     # Process data tensors and create summary statistics
