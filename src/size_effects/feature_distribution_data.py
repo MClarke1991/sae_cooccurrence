@@ -539,7 +539,7 @@ def main() -> None:
 
     # Create output directory
     output_dir = pj(
-        git_root, f"results/cooc/cooccurrence_analysis/{model_name}/{sae_release_short}/{n_batches}"
+        git_root, f"results/cooc/cooccurrence_analysis/{model_name}/{sae_release_short}/n_batches_{n_batches}"
     )
     os.makedirs(output_dir, exist_ok=True)
 

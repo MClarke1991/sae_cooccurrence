@@ -361,10 +361,11 @@ def main():
     
     
     activation_thresholds = [0.0]
+    n_batches = 10
     
 
     input_dir = pj(
-        git_root, f"results/cooc/cooccurrence_analysis/{model_name}/{sae_release_short}"
+        git_root, f"results/cooc/cooccurrence_analysis/{model_name}/{sae_release_short}/n_batches_{n_batches}"
     )
     output_dir = pj(
         git_root,
