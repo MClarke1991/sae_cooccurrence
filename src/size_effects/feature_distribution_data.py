@@ -8,6 +8,7 @@ from sae_lens import SAE, ActivationsStore
 from tqdm.autonotebook import tqdm
 from transformer_lens import HookedTransformer
 
+from sae_cooccurrence.normalised_cooc_functions import get_sae_release
 from sae_cooccurrence.utils.saving_loading import notify, set_device
 from sae_cooccurrence.utils.set_paths import get_git_root
 
@@ -115,9 +116,9 @@ def calculate_expected_cooccurrences(
     return expected_cooccurrences
 
 
-def save_results_as_parquet(table: pa.Table, output_dir: str, sae_size: int) -> None:
+def save_results_as_parquet(table: pa.Table, output_dir: str, sae_size: int, n_batches: int) -> None:
     # Create filename with SAE size
-    parquet_filename = f"cooccurrence_analysis_results_sae_{sae_size}.parquet"
+    parquet_filename = f"cooccurrence_analysis_results_sae_{sae_size}_nbatches_{n_batches}.parquet"
     parquet_path = pj(output_dir, parquet_filename)
 
     # Save as Parquet file
@@ -129,15 +130,25 @@ def main() -> None:
     device = set_device()
     git_root = get_git_root()
 
-    model_name = "gpt2-small"
-    sae_release_short = "res-jb-feature-splitting"
+    # model_name = "gpt2-small"
+    # sae_release_short = "res-jb-feature-splitting"
+    # # sae_sizes = [768, 1536, 3072, 6144, 12288, 24576]
+    # sae_sizes: list[int] = [768, 1536, 3072, 6144, 12288]
+    # # sae_sizes = [24576, 49152, 98304]
+    # # sae_sizes: list[int] = [768]
+    # # sae_sizes = [768]
+    # activation_thresholds: list[float] = [0.0]
+    # n_batches = 5000
+    
+    model_name = "gemma-2-2b"
+    sae_release_short = "gemma-scope-2b-pt-res"
     # sae_sizes = [768, 1536, 3072, 6144, 12288, 24576]
-    sae_sizes: list[int] = [768, 1536, 3072, 6144, 12288]
+    sae_sizes: list[int] = [176, 22, 41, 445, 82]
     # sae_sizes = [24576, 49152, 98304]
     # sae_sizes: list[int] = [768]
     # sae_sizes = [768]
     activation_thresholds: list[float] = [0.0]
-    n_batches = 5000
+    n_batches = 10
 
     # Create output directory
     output_dir = pj(
@@ -146,12 +157,21 @@ def main() -> None:
     os.makedirs(output_dir, exist_ok=True)
 
     for sae_size in tqdm(sae_sizes, desc="Processing SAE sizes"):
-        sae_id = f"blocks.8.hook_resid_pre_{sae_size}"
-
+        if model_name == "gpt2-small":
+            sae_id = f"blocks.8.hook_resid_pre_{sae_size}"
+        elif sae_release_short == "gemma-scope-2b-pt-res":
+            sae_id = f"layer_12/width_16k/average_l0_{sae_size}"
+        elif sae_release_short == "gemma-scope-2b-pt-res-canonical":
+            sae_id = f"layer_12/width_{sae_size}k/canonical"
+        else:
+            raise ValueError(f"Unknown model or SAE release: {model_name} {sae_release_short}")
+            
         # Load model and SAE
         model = HookedTransformer.from_pretrained(model_name, device=device)
+        release = get_sae_release(model_name, sae_release_short)
+
         sae, cfg_dict, sparsity = SAE.from_pretrained(
-            release=f"{model_name}-{sae_release_short}", sae_id=sae_id, device=device
+            release=release, sae_id=sae_id, device=device
         )
 
         # Set up the activations store
@@ -192,7 +212,7 @@ def main() -> None:
         sae_table = pa.concat_tables(sae_results)
 
         # Save results for this SAE size
-        save_results_as_parquet(sae_table, output_dir, sae_size)
+        save_results_as_parquet(sae_table, output_dir, sae_size, n_batches)
 
         # Clear memory
         del model, sae, activation_store, sae_table
