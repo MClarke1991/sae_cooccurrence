@@ -204,8 +204,13 @@ def generate_data_tensors(
             # Calculate feature occurrences
             print(f"Calculating feature occurrences for SAE size {sae_size} and threshold {threshold}")
             feature_occurrences, total_tokens = calculate_feature_occurrences(
-                model, sae, activation_store, n_batches, device, threshold,
-                remove_special_tokens
+                model=model, 
+                sae=sae, 
+                activation_store=activation_store, 
+                n_batches=n_batches, 
+                device=device, 
+                activation_threshold=threshold,
+                remove_special_tokens=remove_special_tokens
             )
 
             # Save feature occurrences file as HDF5 if requested
@@ -531,8 +536,8 @@ def main() -> None:
     model_name = "gemma-2-2b"
     sae_release_short = "gemma-scope-2b-pt-res-canonical"
     # sae_sizes = [768, 1536, 3072, 6144, 12288, 24576]
-    sae_sizes: list[int] = [16, 32, 65, 262, 524]
-    sae_sizes: list[int] = [16, 32, 65, 262, 524]
+    # sae_sizes: list[int] = [16, 32, 65, 262, 524]
+    sae_sizes: list[int] = [16, 32, 65]
     # sae_sizes = [24576, 49152, 98304]
     # sae_sizes: list[int] = [768]
     # sae_sizes = [768]
@@ -559,22 +564,26 @@ def main() -> None:
     if regen_data:
         print("Generating data tensors")
         generate_data_tensors(
-            model_name,
-            sae_release_short,
-            sae_sizes,
-            activation_thresholds,
-            n_batches,
-            n_batches_in_buffer,
-            device,
-            output_dir,
-            save_npz,
-            save_h5,
-            remove_special_tokens,
+            model_name=model_name,
+            sae_release_short=sae_release_short,
+            sae_sizes=sae_sizes,
+            activation_thresholds=activation_thresholds,
+            n_batches=n_batches,
+            n_batches_in_buffer=n_batches_in_buffer,
+            device=device,
+            output_dir=output_dir,
+            save_npz=save_npz,
+            save_h5=save_h5,
+            remove_special_tokens=remove_special_tokens,
         )
         print("Generated data tensors")
     # Process data tensors and create summary statistics
     print("Processing data tensors")
-    process_data_tensors(sae_sizes, activation_thresholds, output_dir)
+    process_data_tensors(
+        sae_sizes=sae_sizes,
+        activation_thresholds=activation_thresholds,
+        output_dir=output_dir,
+    )
     print("Processed data tensors")
     # calculate_and_save_feature_activation_stats(sae_sizes, activation_thresholds, output_dir)
 
