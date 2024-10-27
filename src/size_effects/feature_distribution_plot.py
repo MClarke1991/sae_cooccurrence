@@ -213,6 +213,9 @@ def plot_combined_boxplots(
     all_stats: list[dict[str, Any]], output_dir: str, show_fliers: bool = True
 ) -> None:
     """Create and save a combined boxplot for all SAE sizes."""
+    # Sort all_stats by SAE size
+    all_stats.sort(key=lambda x: x["sae_size"])
+
     fig, ax = plt.subplots(figsize=(12, 6))
 
     positions = []
@@ -429,3 +432,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
