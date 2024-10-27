@@ -347,7 +347,7 @@ def process_data_tensors(sae_sizes, activation_thresholds, output_dir):
 
             # Save histogram data
             histogram_file = pj(
-                output_dir, f"histogram_data_{sae_size}_{safe_threshold}.h5"
+                output_dir, f"histogram_data_{sae_size}_{safe_threshold}"
             )
             save_histogram_data_npz(
                 observed_bin_edges,
@@ -517,7 +517,7 @@ def main() -> None:
     
     
     n_batches_in_buffer = 4    
-    regen_data = False
+    regen_data = True
     save_npz = True
     save_h5 = False # this only controls the overall feature cooccurrence and expected cooccurrence files as they are much larger as h5
 
