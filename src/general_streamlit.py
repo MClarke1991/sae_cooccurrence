@@ -246,8 +246,17 @@ def main():
     st.title("PCA Visualization with Feature Activations")
 
     git_root = get_git_root()
-    n_batches_reconstruction = 100
-    available_models = ["gpt2-small", "gemma-2-2b"]
+    model_to_batch_size = {
+        "gpt2-small": 100,
+        "gemma-2-2b": 10,
+    }
+
+    model = st.selectbox(
+        "Select model",
+        ["gpt2-small", "gemma-2-2b"],
+        format_func=lambda x: f"{x} (batch size: {model_to_batch_size[x]})",
+    )
+
     model_to_releases = {
         "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
         "gemma-2-2b": ["gemma-scope-2b-pt-res-canonical"],
@@ -261,19 +270,9 @@ def main():
         "gemma-scope-2b-pt-res-canonical": ["layer_0/width_16k/canonical"],
     }
 
-    # available_models = ["gpt2-small"]
-    # model_to_releases = {
-    #     "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
-    # }
+    # Get batch size for selected model
+    n_batches_reconstruction = model_to_batch_size[model]
 
-    # sae_release_to_ids = {
-    #     "res-jb": ["blocks.0.hook_resid_pre"],
-    #     "res-jb-feature-splitting": [
-    #         "blocks.8.hook_resid_pre_24576",
-    #     ],
-    # }
-
-    model = st.selectbox("Select model", available_models)
     available_sae_releases = model_to_releases[model]
     sae_release = st.selectbox("Select SAE release", available_sae_releases)
     available_sae_ids = sae_release_to_ids[sae_release]
