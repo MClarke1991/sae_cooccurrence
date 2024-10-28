@@ -3,7 +3,8 @@ import io
 import logging
 import os
 import pickle
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from os.path import join as pj
 from typing import Any
 
@@ -161,6 +162,8 @@ class ProcessedExamples:
         - all_max_feature_info (torch.Tensor): Tensor containing maximum feature information
             (i.e. whether the graph features were the maximally active).
         - all_examples_found (int): Total number of examples found.
+        - top_3_tokens (list[tuple[str, int]]): List of the top 3 tokens and their indices.
+        - example_context (str): The context of the example.
     """
 
     all_token_dfs: pd.DataFrame
@@ -170,6 +173,8 @@ class ProcessedExamples:
     all_feature_acts: torch.Tensor
     all_max_feature_info: torch.Tensor
     all_examples_found: int
+    top_3_tokens: list[tuple[str, int]] = field(default_factory=list)
+    example_context: str = ""
 
 
 def run_model_with_cache(model, tokens, sae):
@@ -346,6 +351,19 @@ def process_examples(
     all_feature_acts = torch.cat(all_feature_acts)
     all_max_feature_info = torch.cat(all_max_feature_info)
 
+    # Add new analysis for top tokens
+    token_counts = Counter(all_fired_tokens)
+    if token_counts:
+        top_3_tokens = token_counts.most_common(3)
+        # Fix the indexing by using pandas boolean indexing
+        most_common_token = top_3_tokens[0][0]
+        example_context = all_token_dfs.loc[
+            all_token_dfs["str_tokens"] == most_common_token
+        ]["context"].iloc[0]
+    else:
+        top_3_tokens = []
+        example_context = ""
+
     return ProcessedExamples(
         all_token_dfs=all_token_dfs,
         all_fired_tokens=all_fired_tokens,
@@ -354,6 +372,8 @@ def process_examples(
         all_examples_found=examples_found,
         all_max_feature_info=all_max_feature_info,
         all_feature_acts=all_feature_acts,
+        top_3_tokens=top_3_tokens,
+        example_context=example_context,
     )
 
 
