@@ -1,5 +1,6 @@
 ['generation']
 n_batches = 1
+remove_first_token = true
 
 model_name = "gpt2-small"
 sae_release_short = "res-jb-feature-splitting"

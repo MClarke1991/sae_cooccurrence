@@ -1,17 +1,16 @@
 ['generation']
-n_batches = 10
+n_batches = 100
 model_name = "gemma-2-2b"
-sae_release = "gemma-scope-2b-pt-res-canonical"
-sae_release_short = "gemma-scope-2b-pt-res-canonical"
+sae_release = "gemma-scope-2b-pt-res"
+sae_release_short = "gemma-scope-2b-pt-res"
 sae_ids = [
-    #"layer_0/width_16k/canonical",
-    # "layer_8/width_16k/canonical",
-    # "layer_12/width_16k/canonical",
-    "layer_18/width_16k/canonical",
-    #"layer_21/width_16k/canonical",
-    # "layer_25/width_16k/canonical"
+    "layer_12/width_16k/average_l0_176",
+    "layer_12/width_16k/average_l0_22",
+    "layer_12/width_16k/average_l0_41",
+    "layer_12/width_16k/average_l0_445",
+    "layer_12/width_16k/average_l0_82"
 ]
-activation_thresholds = [10]
+activation_thresholds = [1.5]
 n_batches_in_buffer = 4
 remove_special_tokens = true
 

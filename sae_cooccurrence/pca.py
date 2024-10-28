@@ -25,6 +25,9 @@ from sklearn.preprocessing import MinMaxScaler
 from tqdm.auto import tqdm
 
 from sae_cooccurrence.graph_generation import load_subgraph, plot_subgraph_static
+from sae_cooccurrence.normalised_cooc_functions import (
+    get_special_tokens,
+)
 
 
 def assign_category(row, fs_splitting_cluster, order_other_subgraphs=False):
@@ -169,8 +172,71 @@ class ProcessedExamples:
     all_examples_found: int
 
 
+def run_model_with_cache(model, tokens, sae):
+    """
+    Run the model with caching and return the cached activations for the SAE hook.
+
+    Args:
+        model: The transformer model to run.
+        tokens: The input tokens to process.
+        sae: The Sparse Autoencoder (SAE) object containing configuration.
+
+    Returns:
+        torch.Tensor: The cached activations at the SAE hook layer.
+
+    This function runs the model with caching enabled, stopping at the layer
+    after the SAE hook layer and filtering for only the SAE hook name. It then
+    returns the cached activations for the SAE hook.
+    """
+    _, cache = model.run_with_cache(
+        tokens,
+        stop_at_layer=sae.cfg.hook_layer + 1,
+        names_filter=[sae.cfg.hook_name],
+    )
+    return cache[sae.cfg.hook_name]
+
+
+def get_max_feature_info(feature_acts, fired_mask, feature_list_tensor, device="cpu"):
+    """
+    Calculate maximum feature information for fired tokens.
+
+    Args:
+        feature_acts (torch.Tensor): Feature activations for all tokens.
+        fired_mask (torch.Tensor): Boolean mask indicating which tokens fired.
+        feature_list_tensor (torch.Tensor): Tensor of feature indices in the graph.
+
+    Returns:
+        torch.Tensor: A tensor containing maximum feature information for each fired token.
+            The tensor has shape (num_fired_tokens, 3) where each row contains:
+            - max_feature_value: The maximum activation value
+            - max_feature_index: The index of the maximally activated feature
+            - max_feature_in_graph: Binary indicator (1.0 if max feature is in the graph, 0.0 otherwise)
+
+    This function computes the maximum feature activation for each fired token,
+    determines if the maximally activated feature is in the graph, and stacks
+    this information into a single tensor.
+    """
+    max_feature_values, max_feature_indices = feature_acts[fired_mask].max(dim=1)
+    max_feature_in_graph = torch.tensor(
+        [float(idx in feature_list_tensor) for idx in max_feature_indices],
+        dtype=torch.float32,
+        device=device,
+    )
+    max_feature_info = torch.stack(
+        [max_feature_values, max_feature_indices.float(), max_feature_in_graph],
+        dim=1,
+    )
+    return max_feature_info
+
+
 def process_examples(
-    activation_store, model, sae, feature_list, n_batches_reconstruction
+    activation_store,
+    model,
+    sae,
+    feature_list,
+    n_batches_reconstruction,
+    remove_special_tokens=False,
+    device="cpu",
 ):
     """
     Process examples from the activation store using the given model and SAE, extract the tokens that the
@@ -183,6 +249,7 @@ def process_examples(
     - sae: The SAE model instance.
     - feature_list: List of features to be considered i.e. those within a cluster/subgraph.
     - n_batches_reconstruction: Number of batches to process for reconstruction from the activation store.
+    - remove_special_tokens: Whether to remove special tokens from the processed examples e.g. BOS, EOS, PAD.
 
     Returns:
     - ProcessedExamples: A data class containing processed examples and related information.
@@ -199,49 +266,78 @@ def process_examples(
 
     pbar = tqdm(range(n_batches_reconstruction), leave=False)
     for _ in pbar:
+        # Get a batch of tokens from the activation store
         tokens = activation_store.get_batch_tokens()
+
+        # Create a DataFrame containing token information
         tokens_df = make_token_df(tokens, model)
+
+        # Flatten the tokens tensor for easier processing
         flat_tokens = tokens.flatten()
 
-        _, cache = model.run_with_cache(
-            tokens,
-            stop_at_layer=sae.cfg.hook_layer + 1,
-            names_filter=[sae.cfg.hook_name],
-        )
-        sae_in = cache[sae.cfg.hook_name]
+        # Run the model and get activations
+        sae_in = run_model_with_cache(model, tokens, sae)
+        # Encode the activations using the SAE
         feature_acts = sae.encode(sae_in).squeeze()
-        feature_acts = feature_acts.flatten(0, 1)
+        # Flatten the feature activations to 2D
+        feature_acts = feature_acts.flatten(0, 1).to(device)
 
+        # Create a mask for tokens where any feature in the feature_list is activated
         fired_mask = (feature_acts[:, feature_list]).sum(dim=-1) > 0
+        fired_mask = fired_mask.to(device)
+
+        if remove_special_tokens:
+            special_tokens = get_special_tokens(model)
+            # Create a mask for non-special tokens
+            # non_special_mask = ~torch.tensor(
+            #     [token in special_tokens for token in flat_tokens],
+            #     device=fired_mask.device,
+            # )
+            non_special_mask = ~torch.isin(
+                flat_tokens,
+                torch.tensor(list(special_tokens), device=device),
+            )
+            # Combine the fired_mask with the non_special_mask
+            fired_mask = fired_mask & non_special_mask
+
+        # Convert the fired tokens to string representations
         fired_tokens = model.to_str_tokens(flat_tokens[fired_mask])
+
+        # Reconstruct the activations for the fired tokens using only the features in the feature_list
         reconstruction = (
             feature_acts[fired_mask][:, feature_list] @ sae.W_dec[feature_list]
         )
 
         # Get max feature info
-        max_feature_values, max_feature_indices = feature_acts[fired_mask].max(dim=1)
-        max_feature_in_graph = torch.zeros_like(
-            max_feature_indices, dtype=torch.float32
-        )
-        for i, idx in enumerate(max_feature_indices):
-            max_feature_in_graph[i] = float(idx in feature_list_tensor)
-        max_feature_info = torch.stack(
-            [max_feature_values, max_feature_indices.float(), max_feature_in_graph],
-            dim=1,
+        max_feature_info = get_max_feature_info(
+            feature_acts, fired_mask, feature_list_tensor, device=device
         )
 
+        # Append the rows of tokens_df where fired_mask is True
+        # Convert fired_mask to CPU, get non-zero indices, flatten, and convert to numpy
+        # Use these indices to select rows from tokens_df
         all_token_dfs.append(
             tokens_df.iloc[fired_mask.cpu().nonzero().flatten().numpy()]
         )
+        # Append feature activations for fired tokens, filtered by feature_list
         all_graph_feature_acts.append(feature_acts[fired_mask][:, feature_list])
+
+        # Append all feature activations for fired tokens
         all_feature_acts.append(feature_acts[fired_mask])
+
+        # Append maximum feature information for fired tokens
         all_max_feature_info.append(max_feature_info)
+
+        # Append the string representations of fired tokens
         all_fired_tokens.append(fired_tokens)
+
+        # Append reconstructions for fired tokens using selected features
         all_reconstructions.append(reconstruction)
 
         examples_found += len(fired_tokens)
         pbar.set_description(f"Examples found: {examples_found}")
 
+    print(f"Total examples found: {examples_found}")
     # Flatten the list of lists
     all_token_dfs = pd.concat(all_token_dfs)
     all_fired_tokens = list_flatten(all_fired_tokens)
@@ -296,9 +392,17 @@ def generate_data(
     fs_splitting_nodes,
     n_batches_reconstruction,
     decoder=False,
+    remove_special_tokens=False,
+    device="cpu",
 ):
     results = process_examples(
-        activation_store, model, sae, fs_splitting_nodes, n_batches_reconstruction
+        activation_store,
+        model,
+        sae,
+        fs_splitting_nodes,
+        n_batches_reconstruction,
+        remove_special_tokens,
+        device=device,
     )
     pca_df, pca = perform_pca_on_results(results, n_components=3)
     if decoder:

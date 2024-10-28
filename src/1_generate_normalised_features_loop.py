@@ -43,6 +43,7 @@ def process_sae(
     n_batches: int,
     n_batches_in_buffer: int,
     device: str,
+    remove_special_tokens: bool,
 ) -> None:
     """
     Processes a given SAE ID by generating normalised features for each batch of activation thresholds.
@@ -55,6 +56,7 @@ def process_sae(
     n_batches (int): The total number of batches of the Activation Store to process.
     n_batches_in_buffer (int): The number of batches of the Activation Store to keep in memory for processing.
     device (torch.device): The device to use for processing (e.g., GPU or CPU).
+    remove_special_tokens (bool): Whether to remove the special tokens from the batch.
     """
     sae_id_neat = neat_sae_id(sae_id)
 
@@ -94,6 +96,7 @@ def process_sae(
             tar_name=tar_name,
             activation_thresholds=threshold_batch,
             n_batches_in_buffer=n_batches_in_buffer,
+            remove_special_token_acts=remove_special_tokens,
             save=True,
         )
 
@@ -107,7 +110,7 @@ def main():
     torch.set_grad_enabled(False)
     device = set_device()
     git_root = get_git_root()
-    config = toml.load(pj(git_root, "src", "cooc", "config_test.toml"))
+    config = toml.load(pj(git_root, "src", "config_gemma.toml"))
 
     n_batches = config["generation"]["n_batches"]
     model_name = config["generation"]["model_name"]
@@ -115,6 +118,7 @@ def main():
     sae_ids = config["generation"]["sae_ids"]
     activation_thresholds = config["generation"]["activation_thresholds"]
     n_batches_in_buffer = config["generation"]["n_batches_in_buffer"]
+    remove_special_tokens = config["generation"]["remove_special_tokens"]
 
     for sae_id in tqdm(sae_ids, desc="Processing SAE IDs"):
         process_sae(
@@ -125,6 +129,7 @@ def main():
             n_batches=n_batches,
             n_batches_in_buffer=n_batches_in_buffer,
             device=device,
+            remove_special_tokens=remove_special_tokens,
         )
 
     logging.info("Script finished running for all SAE IDs.")

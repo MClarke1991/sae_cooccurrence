@@ -39,6 +39,17 @@ def setup_logging(
     )
 
 
+def get_special_tokens(model: HookedTransformer) -> set[int | None]:
+    if model.tokenizer is None:
+        raise ValueError("Model tokenizer is None")
+    special_tokens = {
+        model.tokenizer.bos_token_id,
+        model.tokenizer.eos_token_id,
+        model.tokenizer.pad_token_id,
+    }
+    return special_tokens
+
+
 def get_sae_release(model_name: str, sae_release_short: str) -> str:
     """
     Determine the SAE release based on the model name.
@@ -70,11 +81,11 @@ def generate_normalised_features(
     tar_name: str,
     activation_thresholds: list[float | int],
     n_batches: int = 100,
-    half_precision: bool = False,
     generate_jaccard: bool = True,
     generate_tar: bool = True,
     n_batches_in_buffer: int = 32,
     save: bool = True,
+    remove_special_token_acts: bool = False,
 ) -> None | dict[str, dict[float, torch.Tensor] | dict[float, np.ndarray]]:
     """
     Generates normalised features co-occurrence matrices for a given model, SAE release, and SAE ID.
@@ -94,12 +105,11 @@ def generate_normalised_features(
     the threshold is the minimum activation value for a feature to be considered active.
     - n_batches (int, optional): The number of batches of the Activations Store to use for computing co-occurrence matrices.
     Defaults to 100.
-    - half_precision (bool, optional): Whether to use half precision for computations. Defaults to False.
     - generate_jaccard (bool, optional): Whether to generate Jaccard matrices. Defaults to True.
     - generate_tar (bool, optional): Whether to compress the results directory to a tar file. Defaults to True.
     - n_batches_in_buffer (int, optional): The number of batches to keep in memory for processing. Defaults to 32.
     - save (bool, optional): Whether to save the results to disk. Defaults to True.
-
+    - remove_special_tokens_acts (bool, optional): Whether to remove the activations of special tokens from the batch. Defaults to False.
     Returns:
     - Union[None, dict[str, Union[dict[float, torch.Tensor], dict[float, np.ndarray]]]]:
     If save is False, returns a dictionary containing the total matrices and feature activations. Otherwise, returns None.
@@ -131,6 +141,8 @@ def generate_normalised_features(
     sae.W_dec.norm(dim=-1).mean()
     sae.fold_W_dec_norm()
 
+    special_tokens = get_special_tokens(model)
+
     # Set up the activations store
     activation_store = ActivationsStore.from_sae(
         model=model,
@@ -147,13 +159,13 @@ def generate_normalised_features(
 
     if not check_all_files_exist(results_path, activation_thresholds, "total"):
         total_matrices = compute_cooccurrence_matrices(
-            sae,
-            sae_id,
-            activation_store,
-            n_batches,
-            activation_thresholds,
-            device,
-            half_precision=half_precision,
+            sae=sae,
+            activation_store=activation_store,
+            n_batches=n_batches,
+            activation_thresholds=activation_thresholds,
+            device=device,
+            remove_special_tokens_acts=remove_special_token_acts,
+            special_tokens=special_tokens,
         )
         logging.info("Co-occurrence matrices calculated.")
         if save:
@@ -178,14 +190,9 @@ def generate_normalised_features(
             if os.path.exists(file_path):
                 with np.load(file_path) as data:
                     array_name = list(data.keys())[0]
-                    if half_precision:
-                        total_matrices[threshold] = torch.tensor(
-                            data[array_name], device=device
-                        ).to(torch.float16)
-                    else:
-                        total_matrices[threshold] = torch.tensor(
-                            data[array_name], device=device
-                        )
+                    total_matrices[threshold] = torch.tensor(
+                        data[array_name], device=device
+                    )
                 print(f"Loaded matrix for threshold {threshold}")
             else:
                 print(f"Warning: No file found for threshold {threshold}")
@@ -333,14 +340,105 @@ def get_sae_threshold(sae: SAE, device: str) -> torch.Tensor:
     return sae_threshold
 
 
+def get_feature_activations_for_batch(
+    activation_store: ActivationsStore,
+    device: str,
+    remove_special_tokens_acts: bool,
+    special_tokens: set[int | None],
+) -> torch.Tensor:
+    """
+    Get feature activations for a batch of tokens from an ActivationsStore.
+
+    This function retrieves a batch of activations from the ActivationsStore,
+    optionally removes the first token (typically the beginning-of-sequence token),
+    and encodes the activations using the provided SAE (Sparse Autoencoder).
+
+    Args:
+        activation_store (ActivationsStore): The ActivationsStore object to get activations from.
+        sae (SAE): The Sparse Autoencoder used to encode the activations.
+        remove_special_tokens_acts (bool, optional): Whether to remove the activations of special tokens from the batch.
+                                                     Defaults to False.
+        special_tokens (set[int | None]): A set of special tokens to remove from the batch e.g. bos, eos, pad.
+
+    Returns:
+        torch.Tensor: Encoded feature activations, shape (batch_size * context_size, d_sae).
+
+    Note:
+        - If remove_first_token is True, the function uses get_flattened_activations_wout_first
+          to retrieve activations without the first token.
+        - The returned tensor is squeezed to remove any singleton dimensions.
+    """
+    if not remove_special_tokens_acts:
+        activations_batch = activation_store.next_batch()
+    else:
+        activations_batch = get_batch_without_special_token_activations(
+            activation_store, special_tokens, device
+        )
+    return activations_batch
+
+
+def get_batch_without_special_token_activations(
+    activations_store: ActivationsStore,
+    special_tokens: set[int | None],
+    device: str,
+) -> torch.Tensor:
+    """
+    Get a batch of activations from the ActivationsStore, removing the first token of every prompt.
+
+    Args:
+    activations_store (ActivationsStore): An instance of the ActivationsStore class.
+
+    Returns:
+    torch.Tensor: A tensor of shape [train_batch_size, 1, d_in] containing activations,
+                  with the first token of each prompt removed.
+    """
+    # Get a batch of tokens
+    batch_tokens = activations_store.get_batch_tokens().to(device)
+
+    # Get activations for these tokens
+    with torch.no_grad():
+        activations = activations_store.get_activations(batch_tokens).to(device)
+
+    non_special_mask = ~torch.isin(
+        batch_tokens, torch.tensor(list(special_tokens), device=device)
+    )
+
+    # Remove the first token's activation from each prompt
+    # activations = activations[non_special_mask, ...]
+    activations = activations[non_special_mask]
+
+    # Note I believe that this is necessary because ActivationsStore.next_batch() gets `train_batch_size_tokens` tokens
+    # whereas ActivationsStore.get_batch_tokens() gets `store_batch_size_prompts` i.e. n `prompts of context_size` tokens each.
+    # However, normally the ActivationsStore is initialised such that
+    # train_batch_size_tokens` = `store_batch_size_prompts` * `context_size` and ActivationsStore.get_batch_tokens() defaults to
+    # `store_batch_size_prompts` i.e. the same number of tokens as next_batch()
+
+    # Reshape to match the output of next_batch() because the batch of tokens are stored as seperate prompts whereas next_batch()
+    # returns a single batch of tokens from the prompts shuffled together
+    activations = activations.reshape(-1, 1, activations.shape[-1])
+
+    # If there's any normalization applied in the original next_batch(), apply it here
+    if activations_store.normalize_activations == "expected_average_only_in":
+        activations = activations_store.apply_norm_scaling_factor(activations)
+
+    # Shuffle the activations
+    # activations = activations[torch.randperm(activations.shape[0])]
+
+    # Get the correct batch size
+    train_batch_size = activations_store.train_batch_size_tokens
+
+    # Return only the required number of activations
+    return activations[:train_batch_size]
+
+
 def compute_cooccurrence_matrices(
     sae: SAE,
-    sae_id: str,
     activation_store: ActivationsStore,
     n_batches: int,
     activation_thresholds: list[float],
     device: str,
-    half_precision: bool = False,
+    remove_special_tokens_acts: bool,
+    special_tokens: set[int | None],
 ) -> dict[float, torch.Tensor]:
     """
     Computes co-occurrence matrices for given activation thresholds and precision.
@@ -348,7 +446,6 @@ def compute_cooccurrence_matrices(
     This function iterates over a specified number of batches from the activation store,
     processes each batch through a given SAE model, and computes co-occurrence matrices
     for each specified activation threshold. The matrices are accumulated over all batches.
-    The function can operate in either full or half precision, depending on the `half_precision` parameter.
 
     Args:
     - sae (SAE): The SAE model to use for encoding activations.
@@ -358,8 +455,8 @@ def compute_cooccurrence_matrices(
     - activation_thresholds (list[float]): A list of thresholds for which to compute co-occurrence matrices,
     where the threshold is the minimum activation value for a feature to be considered active.
     - device (str): The device on which to perform computations (e.g. 'cpu', 'cuda', 'mps').
-    - half_precision (bool, optional): If True, computations are performed in half precision. Defaults to False.
-
+    - remove_special_tokens_acts (bool, optional): Whether to remove the activations of special tokens from the batch. Defaults to False.
+    - special_tokens (set[int | None]): A set of special tokens to remove from the batch e.g. bos, eos, pad.
     Returns:
     - dict[float, torch.Tensor]: A dictionary where each key is an activation threshold and
     the value is the accumulated co-occurrence matrix for that threshold.
@@ -367,44 +464,24 @@ def compute_cooccurrence_matrices(
 
     sae_threshold = get_sae_threshold(sae, device)
 
-    if half_precision:
-        feature_acts_cooc_totals = {
-            t: torch.zeros(
-                (sae.cfg.d_sae, sae.cfg.d_sae), dtype=torch.float16, device=device
-            )
-            for t in activation_thresholds
-        }
-        for _ in tqdm(range(n_batches), desc=f"Processing {sae_id}", leave=False):
-            activations_batch = (
-                activation_store.next_batch().half()
-            )  # Convert to half-precision
-            feature_acts = sae.encode(activations_batch).squeeze()
+    feature_acts_cooc_totals = {
+        t: torch.zeros((sae.cfg.d_sae, sae.cfg.d_sae), dtype=torch.float, device=device)
+        for t in activation_thresholds
+    }
+    for _ in tqdm(
+        range(n_batches), desc=f"Processing {sae.cfg.neuronpedia_id}", leave=False
+    ):
+        activations_batch = get_feature_activations_for_batch(
+            activation_store, device, remove_special_tokens_acts, special_tokens
+        )
+        feature_acts = sae.encode(activations_batch).squeeze()
 
-            for threshold in activation_thresholds:
-                feature_acts_bool = apply_activation_threshold(
-                    feature_acts, threshold, sae_threshold
-                )
-                feature_acts_cooc = feature_acts_bool.T @ feature_acts_bool
-                feature_acts_cooc_totals[threshold] += (
-                    feature_acts_cooc.half()
-                )  # Convert to half-precision
-    else:
-        feature_acts_cooc_totals = {
-            t: torch.zeros(
-                (sae.cfg.d_sae, sae.cfg.d_sae), dtype=torch.float, device=device
+        for threshold in activation_thresholds:
+            feature_acts_bool = apply_activation_threshold(
+                feature_acts, threshold, sae_threshold
             )
-            for t in activation_thresholds
-        }
-        for _ in tqdm(range(n_batches), leave=False):
-            activations_batch = activation_store.next_batch()
-            feature_acts = sae.encode(activations_batch).squeeze()
-
-            for threshold in activation_thresholds:
-                feature_acts_bool = apply_activation_threshold(
-                    feature_acts, threshold, sae_threshold
-                )
-                feature_acts_cooc = feature_acts_bool.T @ feature_acts_bool
-                feature_acts_cooc_totals[threshold] += feature_acts_cooc
+            feature_acts_cooc = feature_acts_bool.T @ feature_acts_bool
+            feature_acts_cooc_totals[threshold] += feature_acts_cooc
 
     return feature_acts_cooc_totals
 
