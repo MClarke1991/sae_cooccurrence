@@ -197,10 +197,13 @@ def load_available_subgraphs(file_path):
 
 @st.cache_data
 def load_subgraph_metadata(file_path, subgraph_id):
+    top_3_tokens = []
+    example_context = ""
     with h5py.File(file_path, "r") as f:
         group = f[f"subgraph_{subgraph_id}"]
         top_3_tokens = decode_if_bytes(load_dataset(group["top_3_tokens"]))  # type: ignore
         example_context = decode_if_bytes(load_dataset(group["example_context"]))  # type: ignore
+        example_context = "".join(example_context)  # type: ignore
     return top_3_tokens, example_context
 
 
