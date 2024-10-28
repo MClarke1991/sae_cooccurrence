@@ -270,6 +270,8 @@ def main():
         "gemma-scope-2b-pt-res-canonical": [
             "layer_0/width_16k/canonical",
             "layer_12/width_16k/canonical",
+            "layer_12/width_32k/canonical",
+            "layer_12/width_65k/canonical",
             "layer_18/width_16k/canonical",
             "layer_21/width_16k/canonical",
         ],
