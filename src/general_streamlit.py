@@ -241,6 +241,7 @@ def main():
     st.title("PCA Visualization with Feature Activations")
 
     git_root = get_git_root()
+    n_batches_reconstruction = 100
     available_models = ["gpt2-small", "gemma-2-2b"]
     model_to_releases = {
         "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
@@ -280,7 +281,7 @@ def main():
     pca_results_path = pj(
         results_root,
         f"{sae_id}_pca_for_streamlit",
-        f"graph_analysis_results_size_{selected_size}.h5",
+        f"graph_analysis_results_size_{selected_size}_nbatch_{n_batches_reconstruction}.h5",
     )
 
     # Load available subgraphs
