@@ -247,23 +247,10 @@ def main():
 
     git_root = get_git_root()
     n_batches_reconstruction = 100
-    # available_models = ["gpt2-small", "gemma-2-2b"]
-    # model_to_releases = {
-    #     "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
-    #     "gemma-2-2b": ["gemma-scope-2b-pt-res-canonical"],
-    # }
-
-    # sae_release_to_ids = {
-    #     "res-jb": ["blocks.0.hook_resid_pre"],
-    #     "res-jb-feature-splitting": [
-    #         "blocks.8.hook_resid_pre_24576",
-    #     ],
-    #     "gemma-scope-2b-pt-res-canonical": ["layer_18/width_16k/canonical"],
-    # }
-
-    available_models = ["gpt2-small"]
+    available_models = ["gpt2-small", "gemma-2-2b"]
     model_to_releases = {
         "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
+        "gemma-2-2b": ["gemma-scope-2b-pt-res-canonical"],
     }
 
     sae_release_to_ids = {
@@ -271,7 +258,20 @@ def main():
         "res-jb-feature-splitting": [
             "blocks.8.hook_resid_pre_24576",
         ],
+        "gemma-scope-2b-pt-res-canonical": ["layer_0/width_16k/canonical"],
     }
+
+    # available_models = ["gpt2-small"]
+    # model_to_releases = {
+    #     "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
+    # }
+
+    # sae_release_to_ids = {
+    #     "res-jb": ["blocks.0.hook_resid_pre"],
+    #     "res-jb-feature-splitting": [
+    #         "blocks.8.hook_resid_pre_24576",
+    #     ],
+    # }
 
     model = st.selectbox("Select model", available_models)
     available_sae_releases = model_to_releases[model]
