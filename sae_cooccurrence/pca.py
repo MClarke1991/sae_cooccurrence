@@ -414,8 +414,23 @@ def perform_pca_on_results(
     n_components (int): Number of PCA components to compute (default: 3)
     method (Literal["auto", "full", "arpack", "randomized"]): The method to use for PCA (default: "full")
     Returns:
-    pd.DataFrame: DataFrame containing PCA results and associated metadata
+    Tuple[Optional[pd.DataFrame], Optional[PCA]]: DataFrame containing PCA results and PCA object,
+                                                 or (None, None) if PCA cannot be performed
     """
+    # Get dimensions of the data
+    n_samples, n_features = results.all_reconstructions.cpu().numpy().shape
+    max_components = min(n_samples, n_features)
+
+    if n_components > max_components:
+        import warnings
+
+        warnings.warn(
+            f"Cannot perform PCA: requested n_components ({n_components}) is greater than "
+            f"max possible components ({max_components}). Returning None.",
+            UserWarning,
+        )
+        return None, None
+
     # Perform PCA
     pca = PCA(n_components=n_components, svd_solver=method)
     pca_embedding = pca.fit_transform(results.all_reconstructions.cpu().numpy())

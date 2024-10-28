@@ -31,6 +31,7 @@ def process_graph_for_pca(
     remove_special_tokens,
     device,
 ):
+    # First attempt with original n_batches
     results = process_examples(
         activation_store,
         model,
@@ -41,6 +42,23 @@ def process_graph_for_pca(
         device=device,
     )
     pca_df, _ = perform_pca_on_results(results, n_components=3, method="auto")
+
+    # If PCA failed, retry with double n_batches
+    if pca_df is None:
+        logging.warning(
+            f"PCA failed, retrying with {n_batches_reconstruction * 2} batches"
+        )
+        results = process_examples(
+            activation_store,
+            model,
+            sae,
+            fs_splitting_nodes,
+            n_batches_reconstruction * 2,
+            remove_special_tokens,
+            device=device,
+        )
+        pca_df, _ = perform_pca_on_results(results, n_components=3, method="auto")
+
     return results, pca_df
 
 
@@ -196,6 +214,14 @@ def main():
                     remove_special_tokens,
                     device=device,
                 )
+
+                # Skip this subgraph if PCA still failed after retry
+                if pca_df is None:
+                    logging.warning(
+                        f"Skipping subgraph {subgraph_id} due to PCA failure"
+                    )
+                    continue
+
                 results_dict[subgraph_id] = (results, pca_df)
 
             # Save results for this subgraph size
