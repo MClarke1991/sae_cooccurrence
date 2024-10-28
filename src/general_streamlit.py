@@ -223,15 +223,23 @@ def main():
     st.title("PCA Visualization with Feature Activations")
 
     git_root = get_git_root()
-    sae_id = "blocks.8.hook_resid_pre_24576"
-    sae_id_neat = neat_sae_id(sae_id)
+    available_models = ["gpt2-small"]
+    available_sae_releases = ["res-jb", "res-jb-feature-splitting"]
+    available_sae_ids = [
+        "blocks.8.hook_resid_pre_24576",
+        "blocks.0.hook_resid_pre",
+    ]
+    available_sae_ids_neat = [neat_sae_id(sae_id) for sae_id in available_sae_ids]
+    model = st.selectbox("Select model", available_models)
+    sae_release = st.selectbox("Select SAE release", available_sae_releases)
+    sae_id = st.selectbox("Select SAE ID", available_sae_ids_neat)
     results_root = pj(
         git_root,
-        "results/gpt2-small/res-jb-feature-splitting/blocks_8_hook_resid_pre_24576/",
+        f"results/{model}/{sae_release}/{sae_id}",
     )
 
     # Add size selection before loading subgraphs
-    available_sizes = get_available_sizes(results_root, sae_id_neat)
+    available_sizes = get_available_sizes(results_root, sae_id)
     selected_size = st.selectbox(
         "Select subgraph size",
         options=available_sizes,
@@ -242,7 +250,7 @@ def main():
     # Update pca_results_path to use selected size
     pca_results_path = pj(
         results_root,
-        f"{sae_id_neat}_pca_for_streamlit",
+        f"{sae_id}_pca_for_streamlit",
         f"graph_analysis_results_size_{selected_size}.h5",
     )
 
