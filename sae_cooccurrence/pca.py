@@ -6,7 +6,7 @@ import pickle
 from collections import Counter
 from dataclasses import dataclass, field
 from os.path import join as pj
-from typing import Any
+from typing import Any, Literal
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -401,14 +401,18 @@ def process_examples(
     )
 
 
-def perform_pca_on_results(results: ProcessedExamples, n_components: int = 3, method: str = "full"):
+def perform_pca_on_results(
+    results: ProcessedExamples,
+    n_components: int = 3,
+    method: Literal["auto", "full", "arpack", "randomized"] = "full",
+):
     """
     Perform PCA on the reconstructions from ProcessedExamples and return a DataFrame with the results.
 
     Args:
     results (ProcessedExamples): The results from process_examples function
     n_components (int): Number of PCA components to compute (default: 3)
-
+    method (Literal["auto", "full", "arpack", "randomized"]): The method to use for PCA (default: "full")
     Returns:
     pd.DataFrame: DataFrame containing PCA results and associated metadata
     """
@@ -2443,7 +2447,6 @@ def create_subgraph_traces(subgraph, node_df, activation_array, pos):
     normalized_activations = (
         np.array(node_activations) - np.min(node_activations)  # type: ignore
     ) / (np.max(node_activations) - np.min(node_activations))  # type: ignore
-
 
     # Prepare the color map
     cmap = plt.cm.get_cmap("viridis")
