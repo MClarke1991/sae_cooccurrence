@@ -228,11 +228,16 @@ def load_subgraph_metadata(file_path, subgraph_id):
 
 
 @st.cache_data
-def get_available_sizes(results_root, sae_id_neat):
+def get_available_sizes(results_root, sae_id_neat, n_batches_reconstruction):
     """Get all available subgraph sizes from the directory"""
     base_path = pj(results_root, f"{sae_id_neat}_pca_for_streamlit")
-    files = glob.glob(pj(base_path, "graph_analysis_results_size_*.h5"))
-    sizes = [int(re.search(r"size_(\d+)\.h5$", f).group(1)) for f in files]  # type: ignore
+    files = glob.glob(
+        pj(
+            base_path,
+            f"graph_analysis_results_size_*_nbatch_{n_batches_reconstruction}.h5",
+        )
+    )
+    sizes = [int(re.search(r"size_(\d+)_nbatch_", f).group(1)) for f in files]  # type: ignore
     return sorted(sizes)
 
 
@@ -242,10 +247,23 @@ def main():
 
     git_root = get_git_root()
     n_batches_reconstruction = 100
-    available_models = ["gpt2-small", "gemma-2-2b"]
+    # available_models = ["gpt2-small", "gemma-2-2b"]
+    # model_to_releases = {
+    #     "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
+    #     "gemma-2-2b": ["gemma-scope-2b-pt-res-canonical"],
+    # }
+
+    # sae_release_to_ids = {
+    #     "res-jb": ["blocks.0.hook_resid_pre"],
+    #     "res-jb-feature-splitting": [
+    #         "blocks.8.hook_resid_pre_24576",
+    #     ],
+    #     "gemma-scope-2b-pt-res-canonical": ["layer_18/width_16k/canonical"],
+    # }
+
+    available_models = ["gpt2-small"]
     model_to_releases = {
         "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
-        "gemma-2-2b": ["gemma-scope-2b-pt-res-canonical"],
     }
 
     sae_release_to_ids = {
@@ -253,7 +271,6 @@ def main():
         "res-jb-feature-splitting": [
             "blocks.8.hook_resid_pre_24576",
         ],
-        "gemma-scope-2b-pt-res-canonical": ["layer_18/width_16k/canonical"],
     }
 
     model = st.selectbox("Select model", available_models)
@@ -269,7 +286,9 @@ def main():
     )
 
     # Add size selection before loading subgraphs
-    available_sizes = get_available_sizes(results_root, sae_id)
+    available_sizes = get_available_sizes(
+        results_root, sae_id, n_batches_reconstruction
+    )
     selected_size = st.selectbox(
         "Select subgraph size",
         options=available_sizes,
