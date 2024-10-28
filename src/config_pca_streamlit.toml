@@ -1,16 +1,20 @@
 [model]
-name = "gemma-2-2b"
-sae_release_short = "gemma-scope-2b-pt-res-canonical"
+# name = "gemma-2-2b"
+name = "gpt2-small"
+# sae_release_short = "gemma-scope-2b-pt-res-canonical"
+sae_release_short = "res-jb-feature-splitting"
 sae_ids = [
-    "layer_0/width_16k/canonical", 
-    "layer_12/width_16k/canonical",
-    "layer_18/width_16k/canonical",
-    "layer_21/width_16k/canonical"
+    "blocks.8.hook_resid_pre_24576",
+    "blocks.0.hook_resid_pre_768",
+    "blocks.8.hook_resid_pre_1536",
+    "blocks.8.hook_resid_pre_3072",
+    "blocks.8.hook_resid_pre_6144",
+    "blocks.8.hook_resid_pre_12288",
 ]
 
 [processing]
-remove_special_tokens = true
-n_batches_reconstruction = 10
+remove_special_tokens = false
+n_batches_reconstruction = 100
 activation_threshold = 1.5
 subgraph_sizes_to_plot = [5,6,7]
 save_all_feature_acts = false
