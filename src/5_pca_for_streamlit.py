@@ -5,14 +5,21 @@ from os.path import join as pj
 import h5py
 import numpy as np
 import pandas as pd
+import toml
 import torch
 from sae_lens import ActivationsStore
 from tqdm.autonotebook import tqdm
 
-from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
+from sae_cooccurrence.normalised_cooc_functions import get_sae_release, neat_sae_id
 from sae_cooccurrence.pca import perform_pca_on_results, process_examples
 from sae_cooccurrence.utils.saving_loading import load_model_and_sae, set_device
 from sae_cooccurrence.utils.set_paths import get_git_root
+
+
+def load_config(filename):
+    config_path = pj(get_git_root(), "src", filename)
+    with open(config_path) as f:
+        return toml.load(f)
 
 
 def process_graph_for_pca(
@@ -120,14 +127,25 @@ def main():
     device = set_device()
     git_root = get_git_root()
 
-    model_name = "gpt2-small"
-    sae_release_short = "res-jb-feature-splitting"
-    sae_id = "blocks.8.hook_resid_pre_24576"
-    remove_special_tokens = False  # Set to True for Gemma
-    n_batches_reconstruction = 100
-    activation_threshold = 1.5
-    subgraph_sizes_to_plot = [51]  # List of subgraph sizes to process
-    save_all_feature_acts = False
+    # model_name = "gpt2-small"
+    # sae_release_short = "res-jb"
+    # sae_id = "blocks.0.hook_resid_pre"
+    # remove_special_tokens = False  # Set to True for Gemma
+
+    # Load configuration from TOML
+    config = load_config("config_pca_streamlit.toml")
+
+    model_name = config["model"]["name"]
+    sae_release_short = config["model"]["sae_release_short"]
+    sae_id = config["model"]["sae_id"]
+    remove_special_tokens = config["processing"]["remove_special_tokens"]
+    n_batches_reconstruction = config["processing"]["n_batches_reconstruction"]
+    activation_threshold = config["processing"]["activation_threshold"]
+    subgraph_sizes_to_plot = config["processing"]["subgraph_sizes_to_plot"]
+    save_all_feature_acts = config["processing"]["save_all_feature_acts"]
+
+    if model_name == "gemma-2-2b" and not remove_special_tokens:
+        raise ValueError("Gemma requires removing special tokens")
 
     # Paths and logging setup
     sae_id_neat = neat_sae_id(sae_id)
@@ -138,7 +156,7 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
 
     # Load model and SAE
-    sae_release = f"{model_name}-{sae_release_short}"
+    sae_release = get_sae_release(model_name, sae_release_short)
     model, sae = load_model_and_sae(model_name, sae_release, sae_id, device)
 
     # Set up activation store
@@ -183,7 +201,10 @@ def main():
             results_dict[subgraph_id] = (results, pca_df)
 
         # Save results for this subgraph size
-        output_file = pj(output_dir, f"graph_analysis_results_size_{subgraph_size}.h5")
+        output_file = pj(
+            output_dir,
+            f"graph_analysis_results_size_{subgraph_size}_nbatch_{n_batches_reconstruction}.h5",
+        )
         save_results_to_hdf5(
             output_file, results_dict, save_all_feature_acts=save_all_feature_acts
         )

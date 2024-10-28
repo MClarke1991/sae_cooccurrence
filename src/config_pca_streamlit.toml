@@ -1,0 +1,11 @@
+[model]
+name = "gemma-2-2b"
+sae_release_short = "gemma-scope-2b-pt-res-canonical"
+sae_id = "layer_18/width_16k/canonical"
+
+[processing]
+remove_special_tokens = true
+n_batches_reconstruction = 100
+activation_threshold = 1.5
+subgraph_sizes_to_plot = [5,6,7]
+save_all_feature_acts = false
