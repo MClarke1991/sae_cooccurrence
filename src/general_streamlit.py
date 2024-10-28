@@ -166,12 +166,30 @@ def plot_legend(color_map):
 
 
 def plot_feature_activations(
-    all_graph_feature_acts, point_index, fs_splitting_nodes, context
+    all_graph_feature_acts, point_index, fs_splitting_nodes, context=None
 ):
-    # Get activations for the specific index
-    activations = all_graph_feature_acts[point_index]
+    if point_index is None:
+        # Create an empty figure with instructions
+        fig = go.Figure()
+        fig.update_layout(
+            height=600,
+            width=800,
+            title="Instructions",
+            annotations=[
+                dict(
+                    text="Click on a point in the PCA plot to see its feature activations",
+                    xref="paper",
+                    yref="paper",
+                    x=0.5,
+                    y=0.5,
+                    showarrow=False,
+                )
+            ],
+        )
+        return fig
 
-    # Create a bar trace for all features in fs_splitting_nodes
+    # Original plotting code
+    activations = all_graph_feature_acts[point_index]
     trace = go.Bar(
         x=[f"Feature {i}" for i in fs_splitting_nodes],
         y=activations,
@@ -182,7 +200,7 @@ def plot_feature_activations(
     fig.update_layout(
         height=600,
         width=800,
-        title=f'Context: "{context}"',
+        title=f'Context: "{context}"' if context else "Feature Activations",
         xaxis_title="Feature",
         yaxis_title="Activation",
     )
@@ -314,10 +332,17 @@ def main():
 
     with col3:
         st.write("## Feature Activations (Only for fs_splitting_nodes)")
-        feature_plot_placeholder = st.empty()
 
-        if selected_points:
-            # Check if the selected point exists in the current dataset
+        if not selected_points:
+            # Show empty plot with instructions when no point is selected
+            feature_plot = plot_feature_activations(
+                results["all_graph_feature_acts"],
+                point_index=None,
+                fs_splitting_nodes=fs_splitting_nodes,
+            )
+            st.plotly_chart(feature_plot, use_container_width=True)
+        else:
+            # Rest of the existing code for when a point is selected
             selected_x = selected_points[0]["x"]
             selected_y = selected_points[0]["y"]
             matching_points = pca_df[
@@ -338,15 +363,11 @@ def main():
                     fs_splitting_nodes,
                     context,
                 )
-                feature_plot_placeholder.plotly_chart(
-                    feature_plot, use_container_width=True
-                )
+                st.plotly_chart(feature_plot, use_container_width=True)
             else:
                 st.write(
                     "The selected point is not in the current dataset. Please select a new point."
                 )
-        else:
-            st.write("Click on a point in the PCA plot to see its feature activations.")
 
 
 if __name__ == "__main__":
