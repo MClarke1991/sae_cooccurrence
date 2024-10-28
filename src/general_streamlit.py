@@ -241,15 +241,22 @@ def main():
     st.title("PCA Visualization with Feature Activations")
 
     git_root = get_git_root()
-    available_models = ["gpt2-small"]
-    available_sae_releases = ["res-jb", "res-jb-feature-splitting"]
+    available_models = ["gpt2-small", "gemma-2-2b"]
+    model_to_releases = {
+        "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
+        "gemma-2-2b": ["gemma-scope-2b-pt-res-canonical"],
+    }
+
     sae_release_to_ids = {
         "res-jb": ["blocks.0.hook_resid_pre"],
         "res-jb-feature-splitting": [
             "blocks.8.hook_resid_pre_24576",
         ],
+        "gemma-scope-2b-pt-res-canonical": ["layer_18/width_16k/canonical"],
     }
 
+    model = st.selectbox("Select model", available_models)
+    available_sae_releases = model_to_releases[model]
     sae_release = st.selectbox("Select SAE release", available_sae_releases)
     available_sae_ids = sae_release_to_ids[sae_release]
     sae_id = st.selectbox(
@@ -257,7 +264,7 @@ def main():
     )
     results_root = pj(
         git_root,
-        f"results/{available_models[0]}/{sae_release}/{sae_id}",
+        f"results/{model}/{sae_release}/{sae_id}",
     )
 
     # Add size selection before loading subgraphs
