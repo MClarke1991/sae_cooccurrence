@@ -116,6 +116,9 @@ def test_process_examples(device):
     assert isinstance(results.all_feature_acts, torch.Tensor)
     assert isinstance(results.all_max_feature_info, torch.Tensor)
     assert isinstance(results.all_examples_found, int)
+    # Add new assertions for the new fields
+    assert isinstance(results.top_3_tokens, list)
+    assert isinstance(results.example_context, str)
 
     # Test shapes
     total_tokens = batch_size * seq_len
@@ -167,6 +170,9 @@ def test_process_examples(device):
         results_with_special_tokens_removed.all_max_feature_info, torch.Tensor
     )
     assert isinstance(results_with_special_tokens_removed.all_examples_found, int)
+    # Add new assertions for the new fields
+    assert isinstance(results_with_special_tokens_removed.top_3_tokens, list)
+    assert isinstance(results_with_special_tokens_removed.example_context, str)
 
     # Test shapes
     assert len(results_with_special_tokens_removed.all_fired_tokens) <= total_tokens

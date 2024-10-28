@@ -65,6 +65,23 @@ def save_results_to_hdf5(file_path, results_dict, save_all_feature_acts=True):
             )
             group.create_dataset("all_examples_found", data=results.all_examples_found)
 
+            # Add new fields for top_3_tokens and example_context
+            group.create_dataset(
+                "top_3_tokens",
+                data=np.array(
+                    [str(token).encode("utf-8") for token in results.top_3_tokens]
+                ),
+            )
+            group.create_dataset(
+                "example_context",
+                data=np.array(
+                    [
+                        str(context).encode("utf-8")
+                        for context in results.example_context
+                    ]
+                ),
+            )
+
             # Save all_token_dfs as a table
             token_dfs_group = group.create_group("all_token_dfs")
             for column in results.all_token_dfs.columns:
@@ -109,12 +126,12 @@ def main():
     remove_special_tokens = False  # Set to True for Gemma
     n_batches_reconstruction = 100
     activation_threshold = 1.5
-    subgraph_sizes_to_plot = [5, 6, 7]  # List of subgraph sizes to process
+    subgraph_sizes_to_plot = [51]  # List of subgraph sizes to process
     save_all_feature_acts = False
 
     # Paths and logging setup
     sae_id_neat = neat_sae_id(sae_id)
-    results_dir = f"results/cooc/{model_name}/{sae_release_short}/{sae_id_neat}"
+    results_dir = f"results/{model_name}/{sae_release_short}/{sae_id_neat}"
     results_path = pj(git_root, results_dir)
 
     output_dir = pj(git_root, results_dir, f"{sae_id_neat}_pca_for_streamlit")
