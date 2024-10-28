@@ -401,17 +401,35 @@ def process_examples(
     )
 
 
-def perform_pca_on_results(results: ProcessedExamples, n_components: int = 3, method: str = "full"):
+def perform_pca_on_results(
+    results: ProcessedExamples, n_components: int = 3, method: str = "full"
+):
     """
     Perform PCA on the reconstructions from ProcessedExamples and return a DataFrame with the results.
 
     Args:
     results (ProcessedExamples): The results from process_examples function
     n_components (int): Number of PCA components to compute (default: 3)
+    method (str): PCA solver method (default: "full")
 
     Returns:
-    pd.DataFrame: DataFrame containing PCA results and associated metadata
+    Tuple[Optional[pd.DataFrame], Optional[PCA]]: DataFrame containing PCA results and PCA object,
+                                                 or (None, None) if PCA cannot be performed
     """
+    # Get dimensions of the data
+    n_samples, n_features = results.all_reconstructions.cpu().numpy().shape
+    max_components = min(n_samples, n_features)
+
+    if n_components > max_components:
+        import warnings
+
+        warnings.warn(
+            f"Cannot perform PCA: requested n_components ({n_components}) is greater than "
+            f"max possible components ({max_components}). Returning None.",
+            UserWarning,
+        )
+        return None, None
+
     # Perform PCA
     pca = PCA(n_components=n_components, svd_solver=method)
     pca_embedding = pca.fit_transform(results.all_reconstructions.cpu().numpy())
@@ -2443,7 +2461,6 @@ def create_subgraph_traces(subgraph, node_df, activation_array, pos):
     normalized_activations = (
         np.array(node_activations) - np.min(node_activations)  # type: ignore
     ) / (np.max(node_activations) - np.min(node_activations))  # type: ignore
-
 
     # Prepare the color map
     cmap = plt.cm.get_cmap("viridis")
