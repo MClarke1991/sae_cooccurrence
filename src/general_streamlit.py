@@ -243,17 +243,21 @@ def main():
     git_root = get_git_root()
     available_models = ["gpt2-small"]
     available_sae_releases = ["res-jb", "res-jb-feature-splitting"]
-    available_sae_ids = [
-        "blocks.8.hook_resid_pre_24576",
-        "blocks.0.hook_resid_pre",
-    ]
-    available_sae_ids_neat = [neat_sae_id(sae_id) for sae_id in available_sae_ids]
-    model = st.selectbox("Select model", available_models)
+    sae_release_to_ids = {
+        "res-jb": ["blocks.0.hook_resid_pre"],
+        "res-jb-feature-splitting": [
+            "blocks.8.hook_resid_pre_24576",
+        ],
+    }
+
     sae_release = st.selectbox("Select SAE release", available_sae_releases)
-    sae_id = st.selectbox("Select SAE ID", available_sae_ids_neat)
+    available_sae_ids = sae_release_to_ids[sae_release]
+    sae_id = st.selectbox(
+        "Select SAE ID", [neat_sae_id(id) for id in available_sae_ids]
+    )
     results_root = pj(
         git_root,
-        f"results/{model}/{sae_release}/{sae_id}",
+        f"results/{available_models[0]}/{sae_release}/{sae_id}",
     )
 
     # Add size selection before loading subgraphs
