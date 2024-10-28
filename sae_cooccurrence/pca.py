@@ -234,6 +234,39 @@ def get_max_feature_info(feature_acts, fired_mask, feature_list_tensor, device="
     return max_feature_info
 
 
+# Add new analysis for top tokens
+def get_top_tokens_and_context(all_fired_tokens, all_token_dfs):
+    """Get the top 3 most common tokens and an example context for the most common token.
+
+    Args:
+        all_fired_tokens (list): List of all fired tokens
+        all_token_dfs (pd.DataFrame): DataFrame containing token information and contexts
+
+    Returns:
+        tuple: (list of top 3 token tuples, example context string)
+
+    Raises:
+        IndexError: If a token in all_fired_tokens is not found in all_token_dfs
+    """
+    # Validate all tokens exist in DataFrame
+    token_set = set(all_token_dfs["str_tokens"])
+    for token in all_fired_tokens:
+        if token not in token_set:
+            raise IndexError(f"Token '{token}' not found in DataFrame")
+
+    token_counts = Counter(all_fired_tokens)
+    if token_counts:
+        top_3_tokens = token_counts.most_common(3)
+        most_common_token = top_3_tokens[0][0]
+        example_context = all_token_dfs.loc[
+            all_token_dfs["str_tokens"] == most_common_token
+        ]["context"].iloc[0]
+    else:
+        top_3_tokens = []
+        example_context = ""
+    return top_3_tokens, example_context
+
+
 def process_examples(
     activation_store,
     model,
@@ -351,18 +384,9 @@ def process_examples(
     all_feature_acts = torch.cat(all_feature_acts)
     all_max_feature_info = torch.cat(all_max_feature_info)
 
-    # Add new analysis for top tokens
-    token_counts = Counter(all_fired_tokens)
-    if token_counts:
-        top_3_tokens = token_counts.most_common(3)
-        # Fix the indexing by using pandas boolean indexing
-        most_common_token = top_3_tokens[0][0]
-        example_context = all_token_dfs.loc[
-            all_token_dfs["str_tokens"] == most_common_token
-        ]["context"].iloc[0]
-    else:
-        top_3_tokens = []
-        example_context = ""
+    top_3_tokens, example_context = get_top_tokens_and_context(
+        all_fired_tokens, all_token_dfs
+    )
 
     return ProcessedExamples(
         all_token_dfs=all_token_dfs,
