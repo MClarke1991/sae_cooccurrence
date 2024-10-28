@@ -267,7 +267,12 @@ def main():
         "res-jb-feature-splitting": [
             "blocks.8.hook_resid_pre_24576",
         ],
-        "gemma-scope-2b-pt-res-canonical": ["layer_0/width_16k/canonical"],
+        "gemma-scope-2b-pt-res-canonical": [
+            "layer_0/width_16k/canonical",
+            "layer_12/width_16k/canonical",
+            "layer_18/width_16k/canonical",
+            "layer_21/width_16k/canonical",
+        ],
     }
 
     # Get batch size for selected model
