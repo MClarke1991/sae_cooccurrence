@@ -223,7 +223,12 @@ flycheck_*.el
 **/*.pickle
 **/*.pkl
 **/*.tar.gz
+**/*.tar.lz4
 *.html
 *.parquet
 *.h5
 figures/
+results/**/*.npz
+results/**/*.txt
+results/**/*.png
+results/wormholes/
