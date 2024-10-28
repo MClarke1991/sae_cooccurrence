@@ -40,7 +40,7 @@ def process_graph_for_pca(
         remove_special_tokens,
         device=device,
     )
-    pca_df, _ = perform_pca_on_results(results, n_components=3)
+    pca_df, _ = perform_pca_on_results(results, n_components=3, method="auto")
     return results, pca_df
 
 

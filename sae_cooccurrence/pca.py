@@ -401,7 +401,7 @@ def process_examples(
     )
 
 
-def perform_pca_on_results(results: ProcessedExamples, n_components: int = 3):
+def perform_pca_on_results(results: ProcessedExamples, n_components: int = 3, method: str = "full"):
     """
     Perform PCA on the reconstructions from ProcessedExamples and return a DataFrame with the results.
 
@@ -413,7 +413,7 @@ def perform_pca_on_results(results: ProcessedExamples, n_components: int = 3):
     pd.DataFrame: DataFrame containing PCA results and associated metadata
     """
     # Perform PCA
-    pca = PCA(n_components=n_components, svd_solver="full")
+    pca = PCA(n_components=n_components, svd_solver=method)
     pca_embedding = pca.fit_transform(results.all_reconstructions.cpu().numpy())
 
     # Create DataFrame with PCA results
@@ -2440,9 +2440,10 @@ def create_subgraph_traces(subgraph, node_df, activation_array, pos):
 
     # Normalize activation values for color scaling
     node_activations = [activation_array[node] for node in subgraph.nodes()]
-    normalized_activations = (node_activations - np.min(node_activations)) / (
-        np.max(node_activations) - np.min(node_activations)
-    )
+    normalized_activations = (
+        np.array(node_activations) - np.min(node_activations)  # type: ignore
+    ) / (np.max(node_activations) - np.min(node_activations))  # type: ignore
+
 
     # Prepare the color map
     cmap = plt.cm.get_cmap("viridis")
