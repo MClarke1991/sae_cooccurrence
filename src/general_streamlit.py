@@ -195,6 +195,15 @@ def load_available_subgraphs(file_path):
         )
 
 
+@st.cache_data
+def load_subgraph_metadata(file_path, subgraph_id):
+    with h5py.File(file_path, "r") as f:
+        group = f[f"subgraph_{subgraph_id}"]
+        top_3_tokens = decode_if_bytes(load_dataset(group["top_3_tokens"]))  # type: ignore
+        example_context = decode_if_bytes(load_dataset(group["example_context"]))  # type: ignore
+    return top_3_tokens, example_context
+
+
 def main():
     st.set_page_config(layout="wide")
     st.title("PCA Visualization with Feature Activations")
@@ -215,9 +224,21 @@ def main():
     # Load available subgraphs
     available_subgraphs = load_available_subgraphs(pca_results_path)
 
+    # Load metadata for all subgraphs
+    subgraph_options = []
+    for sg_id in available_subgraphs:
+        top_3_tokens, example_context = load_subgraph_metadata(pca_results_path, sg_id)
+        label = f"Subgraph {sg_id} - Top tokens: {', '.join(top_3_tokens)} | Example: {example_context}"  # type: ignore
+        subgraph_options.append({"label": label, "value": sg_id})
+
     # Dropdown for subgraph selection
     selected_subgraph = st.selectbox(
-        "Select a subgraph", available_subgraphs, key="subgraph_selector"
+        "Select a subgraph",
+        options=[opt["value"] for opt in subgraph_options],
+        format_func=lambda x: next(
+            opt["label"] for opt in subgraph_options if opt["value"] == x
+        ),
+        key="subgraph_selector",
     )
 
     activation_threshold = 1.5
