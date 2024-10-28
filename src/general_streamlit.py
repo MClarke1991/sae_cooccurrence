@@ -1,3 +1,5 @@
+import glob
+import re
 from os.path import join as pj
 
 import h5py
@@ -207,6 +209,15 @@ def load_subgraph_metadata(file_path, subgraph_id):
     return top_3_tokens, example_context
 
 
+@st.cache_data
+def get_available_sizes(results_root, sae_id_neat):
+    """Get all available subgraph sizes from the directory"""
+    base_path = pj(results_root, f"{sae_id_neat}_pca_for_streamlit")
+    files = glob.glob(pj(base_path, "graph_analysis_results_size_*.h5"))
+    sizes = [int(re.search(r"size_(\d+)\.h5$", f).group(1)) for f in files]  # type: ignore
+    return sorted(sizes)
+
+
 def main():
     st.set_page_config(layout="wide")
     st.title("PCA Visualization with Feature Activations")
@@ -218,10 +229,21 @@ def main():
         git_root,
         "results/gpt2-small/res-jb-feature-splitting/blocks_8_hook_resid_pre_24576/",
     )
+
+    # Add size selection before loading subgraphs
+    available_sizes = get_available_sizes(results_root, sae_id_neat)
+    selected_size = st.selectbox(
+        "Select subgraph size",
+        options=available_sizes,
+        format_func=lambda x: f"Size {x}",
+        key="size_selector",
+    )
+
+    # Update pca_results_path to use selected size
     pca_results_path = pj(
         results_root,
         f"{sae_id_neat}_pca_for_streamlit",
-        "graph_analysis_results_size_51.h5",
+        f"graph_analysis_results_size_{selected_size}.h5",
     )
 
     # Load available subgraphs
