@@ -277,10 +277,19 @@ def main():
     st.set_page_config(layout="wide")
     st.title("PCA Visualization with Feature Activations")
 
-    # Use query parameters as default values if they exist
+    # Fix query parameter handling for model selection
     default_model_idx = 0
     if "model" in query_params:
-        default_model_idx = ["gpt2-small", "gemma-2-2b"].index(query_params["model"][0])
+        try:
+            model_param = query_params["model"]
+            # Handle both list and string cases
+            model_value = (
+                model_param[0] if isinstance(model_param, list) else model_param
+            )
+            default_model_idx = ["gpt2-small", "gemma-2-2b"].index(model_value)
+        except (ValueError, IndexError):
+            # If the model parameter is invalid, use default
+            default_model_idx = 0
 
     model = st.selectbox(
         "Select model",
@@ -290,30 +299,40 @@ def main():
     )
 
     # Load model configurations from config
+    # Get batch size for selected model
+    n_batches_reconstruction = model_to_batch_size[model]
     model_to_releases = config["models"]["releases"]
     sae_release_to_ids = config["models"]["sae_ids"]
 
     available_sae_releases = model_to_releases[model]
-
-    # Get batch size for selected model
-    n_batches_reconstruction = model_to_batch_size[model]
-
-    available_sae_releases = model_to_releases[model]
     default_release_idx = 0
     if "sae_release" in query_params:
-        default_release_idx = available_sae_releases.index(
-            query_params["sae_release"][0]
-        )
+        try:
+            release_param = query_params["sae_release"]
+            release_value = (
+                release_param[0] if isinstance(release_param, list) else release_param
+            )
+            default_release_idx = available_sae_releases.index(release_value)
+        except (ValueError, IndexError):
+            # If the release parameter is invalid, use default
+            default_release_idx = 0
 
     sae_release = st.selectbox(
         "Select SAE release", available_sae_releases, index=default_release_idx
     )
 
+    # Similarly for SAE ID selection
     available_sae_ids = sae_release_to_ids[sae_release]
     default_sae_idx = 0
     if "sae_id" in query_params:
-        neat_ids = [neat_sae_id(id) for id in available_sae_ids]
-        default_sae_idx = neat_ids.index(query_params["sae_id"][0])
+        try:
+            sae_param = query_params["sae_id"]
+            sae_value = sae_param[0] if isinstance(sae_param, list) else sae_param
+            neat_ids = [neat_sae_id(id) for id in available_sae_ids]
+            default_sae_idx = neat_ids.index(sae_value)
+        except (ValueError, IndexError):
+            # If the SAE ID parameter is invalid, use default
+            default_sae_idx = 0
 
     sae_id = st.selectbox(
         "Select SAE ID",
@@ -331,7 +350,13 @@ def main():
     )
     default_size_idx = 0
     if "size" in query_params:
-        default_size_idx = available_sizes.index(int(query_params["size"][0]))
+        try:
+            size_param = query_params["size"]
+            size_value = size_param[0] if isinstance(size_param, list) else size_param
+            default_size_idx = available_sizes.index(int(size_value))
+        except (ValueError, IndexError):
+            # If the size parameter is invalid, use default
+            default_size_idx = 0
 
     selected_size = st.selectbox(
         "Select subgraph size",
@@ -361,9 +386,17 @@ def main():
     # Dropdown for subgraph selection
     default_subgraph_idx = 0
     if "subgraph" in query_params:
-        default_subgraph_idx = available_subgraphs.index(
-            int(query_params["subgraph"][0])
-        )
+        try:
+            subgraph_param = query_params["subgraph"]
+            subgraph_value = (
+                subgraph_param[0]
+                if isinstance(subgraph_param, list)
+                else subgraph_param
+            )
+            default_subgraph_idx = available_subgraphs.index(int(subgraph_value))
+        except (ValueError, IndexError):
+            # If the subgraph parameter is invalid, use default
+            default_subgraph_idx = 0
 
     selected_subgraph = st.selectbox(
         "Select a subgraph",
