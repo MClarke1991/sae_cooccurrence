@@ -155,14 +155,13 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
             )
 
     fig.update_layout(
-        height=500,  # Reduced from 600
-        width=650,   # Reduced from 800
+        height=500,  
+        width=650,   
         title="PCA Plot (PC2 vs PC3)",
         xaxis_title="PC2",
         yaxis_title="PC3",
         hovermode="closest",
         hoverdistance=5,
-        # Adjusted legend positioning and style
         legend=dict(
             yanchor="top",
             y=0.99,
@@ -171,9 +170,8 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
             bgcolor="rgba(255, 255, 255, 0.8)",
             bordercolor="rgba(0,0,0,0.2)",
             borderwidth=1,
-            font=dict(size=10)  # Smaller font size for legend
+            font=dict(size=10)
         ),
-        # Add margins to ensure nothing is cut off
         margin=dict(l=50, r=50, t=50, b=50)
     )
 
@@ -215,7 +213,6 @@ def plot_feature_activations(
     all_graph_feature_acts, point_index, fs_splitting_nodes, context=None
 ):
     if point_index is None:
-        # Create an empty figure with instructions
         fig = go.Figure()
         fig.update_layout(
             height=600,
@@ -234,7 +231,7 @@ def plot_feature_activations(
         )
         return fig
 
-    # Original plotting code
+    
     activations = all_graph_feature_acts[point_index]
     trace = go.Bar(
         x=[f"Feature {i}" for i in fs_splitting_nodes],
@@ -288,6 +285,29 @@ def get_available_sizes(results_root, sae_id_neat, n_batches_reconstruction):
     return sorted(sizes)
 
 
+def get_neuronpedia_embed_url(model, sae_release, feature_idx, sae_id):
+    """Generate the correct Neuronpedia embed URL based on model and SAE release"""
+    base_url = "https://neuronpedia.org"
+    
+    if model == "gpt2-small":
+        if sae_release == "res-jb":
+            # Extract layer number from sae_id (e.g., "blocks_7_hook_resid_pre" -> 7)
+            layer = re.search(r'blocks_(\d+)_', sae_id).group(1)
+            path = f"{model}/{layer}-res-jb/{feature_idx}"
+        elif sae_release == "res-jb-feature-splitting":
+            # Extract layer and width (e.g., "blocks_8_hook_resid_pre_24576" -> layer=8, width=24576)
+            layer = re.search(r'blocks_(\d+)_', sae_id).group(1)
+            width = re.search(r'_(\d+)$', sae_id).group(1)
+            path = f"{model}/{layer}-res_fs{width}-jb/{feature_idx}"
+    elif model == "gemma-2-2b":
+        # Extract layer and width (e.g., "layer_20/width_16k/canonical" -> layer=20, width=16k)
+        layer = re.search(r'layer_(\d+)', sae_id).group(1)
+        width = re.search(r'width_(\d+k)', sae_id).group(1)
+        path = f"{model}/{layer}-gemmascope-res-{width}/{feature_idx}"
+    
+    embed_params = "?embed=true&embedexplanation=false&embedplots=false&embedtest=true&height=300"
+    return f"{base_url}/{path}{embed_params}"
+
 def main():
     st.set_page_config(
         page_title="Feature Cooccurrence Explorer",
@@ -296,7 +316,6 @@ def main():
         initial_sidebar_state="expanded"
     )
 
-    # Custom CSS for better styling
     st.markdown("""
         <style>
         .title-text {
@@ -323,7 +342,6 @@ def main():
         </style>
     """, unsafe_allow_html=True)
 
-    # Main title
     st.markdown('<p class="title-text">Feature Cooccurrence Explorer</p>', unsafe_allow_html=True)
 
     git_root = get_git_root()
@@ -333,11 +351,11 @@ def main():
     }
 
     with st.sidebar:
-        st.markdown('<p class="subtitle-text">Configuration Settings</p>', unsafe_allow_html=True)
+        st.markdown('<p class="subtitle-text">Configuration</p>', unsafe_allow_html=True)
         
-        st.markdown('<p class="section-text">Model Selection</p>', unsafe_allow_html=True)
+        # st.markdown('<p class="section-text">Model Selection</p>', unsafe_allow_html=True)
         model = st.selectbox(
-            "Choose Model",
+            "Model",
             ["gpt2-small", "gemma-2-2b"],
             format_func=lambda x: f"{x} (batch size: {model_to_batch_size[x]})",
         )
@@ -364,7 +382,7 @@ def main():
 
         n_batches_reconstruction = model_to_batch_size[model]
 
-        st.markdown('<p class="section-text">Feature Configuration</p>', unsafe_allow_html=True)
+        # st.markdown('<p class="section-text">Feature Configuration</p>', unsafe_allow_html=True)
         available_sae_releases = model_to_releases[model]
         sae_release = st.selectbox("SAE Release", available_sae_releases)
         
@@ -379,7 +397,7 @@ def main():
             f"results/{model}/{sae_release}/{sae_id}",
         )
 
-        st.markdown('<p class="section-text">Size Settings</p>', unsafe_allow_html=True)
+        # st.markdown('<p class="section-text">Size Settings</p>', unsafe_allow_html=True)
         available_sizes = get_available_sizes(
             results_root, sae_id, n_batches_reconstruction
         )
@@ -429,12 +447,11 @@ def main():
     results, pca_df = load_data(pca_results_path, selected_subgraph)
 
     # Main visualization area
-    st.markdown('<p class="subtitle-text">Visualization</p>', unsafe_allow_html=True)
     
-    col1, col2 = st.columns([2, 1.5])  # Changed ratio from [3, 2]
+    col1, col2 = st.columns([2, 1.5]) 
 
     with col1:
-        st.markdown('<p class="section-text">PCA Visualization</p>', unsafe_allow_html=True)
+        st.markdown('<p class="section-text">PCA</p>', unsafe_allow_html=True)
         st.markdown("""
             The plot below shows the PCA projection of feature activations. 
             Colors represent different features. Click on any point to see detailed activations.
@@ -453,7 +470,7 @@ def main():
         )
 
     with col2:
-        st.markdown('<p class="section-text">Feature Activation Analysis</p>', unsafe_allow_html=True)
+        st.markdown('<p class="section-text">Feature Activation</p>', unsafe_allow_html=True)
 
         if not selected_points:
             st.info("👆 Click on any point in the PCA plot to see its feature activations.")
@@ -473,9 +490,8 @@ def main():
             if not matching_points.empty:
                 point_index = matching_points.index[0]
 
-                st.markdown('<p class="section-text">Selected Point Details</p>', unsafe_allow_html=True)
+                # st.markdown('<p class="section-text">Selected Point Details</p>', unsafe_allow_html=True)
                 
-                # Create an expander for point details
                 with st.expander("View token and context", expanded=True):
                     st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
                     st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
@@ -490,6 +506,39 @@ def main():
                 st.plotly_chart(feature_plot, use_container_width=True)
             else:
                 st.error("The selected point is not in the current dataset. Please select a different point.")
+
+
+    st.markdown('<p class="subtitle-text">Feature dashboards from Neuronpedia</p>', unsafe_allow_html=True)
+    st.markdown("Showing visualizations for up to 10 features from the current graph, sorted by feature index.")
+    sorted_features = sorted(fs_splitting_nodes)[:10]
+    
+    # Create rows of 2 embeds each
+    for i in range(0, len(sorted_features), 2):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            feature_idx = sorted_features[i]
+            embed_url = get_neuronpedia_embed_url(model, sae_release, feature_idx, sae_id)
+            st.markdown(f"#### Feature {feature_idx}")
+            st.markdown(
+                f'<iframe src="{embed_url}" '
+                'title="Neuronpedia" '
+                'style="height: 300px; width: 100%; border: none;"></iframe>',
+                unsafe_allow_html=True
+            )
+        
+        with col2:
+            if i + 1 < len(sorted_features):
+                feature_idx = sorted_features[i + 1]
+                embed_url = get_neuronpedia_embed_url(model, sae_release, feature_idx, sae_id)
+                st.markdown(f"#### Feature {feature_idx}")
+                st.markdown(
+                    f'<iframe src="{embed_url}" '
+                    'title="Neuronpedia" '
+                    'style="height: 300px; width: 100%; border: none;"></iframe>',
+                    unsafe_allow_html=True
+                )
+
 
 if __name__ == "__main__":
     main()
