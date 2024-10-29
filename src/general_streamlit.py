@@ -266,6 +266,9 @@ def get_available_sizes(results_root, sae_id_neat, n_batches_reconstruction):
 
 
 def main():
+    # Add query parameter handling at the start of main()
+    query_params = st.query_params
+
     git_root = get_git_root()
     config = load_streamlit_config(pj(git_root, "src", "config_pca_streamlit.toml"))
     load_options = config["processing"]["load_options"]
@@ -274,9 +277,15 @@ def main():
     st.set_page_config(layout="wide")
     st.title("PCA Visualization with Feature Activations")
 
+    # Use query parameters as default values if they exist
+    default_model_idx = 0
+    if "model" in query_params:
+        default_model_idx = ["gpt2-small", "gemma-2-2b"].index(query_params["model"][0])
+
     model = st.selectbox(
         "Select model",
         ["gpt2-small", "gemma-2-2b"],
+        index=default_model_idx,
         format_func=lambda x: f"{x} (batch size: {model_to_batch_size[x]})",
     )
 
@@ -290,10 +299,26 @@ def main():
     n_batches_reconstruction = model_to_batch_size[model]
 
     available_sae_releases = model_to_releases[model]
-    sae_release = st.selectbox("Select SAE release", available_sae_releases)
+    default_release_idx = 0
+    if "sae_release" in query_params:
+        default_release_idx = available_sae_releases.index(
+            query_params["sae_release"][0]
+        )
+
+    sae_release = st.selectbox(
+        "Select SAE release", available_sae_releases, index=default_release_idx
+    )
+
     available_sae_ids = sae_release_to_ids[sae_release]
+    default_sae_idx = 0
+    if "sae_id" in query_params:
+        neat_ids = [neat_sae_id(id) for id in available_sae_ids]
+        default_sae_idx = neat_ids.index(query_params["sae_id"][0])
+
     sae_id = st.selectbox(
-        "Select SAE ID", [neat_sae_id(id) for id in available_sae_ids]
+        "Select SAE ID",
+        [neat_sae_id(id) for id in available_sae_ids],
+        index=default_sae_idx,
     )
     results_root = pj(
         git_root,
@@ -304,9 +329,14 @@ def main():
     available_sizes = get_available_sizes(
         results_root, sae_id, n_batches_reconstruction
     )
+    default_size_idx = 0
+    if "size" in query_params:
+        default_size_idx = available_sizes.index(int(query_params["size"][0]))
+
     selected_size = st.selectbox(
         "Select subgraph size",
         options=available_sizes,
+        index=default_size_idx,
         format_func=lambda x: f"Size {x}",
         key="size_selector",
     )
@@ -329,13 +359,38 @@ def main():
         subgraph_options.append({"label": label, "value": sg_id})
 
     # Dropdown for subgraph selection
+    default_subgraph_idx = 0
+    if "subgraph" in query_params:
+        default_subgraph_idx = available_subgraphs.index(
+            int(query_params["subgraph"][0])
+        )
+
     selected_subgraph = st.selectbox(
         "Select a subgraph",
         options=[opt["value"] for opt in subgraph_options],
+        index=default_subgraph_idx,
         format_func=lambda x: next(
             opt["label"] for opt in subgraph_options if opt["value"] == x
         ),
         key="subgraph_selector",
+    )
+
+    # Add a section to display the shareable link
+    current_params = {
+        "model": model,
+        "sae_release": sae_release,
+        "sae_id": sae_id,
+        "size": str(selected_size),
+        "subgraph": str(selected_subgraph),
+    }
+
+    query_string = "&".join([f"{k}={v}" for k, v in current_params.items()])
+    base_url = "https://saecoocpocapp-6ict2wobwrxf52wrrugm8u.streamlit.app/"
+    st.write("### Shareable Link")
+    st.text_input(
+        "Copy this link to share current view:",
+        f"{base_url}?{query_string}",
+        key="share_link",
     )
 
     activation_threshold = 1.5
