@@ -1,7 +1,10 @@
 import glob
+import os
 import re
+import tempfile
 from os.path import join as pj
 
+import gdown
 import h5py
 import numpy as np
 import pandas as pd
@@ -12,6 +15,21 @@ import streamlit_plotly_events as spe
 
 from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
 from sae_cooccurrence.utils.set_paths import get_git_root
+
+
+def download_from_gdrive(url):
+    """Download file from Google Drive directly into memory using gdown."""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        gdown.download_folder(url, output=temp_dir, quiet=False)
+        # Find the .h5 file in the downloaded folder
+        h5_files = glob.glob(os.path.join(temp_dir, "**/*.h5"), recursive=True)
+        if not h5_files:
+            raise FileNotFoundError("No .h5 files found in downloaded data")
+        return h5_files[0]
+    except Exception as e:
+        st.error(f"Error downloading data: {e}")
+        return None
 
 
 def generate_color_palette(n_colors):
@@ -242,10 +260,14 @@ def get_available_sizes(results_root, sae_id_neat, n_batches_reconstruction):
 
 
 def main():
+    use_gdrive = True
+
     st.set_page_config(layout="wide")
     st.title("PCA Visualization with Feature Activations")
 
     git_root = get_git_root()
+    MODEL_DATA_URLS = pd.read_csv(pj(git_root, "data", "gdown_lookup.csv"))
+
     model_to_batch_size = {
         "gpt2-small": 100,
         "gemma-2-2b": 10,
@@ -259,7 +281,10 @@ def main():
 
     model_to_releases = {
         "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
-        "gemma-2-2b": ["gemma-scope-2b-pt-res-canonical"],
+        "gemma-2-2b": [
+            "gemma-scope-2b-pt-res-canonical",
+            "gemma-scope-2b-pt-res",
+        ],
     }
 
     sae_release_to_ids = {
@@ -274,6 +299,13 @@ def main():
             "layer_12/width_65k/canonical",
             "layer_18/width_16k/canonical",
             "layer_21/width_16k/canonical",
+        ],
+        "gemma-scope-2b-pt-res": [
+            "layer_12/width_16k/average_l0_22",
+            "layer_12/width_16k/average_l0_41",
+            "layer_12/width_16k/average_l0_82",
+            "layer_12/width_16k/average_l0_176",
+            "layer_12/width_16k/average_l0_445",
         ],
     }
 
@@ -302,12 +334,30 @@ def main():
         key="size_selector",
     )
 
-    # Update pca_results_path to use selected size
-    pca_results_path = pj(
-        results_root,
-        f"{sae_id}_pca_for_streamlit",
-        f"graph_analysis_results_size_{selected_size}_nbatch_{n_batches_reconstruction}.h5",
-    )
+    if use_gdrive:
+        matching_urls = MODEL_DATA_URLS.query(
+            "model == @model and release == @sae_release and sae_id == @sae_id"
+        )
+        if matching_urls.empty:
+            st.error(
+                f"No data found for model={model}, release={sae_release}, sae_id={sae_id}"
+            )
+            return
+        url = matching_urls["url"].iloc[0]
+        pca_results_path = download_from_gdrive(url)
+        if pca_results_path is None:
+            st.error("Failed to download data. Please try again or use local data.")
+            return
+    else:
+        results_root = pj(
+            git_root,
+            f"results/{model}/{sae_release}/{sae_id}",
+        )
+        pca_results_path = pj(
+            results_root,
+            f"{sae_id}_pca_for_streamlit",
+            f"graph_analysis_results_size_{selected_size}_nbatch_{n_batches_reconstruction}.h5",
+        )
 
     # Load available subgraphs
     available_subgraphs = load_available_subgraphs(pca_results_path)
