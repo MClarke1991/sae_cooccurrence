@@ -21,7 +21,11 @@ def download_from_gdrive(url):
     """Download file from Google Drive directly into memory using gdown."""
     temp_dir = tempfile.mkdtemp()
     try:
-        gdown.download_folder(url, output=temp_dir, quiet=False)
+        with st.spinner(
+            "Downloading data from Google Drive... (will be a few minutes)"
+        ):
+            gdown.download_folder(url, output=temp_dir, quiet=False)
+
         # Find the .h5 file in the downloaded folder
         h5_files = glob.glob(os.path.join(temp_dir, "**/*.h5"), recursive=True)
         if not h5_files:
@@ -324,9 +328,13 @@ def main():
     )
 
     # Add size selection before loading subgraphs
-    available_sizes = get_available_sizes(
-        results_root, sae_id, n_batches_reconstruction
-    )
+    if use_gdrive:
+        available_sizes = [5, 6, 7]
+        st.write("Using pre-selected sizes for G-Drive")
+    else:
+        available_sizes = get_available_sizes(
+            results_root, sae_id, n_batches_reconstruction
+        )
     selected_size = st.selectbox(
         "Select subgraph size",
         options=available_sizes,
