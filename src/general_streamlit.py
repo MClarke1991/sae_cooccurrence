@@ -11,6 +11,7 @@ import streamlit as st
 import streamlit_plotly_events as spe
 
 from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
+from sae_cooccurrence.streamlit import load_streamlit_config
 from sae_cooccurrence.utils.set_paths import get_git_root
 
 
@@ -48,44 +49,54 @@ def decode_if_bytes(data):
     return data
 
 
-def load_subgraph_data(file_path, subgraph_id):
+def load_subgraph_data(file_path, subgraph_id, load_options):
     with h5py.File(file_path, "r") as f:
         group = f[f"subgraph_{subgraph_id}"]
+        results = {}
 
-        # Load results
-        results = {
-            "all_fired_tokens": decode_if_bytes(
+        # Conditionally load each component based on config
+        if load_options["fired_tokens"]:
+            results["all_fired_tokens"] = decode_if_bytes(
                 load_dataset(group["all_fired_tokens"])  # type: ignore
-            ),  # type: ignores
-            "all_reconstructions": load_dataset(group["all_reconstructions"]),  # type: ignore
-            "all_graph_feature_acts": load_dataset(group["all_graph_feature_acts"]),  # type: ignore
-            # 'all_feature_acts': load_dataset(group['all_feature_acts']),
-            "all_max_feature_info": load_dataset(group["all_max_feature_info"]),  # type: ignore
-            "all_examples_found": load_dataset(group["all_examples_found"]),  # type: ignore
-        }
+            )
 
-        # Load all_token_dfs
-        token_dfs_group = group["all_token_dfs"]  # type: ignore
-        all_token_dfs_data = {}
-        for column in token_dfs_group.keys():  # type: ignore
-            all_token_dfs_data[column] = decode_if_bytes(
-                load_dataset(token_dfs_group[column])  # type: ignore
+        if load_options["reconstructions"]:
+            results["all_reconstructions"] = load_dataset(group["all_reconstructions"])  # type: ignore
+
+        if load_options["graph_feature_acts"]:
+            results["all_graph_feature_acts"] = load_dataset(
+                group["all_graph_feature_acts"]  # type: ignore
             )  # type: ignore
-        results["all_token_dfs"] = pd.DataFrame(all_token_dfs_data)
+
+        if load_options["feature_acts"]:
+            results["all_feature_acts"] = load_dataset(group["all_feature_acts"])  # type: ignore
+
+        if load_options["max_feature_info"]:
+            results["all_max_feature_info"] = load_dataset(
+                group["all_max_feature_info"]  # type: ignore
+            )  # type: ignore
+
+        if load_options["examples_found"]:
+            results["all_examples_found"] = load_dataset(group["all_examples_found"])  # type: ignore
+
+        if load_options["token_dfs"]:
+            results["token_dfs"] = load_dataset(group["token_dfs"])  # type: ignore
 
         # Load pca_df
         pca_df_group = group["pca_df"]  # type: ignore
         pca_df_data = {}
         for column in pca_df_group.keys():  # type: ignore
-            pca_df_data[column] = decode_if_bytes(load_dataset(pca_df_group[column]))  # type: ignore
+            pca_df_data[column] = decode_if_bytes(
+                load_dataset(pca_df_group[column])  # type: ignore
+            )
         pca_df = pd.DataFrame(pca_df_data)
 
-    return results, pca_df
+        return results, pca_df
 
 
 @st.cache_data
-def load_data(file_path, subgraph_id):
-    results, pca_df = load_subgraph_data(file_path, subgraph_id)
+def load_data(file_path, subgraph_id, config):
+    results, pca_df = load_subgraph_data(file_path, subgraph_id, config)
     return results, pca_df
 
 
@@ -255,14 +266,13 @@ def get_available_sizes(results_root, sae_id_neat, n_batches_reconstruction):
 
 
 def main():
+    git_root = get_git_root()
+    config = load_streamlit_config(pj(git_root, "src", "config_pca_streamlit.toml"))
+    load_options = config["processing"]["load_options"]
+    model_to_batch_size = config["models"]["batch_sizes"]
+
     st.set_page_config(layout="wide")
     st.title("PCA Visualization with Feature Activations")
-
-    git_root = get_git_root()
-    model_to_batch_size = {
-        "gpt2-small": 100,
-        "gemma-2-2b": 10,
-    }
 
     model = st.selectbox(
         "Select model",
@@ -270,25 +280,11 @@ def main():
         format_func=lambda x: f"{x} (batch size: {model_to_batch_size[x]})",
     )
 
-    model_to_releases = {
-        "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
-        "gemma-2-2b": ["gemma-scope-2b-pt-res-canonical"],
-    }
+    # Load model configurations from config
+    model_to_releases = config["models"]["releases"]
+    sae_release_to_ids = config["models"]["sae_ids"]
 
-    sae_release_to_ids = {
-        "res-jb": ["blocks.0.hook_resid_pre"],
-        "res-jb-feature-splitting": [
-            "blocks.8.hook_resid_pre_24576",
-        ],
-        "gemma-scope-2b-pt-res-canonical": [
-            "layer_0/width_16k/canonical",
-            "layer_12/width_16k/canonical",
-            "layer_12/width_32k/canonical",
-            "layer_12/width_65k/canonical",
-            "layer_18/width_16k/canonical",
-            "layer_21/width_16k/canonical",
-        ],
-    }
+    available_sae_releases = model_to_releases[model]
 
     # Get batch size for selected model
     n_batches_reconstruction = model_to_batch_size[model]
@@ -351,7 +347,7 @@ def main():
         "node_id"
     ].tolist()
 
-    results, pca_df = load_data(pca_results_path, selected_subgraph)
+    results, pca_df = load_data(pca_results_path, selected_subgraph, load_options)
     # feature_activations = results['all_feature_acts']
 
     col1, col2, col3 = st.columns([3, 1, 2])
