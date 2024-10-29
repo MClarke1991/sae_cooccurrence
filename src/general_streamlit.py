@@ -52,16 +52,17 @@ def load_subgraph_data(file_path, subgraph_id):
     with h5py.File(file_path, "r") as f:
         group = f[f"subgraph_{subgraph_id}"]
 
-        # Load results
+        # # Load results
+   # Load results
         results = {
-            "all_fired_tokens": decode_if_bytes(
-                load_dataset(group["all_fired_tokens"])  # type: ignore
-            ),  # type: ignores
-            "all_reconstructions": load_dataset(group["all_reconstructions"]),  # type: ignore
+            # "all_fired_tokens": decode_if_bytes(
+            #     load_dataset(group["all_fired_tokens"])  # type: ignore
+            # ),  # type: ignores
+            # "all_reconstructions": load_dataset(group["all_reconstructions"]),  # type: ignore
             "all_graph_feature_acts": load_dataset(group["all_graph_feature_acts"]),  # type: ignore
             # 'all_feature_acts': load_dataset(group['all_feature_acts']),
             "all_max_feature_info": load_dataset(group["all_max_feature_info"]),  # type: ignore
-            "all_examples_found": load_dataset(group["all_examples_found"]),  # type: ignore
+            # "all_examples_found": load_dataset(group["all_examples_found"]),  # type: ignore
         }
 
         # Load all_token_dfs
@@ -101,46 +102,79 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
     color_palette = generate_color_palette(n_unique)
     color_map = dict(zip(unique_features, color_palette))
 
-    # Assign colors based on whether the max feature is in fs_splitting_nodes
-    colors = [
-        "grey" if not in_graph else color_map.get(feature, "grey")
-        for feature, in_graph in zip(max_feature_indices, max_feature_in_graph)
-    ]
+    # Create figure with points grouped by feature for legend
+    fig = go.Figure()
 
-    # Add max_feature_indices to pca_df for hover data
-    pca_df["max_feature_index"] = max_feature_indices
+    # Add grey points for features not in graph
+    grey_points = ~max_feature_in_graph
+    if any(grey_points):
+        fig.add_trace(
+            go.Scatter(
+                x=pca_df.loc[grey_points, 'PC2'],
+                y=pca_df.loc[grey_points, 'PC3'],
+                mode='markers',
+                marker=dict(color='grey'),
+                name='Not in graph',
+                hovertemplate=(
+                    "Token: %{customdata[0]}<br>"
+                    "Context: %{customdata[1]}<br>"
+                    "Feature: %{customdata[2]}<br>"
+                    "<extra></extra>"
+                ),
+                customdata=np.column_stack((
+                    pca_df.loc[grey_points, 'tokens'],
+                    pca_df.loc[grey_points, 'context'],
+                    max_feature_indices[grey_points]
+                ))
+            )
+        )
 
-    fig = px.scatter(
-        pca_df,
-        x="PC2",
-        y="PC3",
-        hover_data=["tokens", "context", "max_feature_index"],
-        labels={"max_feature_index": "Most Active Feature"},
-        custom_data=["max_feature_index"],
-    )
-
-    # Update marker colors
-    fig.update_traces(marker=dict(color=colors))
+    # Add points for each feature in fs_splitting_nodes
+    for feature in unique_features:
+        feature_points = (max_feature_indices == feature) & max_feature_in_graph
+        if any(feature_points):
+            fig.add_trace(
+                go.Scatter(
+                    x=pca_df.loc[feature_points, 'PC2'],
+                    y=pca_df.loc[feature_points, 'PC3'],
+                    mode='markers',
+                    marker=dict(color=color_map[feature]),
+                    name=f'Feature {feature}',
+                    hovertemplate=(
+                        "Token: %{customdata[0]}<br>"
+                        "Context: %{customdata[1]}<br>"
+                        "Feature: %{customdata[2]}<br>"
+                        "<extra></extra>"
+                    ),
+                    customdata=np.column_stack((
+                        pca_df.loc[feature_points, 'tokens'],
+                        pca_df.loc[feature_points, 'context'],
+                        max_feature_indices[feature_points]
+                    ))
+                )
+            )
 
     fig.update_layout(
-        height=600,
-        width=800,
+        height=500,  # Reduced from 600
+        width=650,   # Reduced from 800
         title="PCA Plot (PC2 vs PC3)",
         xaxis_title="PC2",
         yaxis_title="PC3",
-        showlegend=False,
         hovermode="closest",
-        hoverdistance=5,  # Reduce hover sensitivity
-    )
-
-    # Add this to make hover more responsive
-    fig.update_traces(
-        hovertemplate=(
-            "Token: %{customdata[0]}<br>"
-            "Context: %{customdata[1]}<br>"
-            "Feature: %{customdata[2]}<br>"
-            "<extra></extra>"  # This removes the secondary box
-        )
+        hoverdistance=5,
+        # Adjusted legend positioning and style
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="right",
+            x=0.99,
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            bordercolor="rgba(0,0,0,0.2)",
+            borderwidth=1,
+            font=dict(size=10)  # Smaller font size for legend
+        ),
+        # Add margins to ensure nothing is cut off
+        margin=dict(l=50, r=50, t=50, b=50)
     )
 
     return fig, color_map
@@ -255,8 +289,42 @@ def get_available_sizes(results_root, sae_id_neat, n_batches_reconstruction):
 
 
 def main():
-    st.set_page_config(layout="wide")
-    st.title("PCA Visualization with Feature Activations")
+    st.set_page_config(
+        page_title="Feature Cooccurrence Explorer",
+        page_icon="🔍",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+
+    # Custom CSS for better styling
+    st.markdown("""
+        <style>
+        .title-text {
+            font-size: 42px;
+            font-weight: 600;
+            color: #1E1E1E;
+            padding-bottom: 20px;
+        }
+        .subtitle-text {
+            font-size: 24px;
+            font-weight: 500;
+            color: #4A4A4A;
+            padding-bottom: 10px;
+        }
+        .section-text {
+            font-size: 20px;
+            font-weight: 500;
+            color: #2C3E50;
+            padding-bottom: 10px;
+        }
+        .stSelectbox {
+            padding-bottom: 15px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Main title
+    st.markdown('<p class="title-text">Feature Cooccurrence Explorer</p>', unsafe_allow_html=True)
 
     git_root = get_git_root()
     model_to_batch_size = {
@@ -264,58 +332,65 @@ def main():
         "gemma-2-2b": 10,
     }
 
-    model = st.selectbox(
-        "Select model",
-        ["gpt2-small", "gemma-2-2b"],
-        format_func=lambda x: f"{x} (batch size: {model_to_batch_size[x]})",
-    )
+    with st.sidebar:
+        st.markdown('<p class="subtitle-text">Configuration Settings</p>', unsafe_allow_html=True)
+        
+        st.markdown('<p class="section-text">Model Selection</p>', unsafe_allow_html=True)
+        model = st.selectbox(
+            "Choose Model",
+            ["gpt2-small", "gemma-2-2b"],
+            format_func=lambda x: f"{x} (batch size: {model_to_batch_size[x]})",
+        )
 
-    model_to_releases = {
-        "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
-        "gemma-2-2b": ["gemma-scope-2b-pt-res-canonical"],
-    }
+        model_to_releases = {
+            "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
+            "gemma-2-2b": ["gemma-scope-2b-pt-res-canonical"],
+        }
 
-    sae_release_to_ids = {
-        "res-jb": ["blocks.0.hook_resid_pre"],
-        "res-jb-feature-splitting": [
-            "blocks.8.hook_resid_pre_24576",
-        ],
-        "gemma-scope-2b-pt-res-canonical": [
-            "layer_0/width_16k/canonical",
-            "layer_12/width_16k/canonical",
-            "layer_12/width_32k/canonical",
-            "layer_12/width_65k/canonical",
-            "layer_18/width_16k/canonical",
-            "layer_21/width_16k/canonical",
-        ],
-    }
+        sae_release_to_ids = {
+            "res-jb": ["blocks.0.hook_resid_pre"],
+            "res-jb-feature-splitting": [
+                "blocks.8.hook_resid_pre_24576",
+            ],
+            "gemma-scope-2b-pt-res-canonical": [
+                "layer_0/width_16k/canonical",
+                "layer_12/width_16k/canonical",
+                "layer_12/width_32k/canonical",
+                "layer_12/width_65k/canonical",
+                "layer_18/width_16k/canonical",
+                "layer_21/width_16k/canonical",
+            ],
+        }
 
-    # Get batch size for selected model
-    n_batches_reconstruction = model_to_batch_size[model]
+        n_batches_reconstruction = model_to_batch_size[model]
 
-    available_sae_releases = model_to_releases[model]
-    sae_release = st.selectbox("Select SAE release", available_sae_releases)
-    available_sae_ids = sae_release_to_ids[sae_release]
-    sae_id = st.selectbox(
-        "Select SAE ID", [neat_sae_id(id) for id in available_sae_ids]
-    )
-    results_root = pj(
-        git_root,
-        f"results/{model}/{sae_release}/{sae_id}",
-    )
+        st.markdown('<p class="section-text">Feature Configuration</p>', unsafe_allow_html=True)
+        available_sae_releases = model_to_releases[model]
+        sae_release = st.selectbox("SAE Release", available_sae_releases)
+        
+        available_sae_ids = sae_release_to_ids[sae_release]
+        sae_id = st.selectbox(
+            "SAE ID", 
+            [neat_sae_id(id) for id in available_sae_ids]
+        )
 
-    # Add size selection before loading subgraphs
-    available_sizes = get_available_sizes(
-        results_root, sae_id, n_batches_reconstruction
-    )
-    selected_size = st.selectbox(
-        "Select subgraph size",
-        options=available_sizes,
-        format_func=lambda x: f"Size {x}",
-        key="size_selector",
-    )
+        results_root = pj(
+            git_root,
+            f"results/{model}/{sae_release}/{sae_id}",
+        )
 
-    # Update pca_results_path to use selected size
+        st.markdown('<p class="section-text">Size Settings</p>', unsafe_allow_html=True)
+        available_sizes = get_available_sizes(
+            results_root, sae_id, n_batches_reconstruction
+        )
+        selected_size = st.selectbox(
+            "Subgraph Size",
+            options=available_sizes,
+            format_func=lambda x: f"Size {x}",
+            key="size_selector",
+        )
+
+    # Update pca_results_path
     pca_results_path = pj(
         results_root,
         f"{sae_id}_pca_for_streamlit",
@@ -329,12 +404,12 @@ def main():
     subgraph_options = []
     for sg_id in available_subgraphs:
         top_3_tokens, example_context = load_subgraph_metadata(pca_results_path, sg_id)
-        label = f"Subgraph {sg_id} - Top tokens: {', '.join(top_3_tokens)} | Example: {example_context}"  # type: ignore
+        label = f"Subgraph {sg_id} - Top tokens: {', '.join(top_3_tokens)} | Example: {example_context}"
         subgraph_options.append({"label": label, "value": sg_id})
 
-    # Dropdown for subgraph selection
+    # st.markdown('<p class="section-text">Subgraph Selection</p>', unsafe_allow_html=True)
     selected_subgraph = st.selectbox(
-        "Select a subgraph",
+        "Choose a subgraph to visualize",
         options=[opt["value"] for opt in subgraph_options],
         format_func=lambda x: next(
             opt["label"] for opt in subgraph_options if opt["value"] == x
@@ -352,39 +427,36 @@ def main():
     ].tolist()
 
     results, pca_df = load_data(pca_results_path, selected_subgraph)
-    # feature_activations = results['all_feature_acts']
 
-    col1, col2, col3 = st.columns([3, 1, 2])
+    # Main visualization area
+    st.markdown('<p class="subtitle-text">Visualization</p>', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns([2, 1.5])  # Changed ratio from [3, 2]
 
     with col1:
-        st.write("## PCA Plot (PC2 vs PC3)")
-        st.write(
-            "Color represents character count. Click on a point to see its feature activations."
-        )
+        st.markdown('<p class="section-text">PCA Visualization</p>', unsafe_allow_html=True)
+        st.markdown("""
+            The plot below shows the PCA projection of feature activations. 
+            Colors represent different features. Click on any point to see detailed activations.
+        """)
         pca_plot, color_map = plot_pca_2d(
             pca_df=pca_df,
             max_feature_info=results["all_max_feature_info"],
             fs_splitting_nodes=fs_splitting_nodes,
         )
 
-        # Use a unique key for plotly_events based on the selected subgraph
         selected_points = spe.plotly_events(
             pca_plot,
             click_event=True,
-            override_height=600,
+            override_height=500,
             key=f"pca_plot_{selected_subgraph}",
         )
 
     with col2:
-        st.write("## Legend")
-        legend_fig = plot_legend(color_map)
-        st.plotly_chart(legend_fig, use_container_width=True)
-
-    with col3:
-        st.write("## Feature Activations (Only for fs_splitting_nodes)")
+        st.markdown('<p class="section-text">Feature Activation Analysis</p>', unsafe_allow_html=True)
 
         if not selected_points:
-            # Show empty plot with instructions when no point is selected
+            st.info("👆 Click on any point in the PCA plot to see its feature activations.")
             feature_plot = plot_feature_activations(
                 results["all_graph_feature_acts"],
                 point_index=None,
@@ -392,7 +464,6 @@ def main():
             )
             st.plotly_chart(feature_plot, use_container_width=True)
         else:
-            # Rest of the existing code for when a point is selected
             selected_x = selected_points[0]["x"]
             selected_y = selected_points[0]["y"]
             matching_points = pca_df[
@@ -402,9 +473,12 @@ def main():
             if not matching_points.empty:
                 point_index = matching_points.index[0]
 
-                st.write("## Selected Point Info")
-                st.write(f"Token: {pca_df.loc[point_index, 'tokens']}")
-                st.write(f"Context: {pca_df.loc[point_index, 'context']}")
+                st.markdown('<p class="section-text">Selected Point Details</p>', unsafe_allow_html=True)
+                
+                # Create an expander for point details
+                with st.expander("View token and context", expanded=True):
+                    st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
+                    st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
 
                 context = pca_df.loc[point_index, "context"]
                 feature_plot = plot_feature_activations(
@@ -415,10 +489,7 @@ def main():
                 )
                 st.plotly_chart(feature_plot, use_container_width=True)
             else:
-                st.write(
-                    "The selected point is not in the current dataset. Please select a new point."
-                )
-
+                st.error("The selected point is not in the current dataset. Please select a different point.")
 
 if __name__ == "__main__":
     main()
