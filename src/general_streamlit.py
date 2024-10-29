@@ -129,7 +129,19 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
         xaxis_title="PC2",
         yaxis_title="PC3",
         showlegend=False,
-    )  # Hide the legend in the main plot
+        hovermode="closest",
+        hoverdistance=5,  # Reduce hover sensitivity
+    )
+
+    # Add this to make hover more responsive
+    fig.update_traces(
+        hovertemplate=(
+            "Token: %{customdata[0]}<br>"
+            "Context: %{customdata[1]}<br>"
+            "Feature: %{customdata[2]}<br>"
+            "<extra></extra>"  # This removes the secondary box
+        )
+    )
 
     return fig, color_map
 
@@ -203,6 +215,7 @@ def plot_feature_activations(
         title=f'Context: "{context}"' if context else "Feature Activations",
         xaxis_title="Feature",
         yaxis_title="Activation",
+        hovermode=False,
     )
     return fig
 
