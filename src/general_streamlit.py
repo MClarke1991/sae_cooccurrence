@@ -272,7 +272,10 @@ def main():
 
     model_to_releases = {
         "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
-        "gemma-2-2b": ["gemma-scope-2b-pt-res-canonical"],
+        "gemma-2-2b": [
+            "gemma-scope-2b-pt-res-canonical",
+            "gemma-scope-2b-pt-res",
+        ],
     }
 
     sae_release_to_ids = {
@@ -287,6 +290,13 @@ def main():
             "layer_12/width_65k/canonical",
             "layer_18/width_16k/canonical",
             "layer_21/width_16k/canonical",
+        ],
+        "gemma-scope-2b-pt-res": [
+            "layer_12/width_16k/average_l0_22",
+            "layer_12/width_16k/average_l0_41",
+            "layer_12/width_16k/average_l0_82",
+            "layer_12/width_16k/average_l0_176",
+            "layer_12/width_16k/average_l0_445",
         ],
     }
 
