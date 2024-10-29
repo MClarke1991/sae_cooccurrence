@@ -269,13 +269,10 @@ def main():
     git_root = get_git_root()
     config = load_streamlit_config(pj(git_root, "src", "config_pca_streamlit.toml"))
     load_options = config["processing"]["load_options"]
+    model_to_batch_size = config["models"]["batch_sizes"]
+
     st.set_page_config(layout="wide")
     st.title("PCA Visualization with Feature Activations")
-
-    model_to_batch_size = {
-        "gpt2-small": 100,
-        "gemma-2-2b": 10,
-    }
 
     model = st.selectbox(
         "Select model",
@@ -283,35 +280,11 @@ def main():
         format_func=lambda x: f"{x} (batch size: {model_to_batch_size[x]})",
     )
 
-    model_to_releases = {
-        "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
-        "gemma-2-2b": [
-            "gemma-scope-2b-pt-res-canonical",
-            "gemma-scope-2b-pt-res",
-        ],
-    }
+    # Load model configurations from config
+    model_to_releases = config["models"]["releases"]
+    sae_release_to_ids = config["models"]["sae_ids"]
 
-    sae_release_to_ids = {
-        "res-jb": ["blocks.0.hook_resid_pre"],
-        "res-jb-feature-splitting": [
-            "blocks.8.hook_resid_pre_24576",
-        ],
-        "gemma-scope-2b-pt-res-canonical": [
-            "layer_0/width_16k/canonical",
-            "layer_12/width_16k/canonical",
-            "layer_12/width_32k/canonical",
-            "layer_12/width_65k/canonical",
-            "layer_18/width_16k/canonical",
-            "layer_21/width_16k/canonical",
-        ],
-        "gemma-scope-2b-pt-res": [
-            "layer_12/width_16k/average_l0_22",
-            "layer_12/width_16k/average_l0_41",
-            "layer_12/width_16k/average_l0_82",
-            "layer_12/width_16k/average_l0_176",
-            "layer_12/width_16k/average_l0_445",
-        ],
-    }
+    available_sae_releases = model_to_releases[model]
 
     # Get batch size for selected model
     n_batches_reconstruction = model_to_batch_size[model]
