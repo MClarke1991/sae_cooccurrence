@@ -365,7 +365,6 @@ def process_model_sae_stats(
     output_dir = pj(
         git_root,
         "results",
-        "cooc",
         "size_effects",
         model_name,
         sae_release_short,
@@ -426,20 +425,20 @@ def main():
     torch.set_grad_enabled(False)
 
     # Process GPT-2
-    process_model_sae_stats(
-        model_name="gpt2-small",
-        sae_release_short="res-jb-feature-splitting",
-        sae_ids=[
-            "blocks.8.hook_resid_pre_768",
-            "blocks.8.hook_resid_pre_1536",
-            "blocks.8.hook_resid_pre_3072",
-            "blocks.8.hook_resid_pre_6144",
-            "blocks.8.hook_resid_pre_12288",
-            "blocks.8.hook_resid_pre_24576",
-            "blocks.8.hook_resid_pre_49152",
-            "blocks.8.hook_resid_pre_98304",
-        ],
-    )
+    # process_model_sae_stats(
+    #     model_name="gpt2-small",
+    #     sae_release_short="res-jb-feature-splitting",
+    #     sae_ids=[
+    #         "blocks.8.hook_resid_pre_768",
+    #         "blocks.8.hook_resid_pre_1536",
+    #         "blocks.8.hook_resid_pre_3072",
+    #         "blocks.8.hook_resid_pre_6144",
+    #         "blocks.8.hook_resid_pre_12288",
+    #         "blocks.8.hook_resid_pre_24576",
+    #         "blocks.8.hook_resid_pre_49152",
+    #         "blocks.8.hook_resid_pre_98304",
+    #     ],
+    # )
 
     # Process Gemma
     process_model_sae_stats(
