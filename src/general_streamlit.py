@@ -9,7 +9,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 import streamlit_plotly_events as spe
-from st_copy_to_clipboard import st_copy_to_clipboard
 
 from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
 from sae_cooccurrence.streamlit import load_streamlit_config
@@ -651,25 +650,6 @@ def main():
                     unsafe_allow_html=True,
                 )
 
-    # Add shareable link section
-    # with st.sidebar:
-    #     st.markdown("### Share This View")
-    #     current_params = {
-    #         "model": model,
-    #         "sae_release": sae_release,
-    #         "sae_id": sae_id,
-    #         "size": str(selected_size),
-    #         "subgraph": str(selected_subgraph),
-    #     }
-
-    #     query_string = "&".join([f"{k}={v}" for k, v in current_params.items()])
-    #     base_url = "https://feature-cooccurrence.streamlit.app/"
-    #     shareable_link = f"{base_url}?{query_string}"
-
-    #     st.text_input(
-    #         "Copy this link to share current view:", shareable_link, key="share_link"
-    #     )
- 
 
 
 if __name__ == "__main__":
