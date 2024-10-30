@@ -326,6 +326,8 @@ def get_neuronpedia_embed_url(model, sae_release, feature_idx, sae_id):
 
 
 def main():
+    query_params = st.query_params
+
     st.set_page_config(
         page_title="Feature Cooccurrence Explorer",
         page_icon="🔍",
@@ -376,11 +378,22 @@ def main():
         st.markdown(
             '<p class="subtitle-text">Configuration</p>', unsafe_allow_html=True
         )
+        default_model_idx = 0
+        if "model" in query_params:
+            try:
+                model_param = query_params["model"]
+                # Handle both list and string cases
+                model_value = (
+                    model_param[0] if isinstance(model_param, list) else model_param
+                )
+                default_model_idx = ["gpt2-small", "gemma-2-2b"].index(model_value)
+            except (ValueError, IndexError):
+                default_model_idx = 0
 
-        # st.markdown('<p class="section-text">Model Selection</p>', unsafe_allow_html=True)
         model = st.selectbox(
             "Model",
             ["gpt2-small", "gemma-2-2b"],
+            index=default_model_idx,
             format_func=lambda x: f"{x} (batch size: {model_to_batch_size[x]})",
         )
 
@@ -392,11 +405,40 @@ def main():
 
         n_batches_reconstruction = model_to_batch_size[model]
 
-        # st.markdown('<p class="section-text">Feature Configuration</p>', unsafe_allow_html=True)
-        sae_release = st.selectbox("SAE Release", available_sae_releases)
+        default_release_idx = 0
+        if "sae_release" in query_params:
+            try:
+                release_param = query_params["sae_release"]
+                release_value = (
+                    release_param[0]
+                    if isinstance(release_param, list)
+                    else release_param
+                )
+                default_release_idx = available_sae_releases.index(release_value)
+            except (ValueError, IndexError):
+                default_release_idx = 0
+
+        sae_release = st.selectbox(
+            "SAE Release", available_sae_releases, index=default_release_idx
+        )
 
         available_sae_ids = sae_release_to_ids[sae_release]
-        sae_id = st.selectbox("SAE ID", [neat_sae_id(id) for id in available_sae_ids])
+
+        default_sae_idx = 0
+        if "sae_id" in query_params:
+            try:
+                sae_param = query_params["sae_id"]
+                sae_value = sae_param[0] if isinstance(sae_param, list) else sae_param
+                neat_ids = [neat_sae_id(id) for id in available_sae_ids]
+                default_sae_idx = neat_ids.index(sae_value)
+            except (ValueError, IndexError):
+                default_sae_idx = 0
+
+        sae_id = st.selectbox(
+            "SAE ID",
+            [neat_sae_id(id) for id in available_sae_ids],
+            index=default_sae_idx,
+        )
 
         results_root = pj(
             git_root,
@@ -407,9 +449,22 @@ def main():
         available_sizes = get_available_sizes(
             results_root, sae_id, n_batches_reconstruction
         )
+
+        default_size_idx = 0
+        if "size" in query_params:
+            try:
+                size_param = query_params["size"]
+                size_value = (
+                    size_param[0] if isinstance(size_param, list) else size_param
+                )
+                default_size_idx = available_sizes.index(int(size_value))
+            except (ValueError, IndexError):
+                default_size_idx = 0
+
         selected_size = st.selectbox(
             "Subgraph Size",
             options=available_sizes,
+            index=default_size_idx,
             format_func=lambda x: f"Size {x}",
             key="size_selector",
         )
@@ -432,9 +487,23 @@ def main():
         subgraph_options.append({"label": label, "value": sg_id})
 
     # st.markdown('<p class="section-text">Subgraph Selection</p>', unsafe_allow_html=True)
+    default_subgraph_idx = 0
+    if "subgraph" in query_params:
+        try:
+            subgraph_param = query_params["subgraph"]
+            subgraph_value = (
+                subgraph_param[0]
+                if isinstance(subgraph_param, list)
+                else subgraph_param
+            )
+            default_subgraph_idx = available_subgraphs.index(int(subgraph_value))
+        except (ValueError, IndexError):
+            default_subgraph_idx = 0
+
     selected_subgraph = st.selectbox(
         "Choose a subgraph to visualize",
         options=[opt["value"] for opt in subgraph_options],
+        index=default_subgraph_idx,
         format_func=lambda x: next(
             opt["label"] for opt in subgraph_options if opt["value"] == x
         ),
@@ -559,6 +628,25 @@ def main():
                     'style="height: 300px; width: 100%; border: none;"></iframe>',
                     unsafe_allow_html=True,
                 )
+
+    # Add shareable link section
+    with st.sidebar:
+        st.markdown("### Share This View")
+        current_params = {
+            "model": model,
+            "sae_release": sae_release,
+            "sae_id": sae_id,
+            "size": str(selected_size),
+            "subgraph": str(selected_subgraph),
+        }
+
+        query_string = "&".join([f"{k}={v}" for k, v in current_params.items()])
+        base_url = "https://saecoocpocapp-6ict2wobwrxf52wrrugm8u.streamlit.app/"
+        shareable_link = f"{base_url}?{query_string}"
+
+        st.text_input(
+            "Copy this link to share current view:", shareable_link, key="share_link"
+        )
 
 
 if __name__ == "__main__":
