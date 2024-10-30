@@ -318,9 +318,7 @@ def get_neuronpedia_embed_url(model, sae_release, feature_idx, sae_id):
         path = f"{model}/{layer}-gemmascope-res-{width}/{feature_idx}"
     else:
         raise ValueError(f"Invalid model: {model}")
-    embed_params = (
-        "?embed=true&embedtest=true&embedexplanation=false&height=300"
-    )
+    embed_params = "?embed=true&embedtest=true&embedexplanation=false&height=300"
     return f"{base_url}/{path}{embed_params}"
 
 
@@ -519,15 +517,6 @@ def main():
         "size": str(selected_size),
         "subgraph": str(selected_subgraph),
     }
-
-    query_string = "&".join([f"{k}={v}" for k, v in current_params.items()])
-    base_url = "https://saecoocpocapp-6ict2wobwrxf52wrrugm8u.streamlit.app/"
-    st.write("### Shareable Link")
-    st.text_input(
-        "Copy this link to share current view:",
-        f"{base_url}?{query_string}",
-        key="share_link",
-    )
 
     activation_threshold = 1.5
     activation_threshold_safe = str(activation_threshold).replace(".", "_")
