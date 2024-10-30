@@ -169,8 +169,6 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
             )
 
     fig.update_layout(
-        height=450,
-        width=600,
         xaxis_title="PC2",
         yaxis_title="PC3",
         hovermode="closest",
@@ -185,7 +183,11 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
             borderwidth=1,
             font=dict(size=10),
         ),
-        margin=dict(l=40, r=40, t=40, b=40),
+        margin=dict(l=40, r=40, t=40, b=60),
+        autosize=True,
+        # height = 600,
+        # width=800,  # You can adjust this value
+        # height=800,  # Make height equal to width
     )
 
     return fig, color_map
@@ -228,8 +230,9 @@ def plot_feature_activations(
     if point_index is None:
         fig = go.Figure()
         fig.update_layout(
-            height=600,
-            width=800,
+            autosize=True,
+            # height=600,
+            # width=800,
             title="Instructions",
             annotations=[
                 dict(
@@ -561,7 +564,7 @@ def main():
 
     # Main visualization area
 
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([1.5, 1])
 
     with col1:
         st.markdown('<p class="section-text">PCA</p>', unsafe_allow_html=True)
@@ -575,7 +578,6 @@ def main():
         selected_points = spe.plotly_events(
             pca_plot,
             click_event=True,
-            override_height=500,
             key=f"pca_plot_{selected_subgraph}",
         )
 
