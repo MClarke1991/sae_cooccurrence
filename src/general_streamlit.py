@@ -11,6 +11,7 @@ import streamlit as st
 import streamlit_plotly_events as spe
 
 from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
+from sae_cooccurrence.streamlit import load_streamlit_config
 from sae_cooccurrence.utils.set_paths import get_git_root
 
 
@@ -48,45 +49,54 @@ def decode_if_bytes(data):
     return data
 
 
-def load_subgraph_data(file_path, subgraph_id):
+def load_subgraph_data(file_path, subgraph_id, load_options):
     with h5py.File(file_path, "r") as f:
         group = f[f"subgraph_{subgraph_id}"]
+        results = {}
 
-        # # Load results
-   # Load results
-        results = {
-            # "all_fired_tokens": decode_if_bytes(
-            #     load_dataset(group["all_fired_tokens"])  # type: ignore
-            # ),  # type: ignores
-            # "all_reconstructions": load_dataset(group["all_reconstructions"]),  # type: ignore
-            "all_graph_feature_acts": load_dataset(group["all_graph_feature_acts"]),  # type: ignore
-            # 'all_feature_acts': load_dataset(group['all_feature_acts']),
-            "all_max_feature_info": load_dataset(group["all_max_feature_info"]),  # type: ignore
-            # "all_examples_found": load_dataset(group["all_examples_found"]),  # type: ignore
-        }
+        # Conditionally load each component based on config
+        if load_options["fired_tokens"]:
+            results["all_fired_tokens"] = decode_if_bytes(
+                load_dataset(group["all_fired_tokens"])  # type: ignore
+            )
 
-        # Load all_token_dfs
-        token_dfs_group = group["all_token_dfs"]  # type: ignore
-        all_token_dfs_data = {}
-        for column in token_dfs_group.keys():  # type: ignore
-            all_token_dfs_data[column] = decode_if_bytes(
-                load_dataset(token_dfs_group[column])  # type: ignore
+        if load_options["reconstructions"]:
+            results["all_reconstructions"] = load_dataset(group["all_reconstructions"])  # type: ignore
+
+        if load_options["graph_feature_acts"]:
+            results["all_graph_feature_acts"] = load_dataset(
+                group["all_graph_feature_acts"]  # type: ignore
             )  # type: ignore
-        results["all_token_dfs"] = pd.DataFrame(all_token_dfs_data)
+
+        if load_options["feature_acts"]:
+            results["all_feature_acts"] = load_dataset(group["all_feature_acts"])  # type: ignore
+
+        if load_options["max_feature_info"]:
+            results["all_max_feature_info"] = load_dataset(
+                group["all_max_feature_info"]  # type: ignore
+            )  # type: ignore
+
+        if load_options["examples_found"]:
+            results["all_examples_found"] = load_dataset(group["all_examples_found"])  # type: ignore
+
+        if load_options["token_dfs"]:
+            results["token_dfs"] = load_dataset(group["token_dfs"])  # type: ignore
 
         # Load pca_df
         pca_df_group = group["pca_df"]  # type: ignore
         pca_df_data = {}
         for column in pca_df_group.keys():  # type: ignore
-            pca_df_data[column] = decode_if_bytes(load_dataset(pca_df_group[column]))  # type: ignore
+            pca_df_data[column] = decode_if_bytes(
+                load_dataset(pca_df_group[column])  # type: ignore
+            )
         pca_df = pd.DataFrame(pca_df_data)
 
-    return results, pca_df
+        return results, pca_df
 
 
 @st.cache_data
-def load_data(file_path, subgraph_id):
-    results, pca_df = load_subgraph_data(file_path, subgraph_id)
+def load_data(file_path, subgraph_id, config):
+    results, pca_df = load_subgraph_data(file_path, subgraph_id, config)
     return results, pca_df
 
 
@@ -110,22 +120,24 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
     if any(grey_points):
         fig.add_trace(
             go.Scatter(
-                x=pca_df.loc[grey_points, 'PC2'],
-                y=pca_df.loc[grey_points, 'PC3'],
-                mode='markers',
-                marker=dict(color='grey'),
-                name='Not in graph',
+                x=pca_df.loc[grey_points, "PC2"],
+                y=pca_df.loc[grey_points, "PC3"],
+                mode="markers",
+                marker=dict(color="grey"),
+                name="Not in graph",
                 hovertemplate=(
                     "Token: %{customdata[0]}<br>"
                     "Context: %{customdata[1]}<br>"
                     "Feature: %{customdata[2]}<br>"
                     "<extra></extra>"
                 ),
-                customdata=np.column_stack((
-                    pca_df.loc[grey_points, 'tokens'],
-                    pca_df.loc[grey_points, 'context'],
-                    max_feature_indices[grey_points]
-                ))
+                customdata=np.column_stack(
+                    (
+                        pca_df.loc[grey_points, "tokens"],
+                        pca_df.loc[grey_points, "context"],
+                        max_feature_indices[grey_points],
+                    )
+                ),
             )
         )
 
@@ -135,28 +147,30 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
         if any(feature_points):
             fig.add_trace(
                 go.Scatter(
-                    x=pca_df.loc[feature_points, 'PC2'],
-                    y=pca_df.loc[feature_points, 'PC3'],
-                    mode='markers',
+                    x=pca_df.loc[feature_points, "PC2"],
+                    y=pca_df.loc[feature_points, "PC3"],
+                    mode="markers",
                     marker=dict(color=color_map[feature]),
-                    name=f'Feature {feature}',
+                    name=f"Feature {feature}",
                     hovertemplate=(
                         "Token: %{customdata[0]}<br>"
                         "Context: %{customdata[1]}<br>"
                         "Feature: %{customdata[2]}<br>"
                         "<extra></extra>"
                     ),
-                    customdata=np.column_stack((
-                        pca_df.loc[feature_points, 'tokens'],
-                        pca_df.loc[feature_points, 'context'],
-                        max_feature_indices[feature_points]
-                    ))
+                    customdata=np.column_stack(
+                        (
+                            pca_df.loc[feature_points, "tokens"],
+                            pca_df.loc[feature_points, "context"],
+                            max_feature_indices[feature_points],
+                        )
+                    ),
                 )
             )
 
     fig.update_layout(
-        height=500,  
-        width=650,   
+        height=500,
+        width=650,
         title="PCA Plot (PC2 vs PC3)",
         xaxis_title="PC2",
         yaxis_title="PC3",
@@ -170,9 +184,9 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
             bgcolor="rgba(255, 255, 255, 0.8)",
             bordercolor="rgba(0,0,0,0.2)",
             borderwidth=1,
-            font=dict(size=10)
+            font=dict(size=10),
         ),
-        margin=dict(l=50, r=50, t=50, b=50)
+        margin=dict(l=50, r=50, t=50, b=50),
     )
 
     return fig, color_map
@@ -231,7 +245,6 @@ def plot_feature_activations(
         )
         return fig
 
-    
     activations = all_graph_feature_acts[point_index]
     trace = go.Bar(
         x=[f"Feature {i}" for i in fs_splitting_nodes],
@@ -288,35 +301,40 @@ def get_available_sizes(results_root, sae_id_neat, n_batches_reconstruction):
 def get_neuronpedia_embed_url(model, sae_release, feature_idx, sae_id):
     """Generate the correct Neuronpedia embed URL based on model and SAE release"""
     base_url = "https://neuronpedia.org"
-    
+    path = None
     if model == "gpt2-small":
         if sae_release == "res-jb":
             # Extract layer number from sae_id (e.g., "blocks_7_hook_resid_pre" -> 7)
-            layer = re.search(r'blocks_(\d+)_', sae_id).group(1)
+            layer = re.search(r"blocks_(\d+)_", sae_id).group(1)  # type: ignore
             path = f"{model}/{layer}-res-jb/{feature_idx}"
         elif sae_release == "res-jb-feature-splitting":
             # Extract layer and width (e.g., "blocks_8_hook_resid_pre_24576" -> layer=8, width=24576)
-            layer = re.search(r'blocks_(\d+)_', sae_id).group(1)
-            width = re.search(r'_(\d+)$', sae_id).group(1)
+            layer = re.search(r"blocks_(\d+)_", sae_id).group(1)  # type: ignore
+            width = re.search(r"_(\d+)$", sae_id).group(1)  # type: ignore
             path = f"{model}/{layer}-res_fs{width}-jb/{feature_idx}"
     elif model == "gemma-2-2b":
         # Extract layer and width (e.g., "layer_20/width_16k/canonical" -> layer=20, width=16k)
-        layer = re.search(r'layer_(\d+)', sae_id).group(1)
-        width = re.search(r'width_(\d+k)', sae_id).group(1)
+        layer = re.search(r"layer_(\d+)", sae_id).group(1)  # type: ignore
+        width = re.search(r"width_(\d+k)", sae_id).group(1)  # type: ignore
         path = f"{model}/{layer}-gemmascope-res-{width}/{feature_idx}"
-    
-    embed_params = "?embed=true&embedexplanation=false&embedplots=false&embedtest=true&height=300"
+    else:
+        raise ValueError(f"Invalid model: {model}")
+    embed_params = (
+        "?embed=true&embedexplanation=false&embedplots=false&embedtest=true&height=300"
+    )
     return f"{base_url}/{path}{embed_params}"
+
 
 def main():
     st.set_page_config(
         page_title="Feature Cooccurrence Explorer",
         page_icon="🔍",
         layout="wide",
-        initial_sidebar_state="expanded"
+        initial_sidebar_state="expanded",
     )
 
-    st.markdown("""
+    st.markdown(
+        """
         <style>
         .title-text {
             font-size: 42px;
@@ -340,19 +358,25 @@ def main():
             padding-bottom: 15px;
         }
         </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
-    st.markdown('<p class="title-text">Feature Cooccurrence Explorer</p>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="title-text">Feature Cooccurrence Explorer</p>',
+        unsafe_allow_html=True,
+    )
 
     git_root = get_git_root()
-    model_to_batch_size = {
-        "gpt2-small": 100,
-        "gemma-2-2b": 10,
-    }
+    config = load_streamlit_config(pj(git_root, "src", "config_pca_streamlit.toml"))
+    load_options = config["processing"]["load_options"]
+    model_to_batch_size = config["models"]["batch_sizes"]
 
     with st.sidebar:
-        st.markdown('<p class="subtitle-text">Configuration</p>', unsafe_allow_html=True)
-        
+        st.markdown(
+            '<p class="subtitle-text">Configuration</p>', unsafe_allow_html=True
+        )
+
         # st.markdown('<p class="section-text">Model Selection</p>', unsafe_allow_html=True)
         model = st.selectbox(
             "Model",
@@ -360,37 +384,19 @@ def main():
             format_func=lambda x: f"{x} (batch size: {model_to_batch_size[x]})",
         )
 
-        model_to_releases = {
-            "gpt2-small": ["res-jb", "res-jb-feature-splitting"],
-            "gemma-2-2b": ["gemma-scope-2b-pt-res-canonical"],
-        }
+        # Load model configurations from config
+        model_to_releases = config["models"]["releases"]
+        sae_release_to_ids = config["models"]["sae_ids"]
 
-        sae_release_to_ids = {
-            "res-jb": ["blocks.0.hook_resid_pre"],
-            "res-jb-feature-splitting": [
-                "blocks.8.hook_resid_pre_24576",
-            ],
-            "gemma-scope-2b-pt-res-canonical": [
-                "layer_0/width_16k/canonical",
-                "layer_12/width_16k/canonical",
-                "layer_12/width_32k/canonical",
-                "layer_12/width_65k/canonical",
-                "layer_18/width_16k/canonical",
-                "layer_21/width_16k/canonical",
-            ],
-        }
+        available_sae_releases = model_to_releases[model]
 
         n_batches_reconstruction = model_to_batch_size[model]
 
         # st.markdown('<p class="section-text">Feature Configuration</p>', unsafe_allow_html=True)
-        available_sae_releases = model_to_releases[model]
         sae_release = st.selectbox("SAE Release", available_sae_releases)
-        
+
         available_sae_ids = sae_release_to_ids[sae_release]
-        sae_id = st.selectbox(
-            "SAE ID", 
-            [neat_sae_id(id) for id in available_sae_ids]
-        )
+        sae_id = st.selectbox("SAE ID", [neat_sae_id(id) for id in available_sae_ids])
 
         results_root = pj(
             git_root,
@@ -422,7 +428,7 @@ def main():
     subgraph_options = []
     for sg_id in available_subgraphs:
         top_3_tokens, example_context = load_subgraph_metadata(pca_results_path, sg_id)
-        label = f"Subgraph {sg_id} - Top tokens: {', '.join(top_3_tokens)} | Example: {example_context}"
+        label = f"Subgraph {sg_id} - Top tokens: {', '.join(top_3_tokens)} | Example: {example_context}"  # type: ignore
         subgraph_options.append({"label": label, "value": sg_id})
 
     # st.markdown('<p class="section-text">Subgraph Selection</p>', unsafe_allow_html=True)
@@ -444,11 +450,12 @@ def main():
         "node_id"
     ].tolist()
 
-    results, pca_df = load_data(pca_results_path, selected_subgraph)
+    results, pca_df = load_data(pca_results_path, selected_subgraph, load_options)
+    # feature_activations = results['all_feature_acts']
 
     # Main visualization area
-    
-    col1, col2 = st.columns([2, 1.5]) 
+
+    col1, col2 = st.columns([2, 1.5])
 
     with col1:
         st.markdown('<p class="section-text">PCA</p>', unsafe_allow_html=True)
@@ -470,10 +477,14 @@ def main():
         )
 
     with col2:
-        st.markdown('<p class="section-text">Feature Activation</p>', unsafe_allow_html=True)
+        st.markdown(
+            '<p class="section-text">Feature Activation</p>', unsafe_allow_html=True
+        )
 
         if not selected_points:
-            st.info("👆 Click on any point in the PCA plot to see its feature activations.")
+            st.info(
+                "👆 Click on any point in the PCA plot to see its feature activations."
+            )
             feature_plot = plot_feature_activations(
                 results["all_graph_feature_acts"],
                 point_index=None,
@@ -491,7 +502,7 @@ def main():
                 point_index = matching_points.index[0]
 
                 # st.markdown('<p class="section-text">Selected Point Details</p>', unsafe_allow_html=True)
-                
+
                 with st.expander("View token and context", expanded=True):
                     st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
                     st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
@@ -505,38 +516,48 @@ def main():
                 )
                 st.plotly_chart(feature_plot, use_container_width=True)
             else:
-                st.error("The selected point is not in the current dataset. Please select a different point.")
+                st.error(
+                    "The selected point is not in the current dataset. Please select a different point."
+                )
 
-
-    st.markdown('<p class="subtitle-text">Feature dashboards from Neuronpedia</p>', unsafe_allow_html=True)
-    st.markdown("Showing visualizations for up to 10 features from the current graph, sorted by feature index.")
+    st.markdown(
+        '<p class="subtitle-text">Feature dashboards from Neuronpedia</p>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "Showing visualizations for up to 10 features from the current graph, sorted by feature index."
+    )
     sorted_features = sorted(fs_splitting_nodes)[:10]
-    
+
     # Create rows of 2 embeds each
     for i in range(0, len(sorted_features), 2):
         col1, col2 = st.columns(2)
-        
+
         with col1:
             feature_idx = sorted_features[i]
-            embed_url = get_neuronpedia_embed_url(model, sae_release, feature_idx, sae_id)
+            embed_url = get_neuronpedia_embed_url(
+                model, sae_release, feature_idx, sae_id
+            )
             st.markdown(f"#### Feature {feature_idx}")
             st.markdown(
                 f'<iframe src="{embed_url}" '
                 'title="Neuronpedia" '
                 'style="height: 300px; width: 100%; border: none;"></iframe>',
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
-        
+
         with col2:
             if i + 1 < len(sorted_features):
                 feature_idx = sorted_features[i + 1]
-                embed_url = get_neuronpedia_embed_url(model, sae_release, feature_idx, sae_id)
+                embed_url = get_neuronpedia_embed_url(
+                    model, sae_release, feature_idx, sae_id
+                )
                 st.markdown(f"#### Feature {feature_idx}")
                 st.markdown(
                     f'<iframe src="{embed_url}" '
                     'title="Neuronpedia" '
                     'style="height: 300px; width: 100%; border: none;"></iframe>',
-                    unsafe_allow_html=True
+                    unsafe_allow_html=True,
                 )
 
 
