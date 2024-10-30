@@ -190,6 +190,7 @@ def plot_results(
     ax1.set_xscale("log")
     ax1.set_yscale("log")
     ax1.xaxis.set_major_formatter(ff(lambda x, _: f"{int(x):,}"))
+    ax1.set_xticks(sae_sizes) 
     ax1.tick_params(axis="x", rotation=45)
     ax1.set_xlabel("SAE Size")
     ax1.set_ylabel("Fraction of Features Fired")
@@ -199,6 +200,7 @@ def plot_results(
 
     ax2.set_xscale("log")
     ax2.xaxis.set_major_formatter(ff(lambda x, _: f"{int(x):,}"))
+    ax2.set_xticks(sae_sizes)
     ax2.tick_params(axis="x", rotation=45)
     ax2.set_xlabel("SAE Size")
     ax2.set_ylabel("Average Number of Features Fired")
@@ -225,6 +227,7 @@ def plot_results(
 
     ax1.set_xscale("log")
     ax1.xaxis.set_major_formatter(ff(lambda x, _: f"{int(x):,}"))
+    ax1.set_xticks(sae_sizes)
     ax1.tick_params(axis="x", rotation=45)
     if sae_release_short == "gemma-scope-2b-pt-res":
         ax1.set_xlabel("L0")
