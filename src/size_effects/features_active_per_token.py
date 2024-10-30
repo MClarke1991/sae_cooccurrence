@@ -10,12 +10,20 @@ from sae_lens import SAE, ActivationsStore
 from tqdm.autonotebook import tqdm
 from transformer_lens import HookedTransformer
 
+from sae_cooccurrence.normalised_cooc_functions import get_sae_release
 from sae_cooccurrence.utils.saving_loading import notify, set_device
 from sae_cooccurrence.utils.set_paths import get_git_root
 
 
-def get_sae_size(sae_id):
-    return int(sae_id.split("_")[-1])
+def get_sae_size(sae_id, model_name):
+    if model_name == "gpt2-small":
+        return int(sae_id.split("_")[-1])
+    elif model_name == "gemma-2-2b":
+        # Extract the number from 'width_XXk' format
+        width = sae_id.split("/")[1]  # gets 'width_16k'
+        return int(width.split("_")[1].replace("k", "000"))
+    else:
+        raise ValueError(f"Unsupported model: {model_name}")
 
 
 def calculate_firing_stats(sae, activation_store, n_batches, threshold):
@@ -271,9 +279,10 @@ def process_model_sae_stats(
     results = {}
 
     for sae_id in tqdm(sae_ids, desc="Processing SAE IDs"):
-        sae_size = get_sae_size(sae_id)
+        sae_size = get_sae_size(sae_id, model_name)
+        sae_release = get_sae_release(model_name, sae_release_short)
         sae, cfg_dict, sparsity = SAE.from_pretrained(
-            release=f"{model_name}-{sae_release_short}", sae_id=sae_id, device=device
+            release=sae_release, sae_id=sae_id, device=device
         )
 
         activation_store = ActivationsStore.from_sae(
