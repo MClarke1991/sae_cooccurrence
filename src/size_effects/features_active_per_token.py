@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import torch
+from matplotlib.ticker import FuncFormatter as ff
 from sae_lens import SAE, ActivationsStore
 from tqdm.autonotebook import tqdm
 from transformer_lens import HookedTransformer
@@ -37,11 +38,19 @@ def calculate_firing_stats(sae, activation_store, n_batches, threshold):
 
     for _ in tqdm(range(n_batches), desc="Processing batches", leave=False):
         activations_batch = activation_store.next_batch()
-        feature_acts = sae.encode(activations_batch).squeeze()
+        feature_acts = sae.encode(
+            activations_batch
+        ).squeeze()  # Shape: [n_tokens, n_features]
 
         firings = (feature_acts > threshold).float()
-        fraction_fired = firings.sum(dim=1) / firings.shape[1]  # Raw number fired divided by SAE width
-        raw_number_fired = firings.sum(dim=1)  # Sum across features for each token
+        # For each token (column), count how many features fired and divide by total features
+        # Calculate raw number of features fired per token
+        raw_number_fired = firings.sum(dim=1)  # Sum across features dimension
+
+        # Calculate fraction of features fired per token
+        fraction_fired = (
+            raw_number_fired / firings.shape[1]
+        )  # Divide by total number of features
 
         all_fractions.extend(fraction_fired.tolist())
         all_raw_numbers.extend(raw_number_fired.tolist())
@@ -180,6 +189,8 @@ def plot_results(
 
     ax1.set_xscale("log")
     ax1.set_yscale("log")
+    ax1.xaxis.set_major_formatter(ff(lambda x, _: f"{int(x):,}"))
+    ax1.tick_params(axis="x", rotation=45)
     ax1.set_xlabel("SAE Size")
     ax1.set_ylabel("Fraction of Features Fired")
     ax1.set_title("Fraction of SAE Features Fired vs SAE Size")
@@ -187,6 +198,8 @@ def plot_results(
     ax1.grid(True)
 
     ax2.set_xscale("log")
+    ax2.xaxis.set_major_formatter(ff(lambda x, _: f"{int(x):,}"))
+    ax2.tick_params(axis="x", rotation=45)
     ax2.set_xlabel("SAE Size")
     ax2.set_ylabel("Average Number of Features Fired")
     ax2.set_title("Average Number of SAE Features Fired vs SAE Size")
@@ -211,6 +224,8 @@ def plot_results(
     ax2.plot(sae_sizes, raw_numbers, "r-", marker="s", label="Number Fired")
 
     ax1.set_xscale("log")
+    ax1.xaxis.set_major_formatter(ff(lambda x, _: f"{int(x):,}"))
+    ax1.tick_params(axis="x", rotation=45)
     if sae_release_short == "gemma-scope-2b-pt-res":
         ax1.set_xlabel("L0")
     else:
