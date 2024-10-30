@@ -404,28 +404,28 @@ def plot_feature_activation_stats(input_dir: str, output_dir: str):
 
 def main():
     git_root = get_git_root()
-    # model_name = "gpt2-small"
-    # sae_release_short = "res-jb-feature-splitting"
-    # sae_sizes = [768, 1536, 3072, 6144, 12288, 24576, 49152, 98304]
+    model_name = "gpt2-small"
+    sae_release_short = "res-jb-feature-splitting"
+    sae_sizes = [768, 1536, 3072, 6144, 12288, 24576, 49152, 98304]
 
     # model_name = "gemma-2-2b"
     # sae_release_short = "gemma-scope-2b-pt-res"
     # sae_sizes = [176, 22, 41, 445, 82]
 
-    model_name = "gemma-2-2b"
-    sae_release_short = "gemma-scope-2b-pt-res-canonical"
-    sae_sizes = [16, 32, 65]
+    # model_name = "gemma-2-2b"
+    # sae_release_short = "gemma-scope-2b-pt-res-canonical"
+    # sae_sizes = [16, 32, 65]
 
     activation_thresholds = [0.0]
     n_batches = 100
 
     input_dir = pj(
         git_root,
-        f"results/cooc/cooccurrence_analysis/{model_name}/{sae_release_short}/n_batches_{n_batches}",
+        f"results/size_effects/cooccurrence_analysis/{model_name}/{sae_release_short}/n_batches_{n_batches}",
     )
     output_dir = pj(
         git_root,
-        f"results/cooc/cooccurrence_from_summary/{model_name}/{sae_release_short}/n_batches_{n_batches}",
+        f"results/size_effects/cooccurrence_from_summary/{model_name}/{sae_release_short}/n_batches_{n_batches}",
     )
     os.makedirs(output_dir, exist_ok=True)
 

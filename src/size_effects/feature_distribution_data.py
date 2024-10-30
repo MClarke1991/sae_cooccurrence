@@ -71,7 +71,7 @@ def calculate_feature_occurrences(
 ) -> tuple[torch.Tensor, int]:
     feature_occurrences = torch.zeros((sae.cfg.d_sae, sae.cfg.d_sae), device=device)
     total_tokens = 0
-    
+
     if remove_special_tokens:
         special_tokens = get_special_tokens(model)
     else:
@@ -103,7 +103,9 @@ def calculate_expected_cooccurrences(
     n = feature_probabilities.size(0)
     expected_cooccurrences = torch.zeros_like(feature_occurrences)
 
-    for i in tqdm(range(0, n, chunk_size), desc="Calculating expected co-occurrences", leave=False):
+    for i in tqdm(
+        range(0, n, chunk_size), desc="Calculating expected co-occurrences", leave=False
+    ):
         end = min(i + chunk_size, n)
         chunk = feature_probabilities[i:end]
         expected_cooccurrences[i:end] = torch.outer(chunk, feature_probabilities)
@@ -116,34 +118,34 @@ def calculate_boxplot_stats(tensor: torch.Tensor, chunk_size: int = 1_000_000) -
     """Calculate summary statistics for a boxplot using chunked processing."""
     flattened = tensor.flatten()
     n = flattened.numel()
-    
+
     # Initialize variables to store quantiles
     q1, median, q3 = 0.0, 0.0, 0.0
-    
+
     # Process in chunks
     for i in tqdm(range(0, n, chunk_size), desc="Calculating quantiles", leave=False):
-        chunk = flattened[i:i+chunk_size]
+        chunk = flattened[i : i + chunk_size]
         q1 += torch.quantile(chunk, 0.25).item()
         median += torch.quantile(chunk, 0.5).item()
         q3 += torch.quantile(chunk, 0.75).item()
-    
+
     # Calculate average quantiles
     num_chunks = (n + chunk_size - 1) // chunk_size
     q1 /= num_chunks
     median /= num_chunks
     q3 /= num_chunks
-    
+
     iqr = q3 - q1
     lower_fence = q1 - 1.5 * iqr
     upper_fence = q3 + 1.5 * iqr
-    
+
     # Calculate outliers in chunks
     outliers = []
     for i in tqdm(range(0, n, chunk_size), desc="Calculating outliers", leave=False):
-        chunk = flattened[i:i+chunk_size]
+        chunk = flattened[i : i + chunk_size]
         chunk_outliers = chunk[(chunk < lower_fence) | (chunk > upper_fence)]
         outliers.append(chunk_outliers)
-    
+
     outliers = torch.cat(outliers).cpu().numpy()
 
     return {
@@ -169,7 +171,6 @@ def generate_data_tensors(
     save_h5: bool = True,  # New parameter
 ):
     for sae_size in tqdm(sae_sizes, desc="Generating data tensors"):
-        
         if model_name == "gpt2-small":
             sae_id = f"blocks.8.hook_resid_pre_{sae_size}"
         elif sae_release_short == "gemma-scope-2b-pt-res":
@@ -177,7 +178,9 @@ def generate_data_tensors(
         elif sae_release_short == "gemma-scope-2b-pt-res-canonical":
             sae_id = f"layer_12/width_{sae_size}k/canonical"
         else:
-            raise ValueError(f"Unknown model or SAE release: {model_name} {sae_release_short}")
+            raise ValueError(
+                f"Unknown model or SAE release: {model_name} {sae_release_short}"
+            )
 
         # Load model and SAE
         model = HookedTransformer.from_pretrained(model_name, device=device)
@@ -202,15 +205,17 @@ def generate_data_tensors(
             safe_threshold = str(threshold).replace(".", "_")
 
             # Calculate feature occurrences
-            print(f"Calculating feature occurrences for SAE size {sae_size} and threshold {threshold}")
+            print(
+                f"Calculating feature occurrences for SAE size {sae_size} and threshold {threshold}"
+            )
             feature_occurrences, total_tokens = calculate_feature_occurrences(
-                model=model, 
-                sae=sae, 
-                activation_store=activation_store, 
-                n_batches=n_batches, 
-                device=device, 
+                model=model,
+                sae=sae,
+                activation_store=activation_store,
+                n_batches=n_batches,
+                device=device,
                 activation_threshold=threshold,
-                remove_special_tokens=remove_special_tokens
+                remove_special_tokens=remove_special_tokens,
             )
 
             # Save feature occurrences file as HDF5 if requested
@@ -234,7 +239,9 @@ def generate_data_tensors(
                 save_tensor_to_npz(feature_occurrences, npz_file)
 
             # Calculate expected co-occurrences
-            print(f"Calculating expected co-occurrences for SAE size {sae_size} and threshold {threshold}")
+            print(
+                f"Calculating expected co-occurrences for SAE size {sae_size} and threshold {threshold}"
+            )
             expected_cooccurrences = calculate_expected_cooccurrences(
                 feature_occurrences, total_tokens
             )
@@ -252,9 +259,12 @@ def generate_data_tensors(
 
             # Save expected co-occurrences as npz if requested
             if save_npz:
-                print(f"Saving expected co-occurrences as npz for SAE size {sae_size} and threshold {threshold} (can be very slow)")
+                print(
+                    f"Saving expected co-occurrences as npz for SAE size {sae_size} and threshold {threshold} (can be very slow)"
+                )
                 npz_file = pj(
-                    output_dir, f"expected_cooccurrences_{sae_size}_{safe_threshold}.npz"
+                    output_dir,
+                    f"expected_cooccurrences_{sae_size}_{safe_threshold}.npz",
                 )
                 save_tensor_to_npz(expected_cooccurrences, npz_file)
 
@@ -279,15 +289,19 @@ def process_data_tensors(sae_sizes, activation_thresholds, output_dir):
 
             if os.path.exists(feature_occurrences_npz):
                 with np.load(feature_occurrences_npz) as data:
-                    feature_occurrences = torch.tensor(data['data'])
+                    feature_occurrences = torch.tensor(data["data"])
                 # Load total_tokens from a separate file or recalculate it
                 total_tokens = feature_occurrences.sum().item()
             elif os.path.exists(feature_occurrences_h5):
                 with h5py.File(feature_occurrences_h5, "r") as f:
-                    feature_occurrences = torch.tensor(np.array(f["feature_occurrences"]))
+                    feature_occurrences = torch.tensor(
+                        np.array(f["feature_occurrences"])
+                    )
                     total_tokens = f["total_tokens"][()]  # type: ignore
             else:
-                raise FileNotFoundError(f"No data file found for SAE size {sae_size} and threshold {threshold}")
+                raise FileNotFoundError(
+                    f"No data file found for SAE size {sae_size} and threshold {threshold}"
+                )
 
             # Similar process for expected co-occurrences
             expected_cooccurrences_npz = pj(
@@ -304,15 +318,19 @@ def process_data_tensors(sae_sizes, activation_thresholds, output_dir):
             if os.path.exists(expected_cooccurrences_npz):
                 if zipfile.is_zipfile(expected_cooccurrences_npz):
                     with np.load(expected_cooccurrences_npz) as data:
-                        expected_cooccurrences = torch.tensor(data['data'])
+                        expected_cooccurrences = torch.tensor(data["data"])
                 else:
                     warnings.warn("NPZ file is not a valid zip archive")
             elif os.path.exists(expected_cooccurrences_h5):
                 with h5py.File(expected_cooccurrences_h5, "r") as f:
-                    expected_cooccurrences = torch.tensor(np.array(f["expected_cooccurrences"]))
+                    expected_cooccurrences = torch.tensor(
+                        np.array(f["expected_cooccurrences"])
+                    )
 
             if expected_cooccurrences is None:
-                raise FileNotFoundError(f"No expected co-occurrences file found for SAE size {sae_size} and threshold {threshold}")
+                raise FileNotFoundError(
+                    f"No expected co-occurrences file found for SAE size {sae_size} and threshold {threshold}"
+                )
 
             # Calculate summary statistics
             observed_stats = calculate_boxplot_stats(feature_occurrences)
@@ -322,7 +340,9 @@ def process_data_tensors(sae_sizes, activation_thresholds, output_dir):
             for summary_stats in [observed_stats, expected_stats]:
                 for key in ["median", "q1", "q3", "whiskers"]:
                     if isinstance(summary_stats[key], tuple):
-                        summary_stats[key] = tuple(v / total_tokens for v in summary_stats[key])
+                        summary_stats[key] = tuple(
+                            v / total_tokens for v in summary_stats[key]
+                        )
                     else:
                         summary_stats[key] /= total_tokens
                 summary_stats["outliers"] /= total_tokens
@@ -412,6 +432,7 @@ def generate_histogram_data(
 
     return bin_edges[:-1], density, log_bin_edges[:-1], log_density
 
+
 def save_histogram_data_npz(
     observed_bin_edges: np.ndarray,
     observed_density: np.ndarray,
@@ -432,8 +453,9 @@ def save_histogram_data_npz(
         expected_bin_edges=expected_bin_edges,
         expected_density=expected_density,
         expected_log_bin_edges=expected_log_bin_edges,
-        expected_log_density=expected_log_density
+        expected_log_density=expected_log_density,
     )
+
 
 def save_histogram_data_h5(
     observed_bin_edges: np.ndarray,
@@ -521,7 +543,7 @@ def main() -> None:
     # sae_sizes = [98304]
     # activation_thresholds: list[float] = [0.0]
     # n_batches = 1000
-    
+
     # model_name = "gemma-2-2b"
     # sae_release_short = "gemma-scope-2b-pt-res"
     # # sae_sizes = [768, 1536, 3072, 6144, 12288, 24576]
@@ -533,7 +555,7 @@ def main() -> None:
     # activation_thresholds: list[float] = [0.0]
     # n_batches = 10
     # remove_special_tokens = True
-    
+
     model_name = "gemma-2-2b"
     sae_release_short = "gemma-scope-2b-pt-res-canonical"
     # sae_sizes = [768, 1536, 3072, 6144, 12288, 24576]
@@ -545,19 +567,16 @@ def main() -> None:
     activation_thresholds: list[float] = [0.0]
     n_batches = 100
     remove_special_tokens = True
-    
-    
 
-    
-    
-    n_batches_in_buffer = 4    
+    n_batches_in_buffer = 4
     regen_data = True
     save_npz = True
-    save_h5 = False # this only controls the overall feature cooccurrence and expected cooccurrence files as they are much larger as h5
+    save_h5 = False  # this only controls the overall feature cooccurrence and expected cooccurrence files as they are much larger as h5
 
     # Create output directory
     output_dir = pj(
-        git_root, f"results/cooc/cooccurrence_analysis/{model_name}/{sae_release_short}/n_batches_{n_batches}"
+        git_root,
+        f"results/size_effects/cooccurrence_analysis/{model_name}/{sae_release_short}/n_batches_{n_batches}",
     )
     os.makedirs(output_dir, exist_ok=True)
 
