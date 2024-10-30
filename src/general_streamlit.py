@@ -169,8 +169,6 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
             )
 
     fig.update_layout(
-        height=450,
-        width=600,
         xaxis_title="PC2",
         yaxis_title="PC3",
         hovermode="closest",
@@ -186,6 +184,7 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
             font=dict(size=10),
         ),
         margin=dict(l=40, r=40, t=40, b=40),
+        autosize=True,
     )
 
     return fig, color_map
@@ -575,7 +574,6 @@ def main():
         selected_points = spe.plotly_events(
             pca_plot,
             click_event=True,
-            override_height=500,
             key=f"pca_plot_{selected_subgraph}",
         )
 
