@@ -220,53 +220,28 @@ def load_existing_results(output_dir):
     return None
 
 
-def main():
-    torch.set_grad_enabled(False)
+def process_model_sae_stats(
+    model_name: str,
+    sae_release_short: str,
+    sae_ids: list[str],
+    activation_thresholds: list[float] = [0.0, 0.1, 0.5, 1.5],
+    joint_plot_threshold: float = 0.0,
+    n_batches: int = 10,
+    n_batches_in_buffer: int = 4,
+) -> None:
+    """Process SAE statistics for a given model and SAE configuration.
+
+    Args:
+        model_name: Name of the model (e.g., "gpt2-small", "gemma-2b")
+        sae_release_short: Short name of the SAE release
+        sae_ids: List of SAE IDs to process
+        activation_thresholds: Thresholds for feature activation
+        joint_plot_threshold: Threshold for joint plot
+        n_batches: Number of batches to process
+        n_batches_in_buffer: Number of batches to keep in buffer
+    """
     device = set_device()
     git_root = get_git_root()
-
-    # model_names = ["gpt2-small", "gemma-2-2b"]
-    # gpt2_sae_release_short = "res-jb-feature-splitting"
-    # gemma_sae_release_short_width = "gemma-scope-2b-pt-res-canonical"
-    # gpt2_sae_ids = [
-    #     "blocks.8.hook_resid_pre_768",
-    #     "blocks.8.hook_resid_pre_1536",
-    #     "blocks.8.hook_resid_pre_3072",
-    #     "blocks.8.hook_resid_pre_6144",
-    #     "blocks.8.hook_resid_pre_12288",
-    #     "blocks.8.hook_resid_pre_24576",
-    #     "blocks.8.hook_resid_pre_49152",
-    #     "blocks.8.hook_resid_pre_98304",
-    # ]
-    # gemma_sae_ids = [
-    #     "layer_12/width_16k/canonical",
-    #     "layer_12/width_32k/canonical",
-    #     "layer_12/width_65k/canonical",
-    #     # "layer_12/width_262k/canonical",
-    #     # "layer_12/width_524k/canonical",
-    #     # "layer_12/width_1m/canonical"
-    # ]
-    model_name = "gpt2-small"
-    sae_release_short = "res-jb-feature-splitting"
-    sae_ids = [
-        "blocks.8.hook_resid_pre_768",
-        "blocks.8.hook_resid_pre_1536",
-        "blocks.8.hook_resid_pre_3072",
-        "blocks.8.hook_resid_pre_6144",
-        "blocks.8.hook_resid_pre_12288",
-        "blocks.8.hook_resid_pre_24576",
-        "blocks.8.hook_resid_pre_49152",
-        "blocks.8.hook_resid_pre_98304",
-    ]
-    n_batches_in_buffer = 4
-
-    # config = config = toml.load(
-    #     pj(git_root, "src", "cooc", "config_feature_split.toml")
-    # )
-    activation_thresholds = [0.0, 0.1, 0.5, 1.5]
-    # activation_thresholds = [1.5]
-    joint_plot_threshold = 0.0
-    n_batches = 10
 
     output_dir = pj(
         git_root,
@@ -293,12 +268,10 @@ def main():
 
     # If no existing results or user chose to recalculate
     model = HookedTransformer.from_pretrained(model_name, device=device)
-
     results = {}
 
     for sae_id in tqdm(sae_ids, desc="Processing SAE IDs"):
         sae_size = get_sae_size(sae_id)
-
         sae, cfg_dict, sparsity = SAE.from_pretrained(
             release=f"{model_name}-{sae_release_short}", sae_id=sae_id, device=device
         )
@@ -314,7 +287,6 @@ def main():
         )
 
         results[sae_size] = {}
-
         for threshold in activation_thresholds:
             results[sae_size][threshold] = calculate_firing_stats(
                 sae, activation_store, n_batches, threshold
@@ -358,30 +330,38 @@ def main():
     save_results(results, summary_stats, output_dir)
     plot_results(results, output_dir, joint_plot_threshold=joint_plot_threshold)
 
-    # Print results
-    print("\nResults:")
-    print(
-        "SAE Size | Threshold | Fraction Fired (mean ± std) | Avg Features Fired (mean ± std)"
-    )
-    print("-" * 80)
-    for sae_size in sorted(results.keys()):
-        for threshold in activation_thresholds:
-            fraction_mean = results[sae_size][threshold]["fraction"]["mean"]
-            fraction_std = results[sae_size][threshold]["fraction"]["std"]
-            raw_mean = results[sae_size][threshold]["raw_number"]["mean"]
-            raw_std = results[sae_size][threshold]["raw_number"]["std"]
-            print(
-                f"{sae_size:8d} | {threshold:9.2f} | {fraction_mean:10.6f} ± {fraction_std:10.6f} | {raw_mean:10.2f} ± {raw_std:10.2f}"
-            )
 
-    # Print summary statistics
-    print("\nSummary Statistics:")
-    for threshold in activation_thresholds:
-        print(f"\nThreshold: {threshold}")
-        for stat_type in ["fraction", "raw_number"]:
-            print(f"  {stat_type.capitalize()}:")
-            for stat, value in summary_stats[threshold][stat_type].items():
-                print(f"    {stat.capitalize()}: {value:.6f}")
+def main():
+    torch.set_grad_enabled(False)
+
+    # Process GPT-2
+    process_model_sae_stats(
+        model_name="gpt2-small",
+        sae_release_short="res-jb-feature-splitting",
+        sae_ids=[
+            "blocks.8.hook_resid_pre_768",
+            "blocks.8.hook_resid_pre_1536",
+            "blocks.8.hook_resid_pre_3072",
+            "blocks.8.hook_resid_pre_6144",
+            "blocks.8.hook_resid_pre_12288",
+            "blocks.8.hook_resid_pre_24576",
+            "blocks.8.hook_resid_pre_49152",
+            "blocks.8.hook_resid_pre_98304",
+        ],
+    )
+
+    # Process Gemma
+    process_model_sae_stats(
+        model_name="gemma-2-2b",
+        sae_release_short="gemma-scope-2b-pt-res-canonical",
+        sae_ids=[
+            "layer_12/width_16k/canonical",
+            "layer_12/width_32k/canonical",
+            "layer_12/width_65k/canonical",
+        ],
+    )
+
+    notify("SAE firing statistics complete")
 
 
 if __name__ == "__main__":
