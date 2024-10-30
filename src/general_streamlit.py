@@ -399,7 +399,6 @@ def main():
         )
         st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
 
-
         # Load model configurations from config
         model_to_releases = config["models"]["releases"]
         sae_release_to_ids = config["models"]["sae_ids"]
@@ -489,7 +488,6 @@ def main():
         label = f"Subgraph {sg_id} - Top tokens: {', '.join(top_3_tokens)} | Example: {example_context}"  # type: ignore
         subgraph_options.append({"label": label, "value": sg_id})
 
-    # st.markdown('<p class="section-text">Subgraph Selection</p>', unsafe_allow_html=True)
     default_subgraph_idx = 0
     if "subgraph" in query_params:
         try:
@@ -511,6 +509,24 @@ def main():
             opt["label"] for opt in subgraph_options if opt["value"] == x
         ),
         key="subgraph_selector",
+    )
+
+    # Add a section to display the shareable link
+    current_params = {
+        "model": model,
+        "sae_release": sae_release,
+        "sae_id": sae_id,
+        "size": str(selected_size),
+        "subgraph": str(selected_subgraph),
+    }
+
+    query_string = "&".join([f"{k}={v}" for k, v in current_params.items()])
+    base_url = "https://saecoocpocapp-6ict2wobwrxf52wrrugm8u.streamlit.app/"
+    st.write("### Shareable Link")
+    st.text_input(
+        "Copy this link to share current view:",
+        f"{base_url}?{query_string}",
+        key="share_link",
     )
 
     activation_threshold = 1.5
