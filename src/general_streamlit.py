@@ -9,6 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 import streamlit_plotly_events as spe
+from st_copy_to_clipboard import st_copy_to_clipboard
 
 from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
 from sae_cooccurrence.streamlit import load_streamlit_config
@@ -321,9 +322,18 @@ def get_neuronpedia_embed_url(model, sae_release, feature_idx, sae_id):
     embed_params = "?embed=true&embedtest=true&embedexplanation=false&height=300"
     return f"{base_url}/{path}{embed_params}"
 
+def update_url_params(key, value):
+    """Update URL parameters without triggering a reload"""
+    current_params = st.query_params.to_dict()
+    current_params[key] = value
+    st.query_params.update(current_params)
 
 def main():
     query_params = st.query_params
+
+    if "point_x" in st.query_params and "point_y" in st.query_params:
+        initial_point_x = float(st.query_params["point_x"])
+        initial_point_y = float(st.query_params["point_y"])
 
     st.set_page_config(
         page_title="Feature Cooccurrence Explorer",
@@ -391,10 +401,13 @@ def main():
                 default_model_idx = 0
 
         model = st.selectbox(
-            "Model",
-            ["gpt2-small", "gemma-2-2b"],
-            index=default_model_idx,
+                "Model",
+                ["gpt2-small", "gemma-2-2b"],
+                index=default_model_idx,
+                key="model_selector",
+                on_change=lambda: update_url_params("model", st.session_state.model_selector)
         )
+
         st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
 
         # Load model configurations from config
@@ -419,7 +432,11 @@ def main():
                 default_release_idx = 0
 
         sae_release = st.selectbox(
-            "SAE Release", available_sae_releases, index=default_release_idx
+            "SAE Release", 
+            available_sae_releases, 
+            index=default_release_idx,
+            key="sae_release_selector",
+            on_change=lambda: update_url_params("sae_release", st.session_state.sae_release_selector)
         )
 
         available_sae_ids = sae_release_to_ids[sae_release]
@@ -438,8 +455,9 @@ def main():
             "SAE ID",
             [neat_sae_id(id) for id in available_sae_ids],
             index=default_sae_idx,
+            key="sae_id_selector",
+            on_change=lambda: update_url_params("sae_id", st.session_state.sae_id_selector)
         )
-
         results_root = pj(
             git_root,
             f"results/{model}/{sae_release}/{sae_id}",
@@ -462,12 +480,13 @@ def main():
                 default_size_idx = 0
 
         selected_size = st.selectbox(
-            "Subgraph Size",
-            options=available_sizes,
-            index=default_size_idx,
-            format_func=lambda x: f"Size {x}",
-            key="size_selector",
-        )
+                        "Subgraph Size",
+                        options=available_sizes,
+                        index=default_size_idx,
+                        format_func=lambda x: f"Size {x}",
+                        key="size_selector",
+                        on_change=lambda: update_url_params("size", st.session_state.size_selector)
+                    )
 
     # Update pca_results_path
     pca_results_path = pj(
@@ -503,10 +522,9 @@ def main():
         "Choose a subgraph to visualize",
         options=[opt["value"] for opt in subgraph_options],
         index=default_subgraph_idx,
-        format_func=lambda x: next(
-            opt["label"] for opt in subgraph_options if opt["value"] == x
-        ),
+        format_func=lambda x: next(opt["label"] for opt in subgraph_options if opt["value"] == x),
         key="subgraph_selector",
+        on_change=lambda: update_url_params("subgraph", st.session_state.subgraph_selector)
     )
 
     # Add a section to display the shareable link
@@ -551,14 +569,10 @@ def main():
         )
 
     with col2:
-        st.markdown(
-            '<p class="section-text">Feature Activation</p>', unsafe_allow_html=True
-        )
+        st.markdown('<p class="section-text">Feature Activation</p>', unsafe_allow_html=True)
 
         if not selected_points:
-            st.info(
-                "👆 Click on any point in the PCA plot to see its feature activations."
-            )
+            st.info("👆 Click on any point in the PCA plot to see its feature activations.")
             feature_plot = plot_feature_activations(
                 results["all_graph_feature_acts"],
                 point_index=None,
@@ -566,16 +580,19 @@ def main():
             )
             st.plotly_chart(feature_plot, use_container_width=True)
         else:
+            # Add the new URL parameter update code here
             selected_x = selected_points[0]["x"]
             selected_y = selected_points[0]["y"]
+            update_url_params("point_x", str(selected_x))
+            update_url_params("point_y", str(selected_y))
+
+            # Continue with your existing code
             matching_points = pca_df[
                 (pca_df["PC2"] == selected_x) & (pca_df["PC3"] == selected_y)
             ]
 
             if not matching_points.empty:
                 point_index = matching_points.index[0]
-
-                # st.markdown('<p class="section-text">Selected Point Details</p>', unsafe_allow_html=True)
 
                 with st.expander("View token and context", expanded=True):
                     st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
@@ -635,23 +652,24 @@ def main():
                 )
 
     # Add shareable link section
-    with st.sidebar:
-        st.markdown("### Share This View")
-        current_params = {
-            "model": model,
-            "sae_release": sae_release,
-            "sae_id": sae_id,
-            "size": str(selected_size),
-            "subgraph": str(selected_subgraph),
-        }
+    # with st.sidebar:
+    #     st.markdown("### Share This View")
+    #     current_params = {
+    #         "model": model,
+    #         "sae_release": sae_release,
+    #         "sae_id": sae_id,
+    #         "size": str(selected_size),
+    #         "subgraph": str(selected_subgraph),
+    #     }
 
-        query_string = "&".join([f"{k}={v}" for k, v in current_params.items()])
-        base_url = "https://saecoocpocapp-6ict2wobwrxf52wrrugm8u.streamlit.app/"
-        shareable_link = f"{base_url}?{query_string}"
+    #     query_string = "&".join([f"{k}={v}" for k, v in current_params.items()])
+    #     base_url = "https://feature-cooccurrence.streamlit.app/"
+    #     shareable_link = f"{base_url}?{query_string}"
 
-        st.text_input(
-            "Copy this link to share current view:", shareable_link, key="share_link"
-        )
+    #     st.text_input(
+    #         "Copy this link to share current view:", shareable_link, key="share_link"
+    #     )
+ 
 
 
 if __name__ == "__main__":
