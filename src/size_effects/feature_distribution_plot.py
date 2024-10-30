@@ -44,10 +44,23 @@ def load_boxplot_stats(file_path: str) -> dict[str, Any]:
     return stats
 
 
+def get_axis_label(sae_release_short: str) -> str:
+    if sae_release_short == "gemma-scope-2b-pt-res":
+        return "L0"
+    else:
+        return "Width"
+
+
 def plot_boxplots(
-    stats: dict[str, Any], output_dir: str, show_fliers: bool = True
+    stats: dict[str, Any],
+    output_dir: str,
+    sae_release_short: str,
+    show_fliers: bool = True,
 ) -> None:
     """Create and save boxplots for observed and expected co-occurrences."""
+
+    axis_label = get_axis_label(sae_release_short)
+
     # Create two plots - one normal and one with log scale
     for use_log in [False, True]:
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -96,7 +109,7 @@ def plot_boxplots(
             scale_suffix = ""
 
         ax.set_title(
-            f'Co-occurrence Distribution (SAE size: {stats["sae_size"]}, '
+            f'Co-occurrence Distribution (SAE {axis_label}: {stats["sae_size"]}, '
             f'Activation threshold: {stats["activation_threshold"]})'
         )
 
@@ -162,8 +175,12 @@ def plot_histogram(
     histogram_data: dict[str, dict[str, np.ndarray]],
     stats: dict[str, Any],
     output_dir: str,
+    sae_release_short: str,
 ) -> None:
     """Create and save histogram plots for observed and expected co-occurrences."""
+
+    axis_label = get_axis_label(sae_release_short)
+
     # Log-transformed histogram
     fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -184,7 +201,7 @@ def plot_histogram(
     ax.set_ylabel("Density")
     ax.set_title(
         f'Log-transformed Co-occurrence Density Plot\n'
-        f'(SAE size: {stats["sae_size"]}, Activation threshold: {stats["activation_threshold"]})'
+        f'(SAE {axis_label}: {stats["sae_size"]}, Activation threshold: {stats["activation_threshold"]})'
     )
     ax.legend()
 
@@ -214,7 +231,7 @@ def plot_histogram(
     ax.set_ylabel("Density")
     ax.set_title(
         f'Unlogged Co-occurrence Density Plot\n'
-        f'(SAE size: {stats["sae_size"]}, Activation threshold: {stats["activation_threshold"]})'
+        f'(SAE {axis_label}: {stats["sae_size"]}, Activation threshold: {stats["activation_threshold"]})'
     )
     ax.legend()
 
@@ -226,10 +243,15 @@ def plot_histogram(
 
 
 def plot_combined_boxplots(
-    all_stats: list[dict[str, Any]], output_dir: str, show_fliers: bool = True
+    all_stats: list[dict[str, Any]],
+    output_dir: str,
+    sae_release_short: str,
+    show_fliers: bool = True,
 ) -> None:
     """Create and save a combined boxplot for all SAE sizes."""
     # Sort all_stats by SAE size
+    axis_label = get_axis_label(sae_release_short)
+
     all_stats.sort(key=lambda x: x["sae_size"])
 
     for use_log in [False, True]:
@@ -291,7 +313,7 @@ def plot_combined_boxplots(
             scale_suffix = ""
 
         ax.set_title(
-            f'Co-occurrence Distribution for Different SAE Sizes\n'
+            f'Co-occurrence Distribution for Different SAE {axis_label}s\n'
             f'(Activation threshold: {all_stats[0]["activation_threshold"]})'
         )
 
@@ -433,11 +455,11 @@ def main():
             print(
                 f"Plotting boxplots for SAE size {sae_size} and threshold {threshold}"
             )
-            plot_boxplots(stats, output_dir, show_fliers=False)
+            plot_boxplots(stats, output_dir, sae_release_short, show_fliers=False)
             print(
                 f"Plotted boxplots without outliers for SAE size {sae_size} and threshold {threshold}"
             )
-            plot_boxplots(stats, output_dir)
+            plot_boxplots(stats, output_dir, sae_release_short)
             print(f"Plotted boxplots for SAE size {sae_size} and threshold {threshold}")
 
             if os.path.exists(histogram_file):
@@ -451,7 +473,7 @@ def main():
                 print(
                     f"Plotting histogram for SAE size {sae_size} and threshold {threshold}"
                 )
-                plot_histogram(histogram_data, stats, output_dir)
+                plot_histogram(histogram_data, stats, output_dir, sae_release_short)
                 print(
                     f"Plotted histogram for SAE size {sae_size} and threshold {threshold}"
                 )
@@ -465,10 +487,12 @@ def main():
     # Plot combined boxplots for all SAE sizes
     if len(all_stats) > 1:
         print("Plotting combined boxplots for all SAE sizes")
-        plot_combined_boxplots(all_stats, output_dir)
+        plot_combined_boxplots(all_stats, output_dir, sae_release_short)
         print("Plotted combined boxplots for all SAE sizes")
         print("Plotting combined boxplots without outliers for all SAE sizes")
-        plot_combined_boxplots(all_stats, output_dir, show_fliers=False)
+        plot_combined_boxplots(
+            all_stats, output_dir, sae_release_short, show_fliers=False
+        )
         print("Plotted combined boxplots without outliers for all SAE sizes")
     print("Boxplot and histogram generation complete.")
 
