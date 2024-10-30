@@ -321,18 +321,20 @@ def get_neuronpedia_embed_url(model, sae_release, feature_idx, sae_id):
     embed_params = "?embed=true&embedtest=true&embedexplanation=false&height=300"
     return f"{base_url}/{path}{embed_params}"
 
+
 def update_url_params(key, value):
     """Update URL parameters without triggering a reload"""
     current_params = st.query_params.to_dict()
     current_params[key] = value
     st.query_params.update(current_params)
 
+
 def main():
     query_params = st.query_params
 
-    if "point_x" in st.query_params and "point_y" in st.query_params:
-        initial_point_x = float(st.query_params["point_x"])
-        initial_point_y = float(st.query_params["point_y"])
+    # if "point_x" in st.query_params and "point_y" in st.query_params:
+    #     initial_point_x = float(st.query_params["point_x"])
+    #     initial_point_y = float(st.query_params["point_y"])
 
     st.set_page_config(
         page_title="Feature Cooccurrence Explorer",
@@ -400,11 +402,13 @@ def main():
                 default_model_idx = 0
 
         model = st.selectbox(
-                "Model",
-                ["gpt2-small", "gemma-2-2b"],
-                index=default_model_idx,
-                key="model_selector",
-                on_change=lambda: update_url_params("model", st.session_state.model_selector)
+            "Model",
+            ["gpt2-small", "gemma-2-2b"],
+            index=default_model_idx,
+            key="model_selector",
+            on_change=lambda: update_url_params(
+                "model", st.session_state.model_selector
+            ),
         )
 
         st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
@@ -431,11 +435,13 @@ def main():
                 default_release_idx = 0
 
         sae_release = st.selectbox(
-            "SAE Release", 
-            available_sae_releases, 
+            "SAE Release",
+            available_sae_releases,
             index=default_release_idx,
             key="sae_release_selector",
-            on_change=lambda: update_url_params("sae_release", st.session_state.sae_release_selector)
+            on_change=lambda: update_url_params(
+                "sae_release", st.session_state.sae_release_selector
+            ),
         )
 
         available_sae_ids = sae_release_to_ids[sae_release]
@@ -455,7 +461,9 @@ def main():
             [neat_sae_id(id) for id in available_sae_ids],
             index=default_sae_idx,
             key="sae_id_selector",
-            on_change=lambda: update_url_params("sae_id", st.session_state.sae_id_selector)
+            on_change=lambda: update_url_params(
+                "sae_id", st.session_state.sae_id_selector
+            ),
         )
         results_root = pj(
             git_root,
@@ -479,13 +487,13 @@ def main():
                 default_size_idx = 0
 
         selected_size = st.selectbox(
-                        "Subgraph Size",
-                        options=available_sizes,
-                        index=default_size_idx,
-                        format_func=lambda x: f"Size {x}",
-                        key="size_selector",
-                        on_change=lambda: update_url_params("size", st.session_state.size_selector)
-                    )
+            "Subgraph Size",
+            options=available_sizes,
+            index=default_size_idx,
+            format_func=lambda x: f"Size {x}",
+            key="size_selector",
+            on_change=lambda: update_url_params("size", st.session_state.size_selector),
+        )
 
     # Update pca_results_path
     pca_results_path = pj(
@@ -521,19 +529,23 @@ def main():
         "Choose a subgraph to visualize",
         options=[opt["value"] for opt in subgraph_options],
         index=default_subgraph_idx,
-        format_func=lambda x: next(opt["label"] for opt in subgraph_options if opt["value"] == x),
+        format_func=lambda x: next(
+            opt["label"] for opt in subgraph_options if opt["value"] == x
+        ),
         key="subgraph_selector",
-        on_change=lambda: update_url_params("subgraph", st.session_state.subgraph_selector)
+        on_change=lambda: update_url_params(
+            "subgraph", st.session_state.subgraph_selector
+        ),
     )
 
     # Add a section to display the shareable link
-    current_params = {
-        "model": model,
-        "sae_release": sae_release,
-        "sae_id": sae_id,
-        "size": str(selected_size),
-        "subgraph": str(selected_subgraph),
-    }
+    # current_params = {
+    #     "model": model,
+    #     "sae_release": sae_release,
+    #     "sae_id": sae_id,
+    #     "size": str(selected_size),
+    #     "subgraph": str(selected_subgraph),
+    # }
 
     activation_threshold = 1.5
     activation_threshold_safe = str(activation_threshold).replace(".", "_")
@@ -568,10 +580,14 @@ def main():
         )
 
     with col2:
-        st.markdown('<p class="section-text">Feature Activation</p>', unsafe_allow_html=True)
+        st.markdown(
+            '<p class="section-text">Feature Activation</p>', unsafe_allow_html=True
+        )
 
         if not selected_points:
-            st.info("👆 Click on any point in the PCA plot to see its feature activations.")
+            st.info(
+                "👆 Click on any point in the PCA plot to see its feature activations."
+            )
             feature_plot = plot_feature_activations(
                 results["all_graph_feature_acts"],
                 point_index=None,
@@ -649,7 +665,6 @@ def main():
                     'style="height: 300px; width: 100%; border: none;"></iframe>',
                     unsafe_allow_html=True,
                 )
-
 
 
 if __name__ == "__main__":
