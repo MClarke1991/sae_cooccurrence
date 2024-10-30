@@ -228,6 +228,103 @@ def load_existing_results(output_dir):
     return None
 
 
+def process_single_sae(
+    sae_id: str,
+    model_name: str,
+    sae_release_short: str,
+    model: HookedTransformer,
+    activation_thresholds: list[float],
+    n_batches: int,
+    n_batches_in_buffer: int,
+    device: str,
+) -> tuple[int, dict]:
+    """Process a single SAE and calculate firing statistics.
+
+    Args:
+        sae_id: ID of the SAE to process
+        model_name: Name of the model
+        sae_release_short: Short name of the SAE release
+        model: The transformer model
+        activation_thresholds: List of thresholds for activation
+        n_batches: Number of batches to process
+        n_batches_in_buffer: Number of batches to keep in buffer
+        device: Device to use for computation
+
+    Returns:
+        Tuple of (sae_size, results_dict)
+    """
+    sae_size = get_sae_size(sae_id, model_name)
+    sae_release = get_sae_release(model_name, sae_release_short)
+    sae, _, _ = SAE.from_pretrained(
+        release=sae_release,
+        sae_id=sae_id,
+        device=device,
+    )
+
+    activation_store = ActivationsStore.from_sae(
+        model=model,
+        sae=sae,
+        streaming=True,
+        store_batch_size_prompts=8,
+        train_batch_size_tokens=4096,
+        n_batches_in_buffer=n_batches_in_buffer,
+        device=device,
+    )
+
+    results_dict = {}
+    for threshold in activation_thresholds:
+        results_dict[threshold] = calculate_firing_stats(
+            sae,
+            activation_store,
+            n_batches,
+            threshold,
+        )
+
+    return sae_size, results_dict
+
+
+def calculate_summary_statistics(results: dict, threshold: float) -> dict:
+    """Calculate summary statistics for a given threshold across all SAE sizes.
+
+    Args:
+        results: Dictionary of results for each SAE size
+        threshold: Activation threshold value
+
+    Returns:
+        Dictionary containing summary statistics for fractions and raw numbers
+    """
+    return {
+        "fraction": {
+            "mean": np.mean(
+                [results[size][threshold]["fraction"]["mean"] for size in results]
+            ),
+            "median": np.median(
+                [results[size][threshold]["fraction"]["mean"] for size in results]
+            ),
+            "min": np.min(
+                [results[size][threshold]["fraction"]["mean"] for size in results]
+            ),
+            "max": np.max(
+                [results[size][threshold]["fraction"]["mean"] for size in results]
+            ),
+        },
+        "raw_number": {
+            "mean": np.mean(
+                [results[size][threshold]["raw_number"]["mean"] for size in results]
+            ),
+            "median": np.median(
+                [results[size][threshold]["raw_number"]["mean"] for size in results]
+            ),
+            "min": np.min(
+                [results[size][threshold]["raw_number"]["mean"] for size in results]
+            ),
+            "max": np.max(
+                [results[size][threshold]["raw_number"]["mean"] for size in results]
+            ),
+        },
+    }
+
+
 def process_model_sae_stats(
     model_name: str,
     sae_release_short: str,
@@ -279,61 +376,22 @@ def process_model_sae_stats(
     results = {}
 
     for sae_id in tqdm(sae_ids, desc="Processing SAE IDs"):
-        sae_size = get_sae_size(sae_id, model_name)
-        sae_release = get_sae_release(model_name, sae_release_short)
-        sae, cfg_dict, sparsity = SAE.from_pretrained(
-            release=sae_release, sae_id=sae_id, device=device
-        )
-
-        activation_store = ActivationsStore.from_sae(
+        sae_size, sae_results = process_single_sae(
+            sae_id=sae_id,
+            model_name=model_name,
+            sae_release_short=sae_release_short,
             model=model,
-            sae=sae,
-            streaming=True,
-            store_batch_size_prompts=8,
-            train_batch_size_tokens=4096,
+            activation_thresholds=activation_thresholds,
+            n_batches=n_batches,
             n_batches_in_buffer=n_batches_in_buffer,
             device=device,
         )
-
-        results[sae_size] = {}
-        for threshold in activation_thresholds:
-            results[sae_size][threshold] = calculate_firing_stats(
-                sae, activation_store, n_batches, threshold
-            )
+        results[sae_size] = sae_results
 
     # Calculate summary statistics
     summary_stats = {}
     for threshold in activation_thresholds:
-        summary_stats[threshold] = {
-            "fraction": {
-                "mean": np.mean(
-                    [results[size][threshold]["fraction"]["mean"] for size in results]
-                ),
-                "median": np.median(
-                    [results[size][threshold]["fraction"]["mean"] for size in results]
-                ),
-                "min": np.min(
-                    [results[size][threshold]["fraction"]["mean"] for size in results]
-                ),
-                "max": np.max(
-                    [results[size][threshold]["fraction"]["mean"] for size in results]
-                ),
-            },
-            "raw_number": {
-                "mean": np.mean(
-                    [results[size][threshold]["raw_number"]["mean"] for size in results]
-                ),
-                "median": np.median(
-                    [results[size][threshold]["raw_number"]["mean"] for size in results]
-                ),
-                "min": np.min(
-                    [results[size][threshold]["raw_number"]["mean"] for size in results]
-                ),
-                "max": np.max(
-                    [results[size][threshold]["raw_number"]["mean"] for size in results]
-                ),
-            },
-        }
+        summary_stats[threshold] = calculate_summary_statistics(results, threshold)
 
     # Save and plot results
     save_results(results, summary_stats, output_dir)
