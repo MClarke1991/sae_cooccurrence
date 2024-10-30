@@ -15,13 +15,18 @@ from sae_cooccurrence.utils.saving_loading import notify, set_device
 from sae_cooccurrence.utils.set_paths import get_git_root
 
 
-def get_sae_size(sae_id, model_name):
+def get_sae_size(sae_id: str, model_name: str, sae_release_short: str) -> int | None:
     if model_name == "gpt2-small":
         return int(sae_id.split("_")[-1])
     elif model_name == "gemma-2-2b":
-        # Extract the number from 'width_XXk' format
-        width = sae_id.split("/")[1]  # gets 'width_16k'
-        return int(width.split("_")[1].replace("k", "000"))
+        if sae_release_short == "gemma-scope-2b-pt-res-canonical":
+            # Extract the number from 'width_XXk' format
+            width = sae_id.split("/")[1]  # gets 'width_16k'
+            return int(width.split("_")[1].replace("k", "000"))
+        elif sae_release_short == "gemma-scope-2b-pt-res":
+            # "layer_12/width_16k/average_l0_22",
+            l0 = sae_id.split("average_l0_")[1]
+            return int(l0)
     else:
         raise ValueError(f"Unsupported model: {model_name}")
 
@@ -130,7 +135,13 @@ def save_results(results, summary_stats, output_dir):
     print(f"Printed results saved as: {txt_path}")
 
 
-def plot_results(results, output_dir, joint_plot_threshold=0.0, plot_errors=True):
+def plot_results(
+    results,
+    output_dir,
+    sae_release_short: str,
+    joint_plot_threshold=0.0,
+    plot_errors=True,
+):
     sns.set_theme()
     sae_sizes = sorted(results.keys())
     thresholds = sorted(results[sae_sizes[0]].keys())
@@ -200,7 +211,10 @@ def plot_results(results, output_dir, joint_plot_threshold=0.0, plot_errors=True
     ax2.plot(sae_sizes, raw_numbers, "r-", marker="s", label="Number Fired")
 
     ax1.set_xscale("log")
-    ax1.set_xlabel("SAE Size")
+    if sae_release_short == "gemma-scope-2b-pt-res":
+        ax1.set_xlabel("L0")
+    else:
+        ax1.set_xlabel("SAE Size")
     ax1.set_ylabel("Fraction of Features Fired", color="b")
     ax2.set_ylabel("Number of Features Fired", color="r")
 
@@ -237,7 +251,7 @@ def process_single_sae(
     n_batches: int,
     n_batches_in_buffer: int,
     device: str,
-) -> tuple[int, dict]:
+) -> tuple[int | None, dict]:
     """Process a single SAE and calculate firing statistics.
 
     Args:
@@ -253,7 +267,7 @@ def process_single_sae(
     Returns:
         Tuple of (sae_size, results_dict)
     """
-    sae_size = get_sae_size(sae_id, model_name)
+    sae_size = get_sae_size(sae_id, model_name, sae_release_short)
     sae_release = get_sae_release(model_name, sae_release_short)
     sae, _, _ = SAE.from_pretrained(
         release=sae_release,
@@ -367,7 +381,12 @@ def process_model_sae_stats(
         if user_input.lower() == "y":
             results = existing_results["detailed_results"]
             summary_stats = existing_results["summary_stats"]
-            plot_results(results, output_dir, joint_plot_threshold=joint_plot_threshold)
+            plot_results(
+                results,
+                output_dir,
+                joint_plot_threshold=joint_plot_threshold,
+                sae_release_short=sae_release_short,
+            )
             print("Existing results loaded and plotted.")
             return
 
@@ -395,7 +414,12 @@ def process_model_sae_stats(
 
     # Save and plot results
     save_results(results, summary_stats, output_dir)
-    plot_results(results, output_dir, joint_plot_threshold=joint_plot_threshold)
+    plot_results(
+        results,
+        output_dir,
+        joint_plot_threshold=joint_plot_threshold,
+        sae_release_short=sae_release_short,
+    )
 
 
 def main():
@@ -425,6 +449,18 @@ def main():
             "layer_12/width_16k/canonical",
             "layer_12/width_32k/canonical",
             "layer_12/width_65k/canonical",
+        ],
+    )
+
+    process_model_sae_stats(
+        model_name="gemma-2-2b",
+        sae_release_short="gemma-scope-2b-pt-res",
+        sae_ids=[
+            "layer_12/width_16k/average_l0_22",
+            "layer_12/width_16k/average_l0_41",
+            "layer_12/width_16k/average_l0_82",
+            "layer_12/width_16k/average_l0_176",
+            "layer_12/width_16k/average_l0_445",
         ],
     )
 
