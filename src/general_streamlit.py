@@ -169,9 +169,8 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
             )
 
     fig.update_layout(
-        height=500,
-        width=650,
-        title="PCA Plot (PC2 vs PC3)",
+        height=450,
+        width=600,
         xaxis_title="PC2",
         yaxis_title="PC3",
         hovermode="closest",
@@ -186,7 +185,7 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
             borderwidth=1,
             font=dict(size=10),
         ),
-        margin=dict(l=50, r=50, t=50, b=50),
+        margin=dict(l=40, r=40, t=40, b=40),
     )
 
     return fig, color_map
@@ -368,7 +367,10 @@ def main():
         '<p class="title-text">Feature Cooccurrence Explorer</p>',
         unsafe_allow_html=True,
     )
-
+    st.markdown("""
+    The plot below shows the PCA projection of feature activations. 
+    Colors represent different features. Click on any point to see detailed activations.
+""")
     git_root = get_git_root()
     config = load_streamlit_config(pj(git_root, "src", "config_pca_streamlit.toml"))
     load_options = config["processing"]["load_options"]
@@ -394,8 +396,9 @@ def main():
             "Model",
             ["gpt2-small", "gemma-2-2b"],
             index=default_model_idx,
-            format_func=lambda x: f"{x} (batch size: {model_to_batch_size[x]})",
         )
+        st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
+
 
         # Load model configurations from config
         model_to_releases = config["models"]["releases"]
@@ -524,14 +527,11 @@ def main():
 
     # Main visualization area
 
-    col1, col2 = st.columns([2, 1.5])
+    col1, col2 = st.columns([2, 1])
 
     with col1:
         st.markdown('<p class="section-text">PCA</p>', unsafe_allow_html=True)
-        st.markdown("""
-            The plot below shows the PCA projection of feature activations. 
-            Colors represent different features. Click on any point to see detailed activations.
-        """)
+
         pca_plot, color_map = plot_pca_2d(
             pca_df=pca_df,
             max_feature_info=results["all_max_feature_info"],
