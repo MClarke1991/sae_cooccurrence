@@ -539,13 +539,13 @@ def main():
     )
 
     # Add a section to display the shareable link
-    # current_params = {
-    #     "model": model,
-    #     "sae_release": sae_release,
-    #     "sae_id": sae_id,
-    #     "size": str(selected_size),
-    #     "subgraph": str(selected_subgraph),
-    # }
+    current_params = {
+        "model": model,
+        "sae_release": sae_release,
+        "sae_id": sae_id,
+        "size": str(selected_size),
+        "subgraph": str(selected_subgraph),
+    }
 
     activation_threshold = 1.5
     activation_threshold_safe = str(activation_threshold).replace(".", "_")
@@ -665,6 +665,25 @@ def main():
                     'style="height: 300px; width: 100%; border: none;"></iframe>',
                     unsafe_allow_html=True,
                 )
+
+        # Add shareable link section
+    with st.sidebar:
+        st.markdown("### Share This View")
+        current_params = {
+            "model": model,
+            "sae_release": sae_release,
+            "sae_id": sae_id,
+            "size": str(selected_size),
+            "subgraph": str(selected_subgraph),
+        }
+
+        query_string = "&".join([f"{k}={v}" for k, v in current_params.items()])
+        base_url = "https://feature-cooccurrence.streamlit.app/"
+        shareable_link = f"{base_url}?{query_string}"
+
+        st.text_input(
+            "Copy this link to share current view:", shareable_link, key="share_link"
+        )
 
 
 if __name__ == "__main__":
