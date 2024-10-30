@@ -320,7 +320,7 @@ def get_neuronpedia_embed_url(model, sae_release, feature_idx, sae_id):
     else:
         raise ValueError(f"Invalid model: {model}")
     embed_params = (
-        "?embed=true&embedexplanation=false&embedplots=false&embedtest=true&height=300"
+        "?embed=true&embedtest=true&embedexplanation=false&height=300"
     )
     return f"{base_url}/{path}{embed_params}"
 
