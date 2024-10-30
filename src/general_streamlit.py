@@ -112,46 +112,80 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
     color_palette = generate_color_palette(n_unique)
     color_map = dict(zip(unique_features, color_palette))
 
-    # Assign colors based on whether the max feature is in fs_splitting_nodes
-    colors = [
-        "grey" if not in_graph else color_map.get(feature, "grey")
-        for feature, in_graph in zip(max_feature_indices, max_feature_in_graph)
-    ]
+    # Create figure with points grouped by feature for legend
+    fig = go.Figure()
 
-    # Add max_feature_indices to pca_df for hover data
-    pca_df["max_feature_index"] = max_feature_indices
+    # Add grey points for features not in graph
+    grey_points = ~max_feature_in_graph
+    if any(grey_points):
+        fig.add_trace(
+            go.Scatter(
+                x=pca_df.loc[grey_points, "PC2"],
+                y=pca_df.loc[grey_points, "PC3"],
+                mode="markers",
+                marker=dict(color="grey"),
+                name="Not in graph",
+                hovertemplate=(
+                    "Token: %{customdata[0]}<br>"
+                    "Context: %{customdata[1]}<br>"
+                    "Feature: %{customdata[2]}<br>"
+                    "<extra></extra>"
+                ),
+                customdata=np.column_stack(
+                    (
+                        pca_df.loc[grey_points, "tokens"],
+                        pca_df.loc[grey_points, "context"],
+                        max_feature_indices[grey_points],
+                    )
+                ),
+            )
+        )
 
-    fig = px.scatter(
-        pca_df,
-        x="PC2",
-        y="PC3",
-        hover_data=["tokens", "context", "max_feature_index"],
-        labels={"max_feature_index": "Most Active Feature"},
-        custom_data=["max_feature_index"],
-    )
-
-    # Update marker colors
-    fig.update_traces(marker=dict(color=colors))
+    # Add points for each feature in fs_splitting_nodes
+    for feature in unique_features:
+        feature_points = (max_feature_indices == feature) & max_feature_in_graph
+        if any(feature_points):
+            fig.add_trace(
+                go.Scatter(
+                    x=pca_df.loc[feature_points, "PC2"],
+                    y=pca_df.loc[feature_points, "PC3"],
+                    mode="markers",
+                    marker=dict(color=color_map[feature]),
+                    name=f"Feature {feature}",
+                    hovertemplate=(
+                        "Token: %{customdata[0]}<br>"
+                        "Context: %{customdata[1]}<br>"
+                        "Feature: %{customdata[2]}<br>"
+                        "<extra></extra>"
+                    ),
+                    customdata=np.column_stack(
+                        (
+                            pca_df.loc[feature_points, "tokens"],
+                            pca_df.loc[feature_points, "context"],
+                            max_feature_indices[feature_points],
+                        )
+                    ),
+                )
+            )
 
     fig.update_layout(
-        height=600,
-        width=800,
-        title="PCA Plot (PC2 vs PC3)",
+        height=450,
+        width=600,
         xaxis_title="PC2",
         yaxis_title="PC3",
-        showlegend=False,
         hovermode="closest",
-        hoverdistance=5,  # Reduce hover sensitivity
-    )
-
-    # Add this to make hover more responsive
-    fig.update_traces(
-        hovertemplate=(
-            "Token: %{customdata[0]}<br>"
-            "Context: %{customdata[1]}<br>"
-            "Feature: %{customdata[2]}<br>"
-            "<extra></extra>"  # This removes the secondary box
-        )
+        hoverdistance=5,
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="right",
+            x=0.99,
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            bordercolor="rgba(0,0,0,0.2)",
+            borderwidth=1,
+            font=dict(size=10),
+        ),
+        margin=dict(l=40, r=40, t=40, b=40),
     )
 
     return fig, color_map
@@ -192,7 +226,6 @@ def plot_feature_activations(
     all_graph_feature_acts, point_index, fs_splitting_nodes, context=None
 ):
     if point_index is None:
-        # Create an empty figure with instructions
         fig = go.Figure()
         fig.update_layout(
             height=600,
@@ -211,7 +244,6 @@ def plot_feature_activations(
         )
         return fig
 
-    # Original plotting code
     activations = all_graph_feature_acts[point_index]
     trace = go.Bar(
         x=[f"Feature {i}" for i in fs_splitting_nodes],
@@ -265,108 +297,179 @@ def get_available_sizes(results_root, sae_id_neat, n_batches_reconstruction):
     return sorted(sizes)
 
 
+def get_neuronpedia_embed_url(model, sae_release, feature_idx, sae_id):
+    """Generate the correct Neuronpedia embed URL based on model and SAE release"""
+    base_url = "https://neuronpedia.org"
+    path = None
+    if model == "gpt2-small":
+        if sae_release == "res-jb":
+            # Extract layer number from sae_id (e.g., "blocks_7_hook_resid_pre" -> 7)
+            layer = re.search(r"blocks_(\d+)_", sae_id).group(1)  # type: ignore
+            path = f"{model}/{layer}-res-jb/{feature_idx}"
+        elif sae_release == "res-jb-feature-splitting":
+            # Extract layer and width (e.g., "blocks_8_hook_resid_pre_24576" -> layer=8, width=24576)
+            layer = re.search(r"blocks_(\d+)_", sae_id).group(1)  # type: ignore
+            width = re.search(r"_(\d+)$", sae_id).group(1)  # type: ignore
+            path = f"{model}/{layer}-res_fs{width}-jb/{feature_idx}"
+    elif model == "gemma-2-2b":
+        # Extract layer and width (e.g., "layer_20/width_16k/canonical" -> layer=20, width=16k)
+        layer = re.search(r"layer_(\d+)", sae_id).group(1)  # type: ignore
+        width = re.search(r"width_(\d+k)", sae_id).group(1)  # type: ignore
+        path = f"{model}/{layer}-gemmascope-res-{width}/{feature_idx}"
+    else:
+        raise ValueError(f"Invalid model: {model}")
+    embed_params = "?embed=true&embedtest=true&embedexplanation=false&height=300"
+    return f"{base_url}/{path}{embed_params}"
+
+
 def main():
-    # Add query parameter handling at the start of main()
     query_params = st.query_params
 
+    st.set_page_config(
+        page_title="Feature Cooccurrence Explorer",
+        page_icon="🔍",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+
+    st.markdown(
+        """
+        <style>
+        .title-text {
+            font-size: 42px;
+            font-weight: 600;
+            color: #1E1E1E;
+            padding-bottom: 20px;
+        }
+        .subtitle-text {
+            font-size: 24px;
+            font-weight: 500;
+            color: #4A4A4A;
+            padding-bottom: 10px;
+        }
+        .section-text {
+            font-size: 20px;
+            font-weight: 500;
+            color: #2C3E50;
+            padding-bottom: 10px;
+        }
+        .stSelectbox {
+            padding-bottom: 15px;
+        }
+        </style>
+    """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<p class="title-text">Feature Cooccurrence Explorer</p>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("""
+    The plot below shows the PCA projection of feature activations. 
+    Colors represent different features. Click on any point to see detailed activations.
+""")
     git_root = get_git_root()
     config = load_streamlit_config(pj(git_root, "src", "config_pca_streamlit.toml"))
     load_options = config["processing"]["load_options"]
     model_to_batch_size = config["models"]["batch_sizes"]
 
-    st.set_page_config(layout="wide")
-    st.title("PCA Visualization with Feature Activations")
+    with st.sidebar:
+        st.markdown(
+            '<p class="subtitle-text">Configuration</p>', unsafe_allow_html=True
+        )
+        default_model_idx = 0
+        if "model" in query_params:
+            try:
+                model_param = query_params["model"]
+                # Handle both list and string cases
+                model_value = (
+                    model_param[0] if isinstance(model_param, list) else model_param
+                )
+                default_model_idx = ["gpt2-small", "gemma-2-2b"].index(model_value)
+            except (ValueError, IndexError):
+                default_model_idx = 0
 
-    # Fix query parameter handling for model selection
-    default_model_idx = 0
-    if "model" in query_params:
-        try:
-            model_param = query_params["model"]
-            # Handle both list and string cases
-            model_value = (
-                model_param[0] if isinstance(model_param, list) else model_param
-            )
-            default_model_idx = ["gpt2-small", "gemma-2-2b"].index(model_value)
-        except (ValueError, IndexError):
-            # If the model parameter is invalid, use default
-            default_model_idx = 0
+        model = st.selectbox(
+            "Model",
+            ["gpt2-small", "gemma-2-2b"],
+            index=default_model_idx,
+        )
+        st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
 
-    model = st.selectbox(
-        "Select model",
-        ["gpt2-small", "gemma-2-2b"],
-        index=default_model_idx,
-        format_func=lambda x: f"{x} (batch size: {model_to_batch_size[x]})",
-    )
+        # Load model configurations from config
+        model_to_releases = config["models"]["releases"]
+        sae_release_to_ids = config["models"]["sae_ids"]
 
-    # Load model configurations from config
-    # Get batch size for selected model
-    n_batches_reconstruction = model_to_batch_size[model]
-    model_to_releases = config["models"]["releases"]
-    sae_release_to_ids = config["models"]["sae_ids"]
+        available_sae_releases = model_to_releases[model]
 
-    available_sae_releases = model_to_releases[model]
-    default_release_idx = 0
-    if "sae_release" in query_params:
-        try:
-            release_param = query_params["sae_release"]
-            release_value = (
-                release_param[0] if isinstance(release_param, list) else release_param
-            )
-            default_release_idx = available_sae_releases.index(release_value)
-        except (ValueError, IndexError):
-            # If the release parameter is invalid, use default
-            default_release_idx = 0
+        n_batches_reconstruction = model_to_batch_size[model]
 
-    sae_release = st.selectbox(
-        "Select SAE release", available_sae_releases, index=default_release_idx
-    )
+        default_release_idx = 0
+        if "sae_release" in query_params:
+            try:
+                release_param = query_params["sae_release"]
+                release_value = (
+                    release_param[0]
+                    if isinstance(release_param, list)
+                    else release_param
+                )
+                default_release_idx = available_sae_releases.index(release_value)
+            except (ValueError, IndexError):
+                default_release_idx = 0
 
-    # Similarly for SAE ID selection
-    available_sae_ids = sae_release_to_ids[sae_release]
-    default_sae_idx = 0
-    if "sae_id" in query_params:
-        try:
-            sae_param = query_params["sae_id"]
-            sae_value = sae_param[0] if isinstance(sae_param, list) else sae_param
-            neat_ids = [neat_sae_id(id) for id in available_sae_ids]
-            default_sae_idx = neat_ids.index(sae_value)
-        except (ValueError, IndexError):
-            # If the SAE ID parameter is invalid, use default
-            default_sae_idx = 0
+        sae_release = st.selectbox(
+            "SAE Release", available_sae_releases, index=default_release_idx
+        )
 
-    sae_id = st.selectbox(
-        "Select SAE ID",
-        [neat_sae_id(id) for id in available_sae_ids],
-        index=default_sae_idx,
-    )
-    results_root = pj(
-        git_root,
-        f"results/{model}/{sae_release}/{sae_id}",
-    )
+        available_sae_ids = sae_release_to_ids[sae_release]
 
-    # Add size selection before loading subgraphs
-    available_sizes = get_available_sizes(
-        results_root, sae_id, n_batches_reconstruction
-    )
-    default_size_idx = 0
-    if "size" in query_params:
-        try:
-            size_param = query_params["size"]
-            size_value = size_param[0] if isinstance(size_param, list) else size_param
-            default_size_idx = available_sizes.index(int(size_value))
-        except (ValueError, IndexError):
-            # If the size parameter is invalid, use default
-            default_size_idx = 0
+        default_sae_idx = 0
+        if "sae_id" in query_params:
+            try:
+                sae_param = query_params["sae_id"]
+                sae_value = sae_param[0] if isinstance(sae_param, list) else sae_param
+                neat_ids = [neat_sae_id(id) for id in available_sae_ids]
+                default_sae_idx = neat_ids.index(sae_value)
+            except (ValueError, IndexError):
+                default_sae_idx = 0
 
-    selected_size = st.selectbox(
-        "Select subgraph size",
-        options=available_sizes,
-        index=default_size_idx,
-        format_func=lambda x: f"Size {x}",
-        key="size_selector",
-    )
+        sae_id = st.selectbox(
+            "SAE ID",
+            [neat_sae_id(id) for id in available_sae_ids],
+            index=default_sae_idx,
+        )
 
-    # Update pca_results_path to use selected size
+        results_root = pj(
+            git_root,
+            f"results/{model}/{sae_release}/{sae_id}",
+        )
+
+        # st.markdown('<p class="section-text">Size Settings</p>', unsafe_allow_html=True)
+        available_sizes = get_available_sizes(
+            results_root, sae_id, n_batches_reconstruction
+        )
+
+        default_size_idx = 0
+        if "size" in query_params:
+            try:
+                size_param = query_params["size"]
+                size_value = (
+                    size_param[0] if isinstance(size_param, list) else size_param
+                )
+                default_size_idx = available_sizes.index(int(size_value))
+            except (ValueError, IndexError):
+                default_size_idx = 0
+
+        selected_size = st.selectbox(
+            "Subgraph Size",
+            options=available_sizes,
+            index=default_size_idx,
+            format_func=lambda x: f"Size {x}",
+            key="size_selector",
+        )
+
+    # Update pca_results_path
     pca_results_path = pj(
         results_root,
         f"{sae_id}_pca_for_streamlit",
@@ -383,7 +486,6 @@ def main():
         label = f"Subgraph {sg_id} - Top tokens: {', '.join(top_3_tokens)} | Example: {example_context}"  # type: ignore
         subgraph_options.append({"label": label, "value": sg_id})
 
-    # Dropdown for subgraph selection
     default_subgraph_idx = 0
     if "subgraph" in query_params:
         try:
@@ -395,11 +497,10 @@ def main():
             )
             default_subgraph_idx = available_subgraphs.index(int(subgraph_value))
         except (ValueError, IndexError):
-            # If the subgraph parameter is invalid, use default
             default_subgraph_idx = 0
 
     selected_subgraph = st.selectbox(
-        "Select a subgraph",
+        "Choose a subgraph to visualize",
         options=[opt["value"] for opt in subgraph_options],
         index=default_subgraph_idx,
         format_func=lambda x: next(
@@ -417,15 +518,6 @@ def main():
         "subgraph": str(selected_subgraph),
     }
 
-    query_string = "&".join([f"{k}={v}" for k, v in current_params.items()])
-    base_url = "https://saecoocpocapp-6ict2wobwrxf52wrrugm8u.streamlit.app/"
-    st.write("### Shareable Link")
-    st.text_input(
-        "Copy this link to share current view:",
-        f"{base_url}?{query_string}",
-        key="share_link",
-    )
-
     activation_threshold = 1.5
     activation_threshold_safe = str(activation_threshold).replace(".", "_")
     node_df = pd.read_csv(
@@ -438,37 +530,35 @@ def main():
     results, pca_df = load_data(pca_results_path, selected_subgraph, load_options)
     # feature_activations = results['all_feature_acts']
 
-    col1, col2, col3 = st.columns([3, 1, 2])
+    # Main visualization area
+
+    col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.write("## PCA Plot (PC2 vs PC3)")
-        st.write(
-            "Color represents character count. Click on a point to see its feature activations."
-        )
+        st.markdown('<p class="section-text">PCA</p>', unsafe_allow_html=True)
+
         pca_plot, color_map = plot_pca_2d(
             pca_df=pca_df,
             max_feature_info=results["all_max_feature_info"],
             fs_splitting_nodes=fs_splitting_nodes,
         )
 
-        # Use a unique key for plotly_events based on the selected subgraph
         selected_points = spe.plotly_events(
             pca_plot,
             click_event=True,
-            override_height=600,
+            override_height=500,
             key=f"pca_plot_{selected_subgraph}",
         )
 
     with col2:
-        st.write("## Legend")
-        legend_fig = plot_legend(color_map)
-        st.plotly_chart(legend_fig, use_container_width=True)
-
-    with col3:
-        st.write("## Feature Activations (Only for fs_splitting_nodes)")
+        st.markdown(
+            '<p class="section-text">Feature Activation</p>', unsafe_allow_html=True
+        )
 
         if not selected_points:
-            # Show empty plot with instructions when no point is selected
+            st.info(
+                "👆 Click on any point in the PCA plot to see its feature activations."
+            )
             feature_plot = plot_feature_activations(
                 results["all_graph_feature_acts"],
                 point_index=None,
@@ -476,7 +566,6 @@ def main():
             )
             st.plotly_chart(feature_plot, use_container_width=True)
         else:
-            # Rest of the existing code for when a point is selected
             selected_x = selected_points[0]["x"]
             selected_y = selected_points[0]["y"]
             matching_points = pca_df[
@@ -486,9 +575,11 @@ def main():
             if not matching_points.empty:
                 point_index = matching_points.index[0]
 
-                st.write("## Selected Point Info")
-                st.write(f"Token: {pca_df.loc[point_index, 'tokens']}")
-                st.write(f"Context: {pca_df.loc[point_index, 'context']}")
+                # st.markdown('<p class="section-text">Selected Point Details</p>', unsafe_allow_html=True)
+
+                with st.expander("View token and context", expanded=True):
+                    st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
+                    st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
 
                 context = pca_df.loc[point_index, "context"]
                 feature_plot = plot_feature_activations(
@@ -499,9 +590,68 @@ def main():
                 )
                 st.plotly_chart(feature_plot, use_container_width=True)
             else:
-                st.write(
-                    "The selected point is not in the current dataset. Please select a new point."
+                st.error(
+                    "The selected point is not in the current dataset. Please select a different point."
                 )
+
+    st.markdown(
+        '<p class="subtitle-text">Feature dashboards from Neuronpedia</p>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "Showing visualizations for up to 10 features from the current graph, sorted by feature index."
+    )
+    sorted_features = sorted(fs_splitting_nodes)[:10]
+
+    # Create rows of 2 embeds each
+    for i in range(0, len(sorted_features), 2):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            feature_idx = sorted_features[i]
+            embed_url = get_neuronpedia_embed_url(
+                model, sae_release, feature_idx, sae_id
+            )
+            st.markdown(f"#### Feature {feature_idx}")
+            st.markdown(
+                f'<iframe src="{embed_url}" '
+                'title="Neuronpedia" '
+                'style="height: 300px; width: 100%; border: none;"></iframe>',
+                unsafe_allow_html=True,
+            )
+
+        with col2:
+            if i + 1 < len(sorted_features):
+                feature_idx = sorted_features[i + 1]
+                embed_url = get_neuronpedia_embed_url(
+                    model, sae_release, feature_idx, sae_id
+                )
+                st.markdown(f"#### Feature {feature_idx}")
+                st.markdown(
+                    f'<iframe src="{embed_url}" '
+                    'title="Neuronpedia" '
+                    'style="height: 300px; width: 100%; border: none;"></iframe>',
+                    unsafe_allow_html=True,
+                )
+
+    # Add shareable link section
+    with st.sidebar:
+        st.markdown("### Share This View")
+        current_params = {
+            "model": model,
+            "sae_release": sae_release,
+            "sae_id": sae_id,
+            "size": str(selected_size),
+            "subgraph": str(selected_subgraph),
+        }
+
+        query_string = "&".join([f"{k}={v}" for k, v in current_params.items()])
+        base_url = "https://saecoocpocapp-6ict2wobwrxf52wrrugm8u.streamlit.app/"
+        shareable_link = f"{base_url}?{query_string}"
+
+        st.text_input(
+            "Copy this link to share current view:", shareable_link, key="share_link"
+        )
 
 
 if __name__ == "__main__":
