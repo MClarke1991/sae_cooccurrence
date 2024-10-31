@@ -275,6 +275,8 @@ def process_examples(
     n_batches_reconstruction,
     remove_special_tokens=False,
     device="cpu",
+    max_examples=5_000_000,  # Add max_examples parameter
+    trim_excess=False,
 ):
     """
     Process examples from the activation store using the given model and SAE, extract the tokens that the
@@ -288,6 +290,7 @@ def process_examples(
     - feature_list: List of features to be considered i.e. those within a cluster/subgraph.
     - n_batches_reconstruction: Number of batches to process for reconstruction from the activation store.
     - remove_special_tokens: Whether to remove special tokens from the processed examples e.g. BOS, EOS, PAD.
+    - max_examples (int, optional): Maximum number of examples to process. If None, process all examples.
 
     Returns:
     - ProcessedExamples: A data class containing processed examples and related information.
@@ -375,6 +378,23 @@ def process_examples(
         examples_found += len(fired_tokens)
         pbar.set_description(f"Examples found: {examples_found}")
 
+        # Add early termination check
+        if max_examples is not None and examples_found >= max_examples:
+            if trim_excess:
+                # Trim excess examples if we went over the limit
+                excess = examples_found - max_examples
+                if excess > 0:
+                    all_fired_tokens[-1] = all_fired_tokens[-1][:-excess]
+                    all_token_dfs[-1] = all_token_dfs[-1][:-excess]
+                    all_graph_feature_acts[-1] = all_graph_feature_acts[-1][:-excess]
+                    all_feature_acts[-1] = all_feature_acts[-1][:-excess]
+                    all_max_feature_info[-1] = all_max_feature_info[-1][:-excess]
+                    all_reconstructions[-1] = all_reconstructions[-1][:-excess]
+                    examples_found = max_examples
+                break
+            else:
+                break
+
     print(f"Total examples found: {examples_found}")
     # Flatten the list of lists
     all_token_dfs = pd.concat(all_token_dfs)
@@ -457,6 +477,8 @@ def generate_data(
     decoder=False,
     remove_special_tokens=False,
     device="cpu",
+    max_examples=5_000_000,
+    trim_excess=False,
 ):
     results = process_examples(
         activation_store,
@@ -466,6 +488,8 @@ def generate_data(
         n_batches_reconstruction,
         remove_special_tokens,
         device=device,
+        max_examples=max_examples,
+        trim_excess=trim_excess,
     )
     pca_df, pca = perform_pca_on_results(results, n_components=3)
     if decoder:
