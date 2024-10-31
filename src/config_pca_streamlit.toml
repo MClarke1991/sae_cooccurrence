@@ -4,8 +4,8 @@ name = "gemma-2-2b"
 sae_release_short = "gemma-scope-2b-pt-res-canonical"
 # sae_release_short = "res-jb-feature-splitting"
 sae_ids = [
-    # "layer_21/width_16k/canonical", 
-    "layer_18/width_16k/canonical",
+    "layer_21/width_16k/canonical", 
+    # "layer_18/width_16k/canonical",
     # "layer_19/width_16k/canonical", 
     # "layer_20/width_16k/canonical",
     # "layer_22/width_16k/canonical"
@@ -15,8 +15,8 @@ sae_ids = [
 remove_special_tokens = true
 n_batches_reconstruction = 100
 activation_threshold = 1.5
-subgraph_sizes_to_plot = [5, 6,7]
-max_examples = 1000
+subgraph_sizes_to_plot = [5, 6, 7]
+max_examples = 5000
 trim_excess = false
 save_all_feature_acts = false
 
