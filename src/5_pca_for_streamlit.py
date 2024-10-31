@@ -24,6 +24,8 @@ def process_graph_for_pca(
     n_batches_reconstruction,
     remove_special_tokens,
     device,
+    max_examples=5_000_000,
+    trim_excess=False,
 ):
     # First attempt with original n_batches
     results = process_examples(
@@ -34,6 +36,8 @@ def process_graph_for_pca(
         n_batches_reconstruction,
         remove_special_tokens,
         device=device,
+        max_examples=max_examples,
+        trim_excess=trim_excess,
     )
     pca_df, _ = perform_pca_on_results(results, n_components=3, method="auto")
 
@@ -50,6 +54,8 @@ def process_graph_for_pca(
             n_batches_reconstruction * 2,
             remove_special_tokens,
             device=device,
+            max_examples=max_examples,
+            trim_excess=trim_excess,
         )
         pca_df, _ = perform_pca_on_results(results, n_components=3, method="auto")
 
@@ -166,6 +172,8 @@ def main():
     n_batches_reconstruction = config["processing"]["n_batches_reconstruction"]
     activation_threshold = config["processing"]["activation_threshold"]
     subgraph_sizes_to_plot = config["processing"]["subgraph_sizes_to_plot"]
+    max_examples = config["processing"]["max_examples"]
+    trim_excess = config["processing"]["trim_excess"]
 
     if model_name == "gemma-2-2b" and not remove_special_tokens:
         raise ValueError("Gemma requires removing special tokens")
@@ -226,6 +234,8 @@ def main():
                     n_batches_reconstruction,
                     remove_special_tokens,
                     device=device,
+                    max_examples=max_examples,
+                    trim_excess=trim_excess,
                 )
 
                 # Skip this subgraph if PCA still failed after retry
