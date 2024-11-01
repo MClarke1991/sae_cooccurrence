@@ -392,6 +392,9 @@ def main():
     load_options = config["processing"]["load_options"]
     models = config["streamlit"]["models"]
     model_to_batch_size = config["models"]["batch_sizes"]
+    use_max_examples = config["processing"]["load_options"]["use_max_examples"]
+    show_max_examples = config["streamlit"]["dev"]["show_max_examples"]
+    show_batch_size = config["streamlit"]["dev"]["show_batch_size"]
     model_to_max_examples = config["models"]["max_examples"]
 
     with st.sidebar:
@@ -420,7 +423,10 @@ def main():
             ),
         )
 
-        st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
+        if use_max_examples and show_max_examples:
+            st.sidebar.info(f"Max number of examples: {model_to_max_examples[model]}")
+        elif show_batch_size:
+            st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
 
         # Load model configurations from config
         model_to_releases = config["models"]["releases"]
@@ -430,7 +436,7 @@ def main():
 
         n_batches_reconstruction = model_to_batch_size[model]
 
-        if "use_max_examples" in load_options and load_options["use_max_examples"]:
+        if use_max_examples:
             max_examples = model_to_max_examples[model]
         else:
             max_examples = ""
