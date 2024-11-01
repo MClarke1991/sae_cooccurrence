@@ -19,6 +19,7 @@ import plotly.graph_objects as go
 import torch
 from PIL import Image
 from plotly.subplots import make_subplots
+from pyvis.network import Network
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.spatial.distance import pdist
 from sklearn.decomposition import PCA
@@ -2734,3 +2735,141 @@ def plot_subgraph_static_from_nx(
         plt.close()
     elif show_plot:
         plt.show()
+
+
+def plot_subgraph_interactive_from_nx(
+    subgraph: nx.Graph,
+    subgraph_df: pd.DataFrame,
+    node_info_df: pd.DataFrame | None = None,
+    activation_array: np.ndarray | None = None,
+    colour_when_inactive: bool = True,
+    plot_token_factors: bool = False,
+    height: str = "700px",
+) -> tuple[Network, str]:
+    """
+    Plot a static subgraph from a networkx graph, as provided by generate_subgraph_plot_data.
+    subgraph: networkx graph
+    subgraph_df: pandas DataFrame, node information
+    node_info_df: pandas DataFrame | None, node information
+    activation_array: numpy array | None, activation array
+    colour_when_inactive: bool, plot with colour representing feature density if there is no activation
+    plot_token_factors: bool, plot token factors
+    height: str, height
+    width: str, width
+    """
+
+    if not isinstance(subgraph, nx.Graph):
+        raise TypeError("subgraph must be a networkx graph")
+
+    if not isinstance(subgraph_df, pd.DataFrame):
+        raise TypeError("subgraph_df must be a pandas DataFrame")
+
+    if not {"node_id", "feature_activations"}.issubset(subgraph_df.columns):
+        raise ValueError(
+            "subgraph_df must contain the columns 'node_id' and 'feature_activations'"
+        )
+
+    if subgraph.size() != len(subgraph_df):
+        raise IndexError("subgraph and subgraph_df must have the same number of nodes")
+
+    if subgraph.size() == 0:
+        raise ValueError("subgraph must contain nodes")
+
+    # Initialize pyvis network with notebook=True
+    net = Network(
+        height=height,
+        width="100%",
+        bgcolor="#ffffff",
+        font_color=False,
+        notebook=True,  # Add this parameter
+    )
+
+    # Get edge weights for scaling
+    edge_weights = [subgraph[u][v]["weight"] for u, v in subgraph.edges()]
+
+    # Rest of your existing configuration
+    net.toggle_physics(True)
+    net.barnes_hut(
+        gravity=-2000,
+        central_gravity=0.3,
+        spring_length=200,
+        spring_strength=0.05,
+        damping=0.09,
+        overlap=0,
+    )
+
+    # Use provided activation_array if available
+    if activation_array is None:
+        if colour_when_inactive:
+            activation_array = np.array(subgraph_df["feature_activations"].values)
+        else:
+            activation_array = np.zeros(len(list(subgraph.nodes())))
+
+    # Calculate node sizes
+    feature_acts = np.array(subgraph_df["feature_activations"].values)
+    min_act = feature_acts.min()
+    max_act = feature_acts.max()
+    act_range = max_act - min_act
+    base_size = 10
+
+    if act_range != 0:
+        normalized_sizes = (feature_acts - min_act) / act_range
+        node_sizes = base_size + (normalized_sizes * base_size)
+    else:
+        node_sizes = [base_size] * len(feature_acts)
+
+    # Color normalization
+    min_activation = min(activation_array)
+    max_activation = max(activation_array)
+    activation_range = max_activation - min_activation
+
+    # Add nodes
+    for i, node in enumerate(subgraph.nodes()):
+        node_id = subgraph_df["node_id"].iloc[i]
+
+        # Prepare label
+        if node_info_df is not None:
+            node_info = node_info_df[node_info_df["node_id"] == node_id].iloc[0]
+            if plot_token_factors:
+                top_tokens = ast.literal_eval(node_info["top_10_tokens"])
+                label = f"ID: {node_id}\n{top_tokens[0]}"
+            else:
+                label = f"ID: {node_id}"
+        else:
+            label = f"ID: {node_id}"
+
+        # Calculate color
+        if activation_array[i] == 0:
+            color = "#ffffff"
+        else:
+            if activation_range != 0:
+                normalized_activation = (
+                    activation_array[i] - min_activation
+                ) / activation_range
+                rgba = plt.cm.get_cmap("Blues")(normalized_activation)
+                color = f"#{int(rgba[0]*255):02x}{int(rgba[1]*255):02x}{int(rgba[2]*255):02x}"
+            else:
+                color = "#084594"
+
+        # Add node
+        net.add_node(
+            node,
+            label=label,
+            color=color,  # Changed from dict to string
+            size=node_sizes[i],
+            borderWidth=2,
+            title=f"Activation: {subgraph_df['feature_activations'].iloc[i]:.2f}",
+        )
+
+    # Add edges
+    for u, v in subgraph.edges():
+        weight = subgraph[u][v]["weight"]
+        width = 1
+        if edge_weights:
+            width = 1 + 4 * (weight - min(edge_weights)) / (  # type: ignore
+                max(edge_weights) - min(edge_weights)  # type: ignore
+            )
+        net.add_edge(u, v, width=width, color={"color": "rgba(128, 128, 128, 0.75)"})
+
+    html = net.generate_html(notebook=False)
+    return net, html
