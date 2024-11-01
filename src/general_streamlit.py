@@ -437,7 +437,7 @@ def main():
         n_batches_reconstruction = model_to_batch_size[model]
 
         if use_max_examples:
-            max_examples = model_to_max_examples[model]
+            max_examples = str(model_to_max_examples[model]) + "cap_"
         else:
             max_examples = ""
 

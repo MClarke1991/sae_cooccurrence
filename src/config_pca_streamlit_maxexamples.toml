@@ -52,7 +52,7 @@ gemma-2-2b = 100
 
 [models.max_examples]
 # gpt2-small = 1000
-gemma-2-2b = "5000cap_"
+gemma-2-2b = 5000
 
 [models.releases]
 # "gpt2-small" = ["res-jb", "res-jb-feature-splitting"]
