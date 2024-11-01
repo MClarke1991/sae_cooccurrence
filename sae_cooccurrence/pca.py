@@ -2584,3 +2584,153 @@ def generate_subgraph_plot_data(
     ]
     subgraph = nx.from_numpy_array(subgraph_matrix)
     return subgraph, subgraph_df
+
+
+def plot_subgraph_static_from_nx(
+    subgraph: nx.Graph,
+    subgraph_df: pd.DataFrame,
+    node_info_df: pd.DataFrame | None = None,
+    output_path: str | None = None,
+    activation_array: np.ndarray | None = None,
+    save_figs: bool = False,
+    normalize_globally: bool = True,
+    base_node_size: int = 1000,
+    colour_when_inactive: bool = True,
+    plot_token_factors: bool = False,
+    show_plot: bool = True,
+) -> None:
+    """
+    Plot a static subgraph from a networkx graph, as provided by generate_subgraph_plot_data.
+    subgraph: networkx graph
+    subgraph_df: pandas DataFrame, node information
+    node_info_df: pandas DataFrame | None, node information
+    output_path: str | None, output path
+    activation_array: numpy array | None, activation array
+    save_figs: bool, save figures
+    normalize_globally: bool, normalize globally
+    """
+
+    if not isinstance(subgraph, nx.Graph):
+        raise TypeError("subgraph must be a networkx graph")
+
+    if not isinstance(subgraph_df, pd.DataFrame):
+        raise TypeError("subgraph_df must be a pandas DataFrame")
+
+    if not {"node_id", "feature_activations"}.issubset(subgraph_df.columns):
+        raise ValueError(
+            "subgraph_df must contain the columns 'node_id' and 'feature_activations'"
+        )
+
+    # Create a new figure
+    plt.figure(figsize=(7, 7))
+
+    # Create a layout for our nodes
+    pos = nx.spring_layout(subgraph, k=0.5, iterations=50, seed=1234)
+
+    # Use provided activation_array if available, otherwise use subgraph_df
+    if activation_array is None:
+        if colour_when_inactive:
+            activation_array = np.array(subgraph_df["feature_activations"].values)
+        else:
+            activation_array = np.zeros(len(list(subgraph.nodes())))
+
+    # Extract activations for nodes in this subgraph
+    subgraph_activations = [
+        activation_array[i] for i in range(len(list(subgraph.nodes())))
+    ]
+
+    # Calculate node sizes based on feature activations
+    feature_acts = np.array(subgraph_df["feature_activations"].values)
+    min_act = feature_acts.min()
+    max_act = feature_acts.max()
+    act_range = max_act - min_act
+    if act_range != 0:
+        normalized_sizes = (feature_acts - min_act) / act_range
+        node_sizes = base_node_size + (normalized_sizes * base_node_size)
+    else:
+        node_sizes = [base_node_size] * len(feature_acts)
+
+    # Determine normalization range for colors
+    if normalize_globally:
+        min_activation = min(activation_array)
+        max_activation = max(activation_array)
+    else:
+        min_activation = min(subgraph_activations)
+        max_activation = max(subgraph_activations)
+
+    activation_range = max_activation - min_activation
+
+    # Prepare node labels and colors
+    labels = {}
+    node_colors = []
+
+    for i, node in enumerate(subgraph.nodes()):
+        node_id = subgraph_df["node_id"].iloc[i]
+
+        # If node_info_df is provided, use top tokens, otherwise just use node_id
+        if node_info_df is not None:
+            node_info = node_info_df[node_info_df["node_id"] == node_id].iloc[0]
+            if plot_token_factors:
+                top_tokens = ast.literal_eval(node_info["top_10_tokens"])
+                top_token = top_tokens[0]
+                labels[node] = f"ID: {node_id}\n{top_token}"
+            else:
+                labels[node] = f"ID: {node_id}"
+        else:
+            labels[node] = f"ID: {node_id}"
+
+        # Set fill to white if activation is 0, otherwise use the color map
+        if subgraph_activations[i] == 0:
+            node_colors.append("white")
+        else:
+            if activation_range != 0:
+                normalized_activation = (
+                    subgraph_activations[i] - min_activation
+                ) / activation_range
+            else:
+                normalized_activation = 0.5
+            node_colors.append(plt.cm.get_cmap("Blues")(normalized_activation))
+
+    # Get edge weights
+    edge_weights = [subgraph[u][v]["weight"] for u, v in subgraph.edges()]
+
+    # Normalize edge weights for thickness
+    if edge_weights:  # Only if there are edges
+        max_weight = max(edge_weights)  # type: ignore
+        min_weight = min(edge_weights)  # type: ignore
+        normalized_weights = [
+            (w - min_weight) / (max_weight - min_weight) for w in edge_weights
+        ]
+        edge_thickness = [0.5 + 4.5 * w for w in normalized_weights]
+    else:
+        edge_thickness = []
+
+    # Draw the graph
+    nx.draw(
+        subgraph,
+        pos,
+        with_labels=False,
+        node_size=node_sizes,  # Use calculated node sizes
+        node_color=node_colors,
+        edgecolors="black",
+        linewidths=3,
+        edge_color=(0.5, 0.5, 0.5, 0.75),
+        width=edge_thickness,
+        arrows=True,
+    )
+
+    # Add node labels outside the nodes
+    # Adjust label positions based on node sizes
+    label_pos = {k: (v[0], v[1] - 0.15) for k, v in pos.items()}
+    nx.draw_networkx_labels(subgraph, label_pos, labels, font_size=8)
+
+    plt.axis("off")
+    plt.tight_layout()
+
+    if save_figs:
+        plt.savefig(f"{output_path}.png", format="png", dpi=300, bbox_inches="tight")
+        plt.savefig(f"{output_path}.pdf", format="pdf", dpi=300, bbox_inches="tight")
+        plt.savefig(f"{output_path}.svg", format="svg", dpi=300, bbox_inches="tight")
+        plt.close()
+    elif show_plot:
+        plt.show()
