@@ -2545,3 +2545,42 @@ def create_subgraph_traces(subgraph, node_df, activation_array, pos):
     node_trace.hovertext = node_hover_text
 
     return edge_trace, node_trace
+
+
+#### Plotting from thresholded matrices
+
+
+def generate_subgraph_plot_data(
+    thresholded_matrix: np.ndarray,
+    node_df: pd.DataFrame,
+    subgraph_id: int,
+) -> tuple[nx.Graph, pd.DataFrame]:
+    """
+    Generate subgraph plot data from a thresholded matrix.
+    thresholded_matrix: numpy array, thresholded adjacency matrix
+    node_df: pandas DataFrame, node information
+    subgraph_id: int, subgraph ID
+    """
+
+    if not isinstance(node_df, pd.DataFrame):
+        raise TypeError("node_df must be a pandas DataFrame")
+
+    if thresholded_matrix is None or node_df is None:
+        raise TypeError("thresholded_matrix and node_df cannot be None")
+
+    # raise error if thresholded_matrix or node_df are empty
+    if thresholded_matrix.size == 0 or node_df.size == 0:
+        raise ValueError("thresholded_matrix and node_df cannot be empty")
+
+    subgraph_df = node_df[node_df["subgraph_id"] == subgraph_id]
+    subgraph_df = subgraph_df[["node_id", "feature_activations"]]
+
+    # ensure subgraph_df is dataframe
+    if not isinstance(subgraph_df, pd.DataFrame):
+        raise TypeError("subgraph_df must be a pandas DataFrame")
+
+    subgraph_matrix = thresholded_matrix[subgraph_df["node_id"].tolist(), :][
+        :, subgraph_df["node_id"].tolist()
+    ]
+    subgraph = nx.from_numpy_array(subgraph_matrix)
+    return subgraph, subgraph_df
