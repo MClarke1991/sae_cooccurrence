@@ -567,15 +567,6 @@ def main():
         ),
     )
 
-    # Add a section to display the shareable link
-    current_params = {
-        "model": model,
-        "sae_release": sae_release,
-        "sae_id": sae_id,
-        "size": str(selected_size),
-        "subgraph": str(selected_subgraph),
-    }
-
     activation_threshold = 1.5
     activation_threshold_safe = str(activation_threshold).replace(".", "_")
     node_df = pd.read_csv(
@@ -592,15 +583,17 @@ def main():
     ].tolist()
 
     results, pca_df = load_data(pca_results_path, selected_subgraph, load_options)
-    # feature_activations = results['all_feature_acts']
 
-    # Main visualization area
+    # Create 2x2 grid layout
+    top_left, top_right = st.columns(2)
+    bottom_left, bottom_right = st.columns(2)
 
-    col1, col2 = st.columns([1.5, 1])
+    # Initialize or get current activations from session state
+    if "current_activations" not in st.session_state:
+        st.session_state.current_activations = None
 
-    with col1:
+    with top_left:
         st.markdown('<p class="section-text">PCA</p>', unsafe_allow_html=True)
-
         pca_plot, color_map = plot_pca_2d(
             pca_df=pca_df,
             max_feature_info=results["all_max_feature_info"],
@@ -613,22 +606,41 @@ def main():
             key=f"pca_plot_{selected_subgraph}",
         )
 
-    # Store the current activations in session state
-    if selected_points:
-        selected_x = selected_points[0]["x"]
-        selected_y = selected_points[0]["y"]
-        matching_points = pca_df[
-            (pca_df["PC2"] == selected_x) & (pca_df["PC3"] == selected_y)
-        ]
-        if not matching_points.empty:
-            point_index = matching_points.index[0]
-            st.session_state.current_activations = results["all_graph_feature_acts"][
-                point_index
+        # Update activations immediately when point is selected
+        if selected_points:
+            selected_x = selected_points[0]["x"]
+            selected_y = selected_points[0]["y"]
+            matching_points = pca_df[
+                (pca_df["PC2"] == selected_x) & (pca_df["PC3"] == selected_y)
             ]
-    else:
-        st.session_state.current_activations = None
+            if not matching_points.empty:
+                point_index = matching_points.index[0]
+                st.session_state.current_activations = results[
+                    "all_graph_feature_acts"
+                ][point_index]
+        else:
+            st.session_state.current_activations = None
 
-    with col2:
+    with top_right:
+        st.markdown(
+            '<p class="section-text">Subgraph Network</p>', unsafe_allow_html=True
+        )
+        subgraph, subgraph_df = generate_subgraph_plot_data(
+            thresholded_matrix, node_df, selected_subgraph
+        )
+
+        _, html = plot_subgraph_interactive_from_nx(
+            subgraph=subgraph,
+            subgraph_df=subgraph_df,
+            node_info_df=node_df,
+            plot_token_factors=True,
+            height="400px",
+            colour_when_inactive=False,
+            activation_array=st.session_state.current_activations,
+        )
+        components.html(html, height=400)
+
+    with bottom_left:
         st.markdown(
             '<p class="section-text">Feature Activation</p>', unsafe_allow_html=True
         )
@@ -644,24 +656,14 @@ def main():
             )
             st.plotly_chart(feature_plot, use_container_width=True)
         else:
-            # Add the new URL parameter update code here
-            selected_x = selected_points[0]["x"]
-            selected_y = selected_points[0]["y"]
-            update_url_params("point_x", str(selected_x))
-            update_url_params("point_y", str(selected_y))
-
-            # Continue with your existing code
+            update_url_params("point_x", str(selected_points[0]["x"]))
+            update_url_params("point_y", str(selected_points[0]["y"]))
             matching_points = pca_df[
-                (pca_df["PC2"] == selected_x) & (pca_df["PC3"] == selected_y)
+                (pca_df["PC2"] == selected_points[0]["x"])
+                & (pca_df["PC3"] == selected_points[0]["y"])
             ]
-
             if not matching_points.empty:
                 point_index = matching_points.index[0]
-
-                with st.expander("View token and context", expanded=True):
-                    st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
-                    st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
-
                 context = pca_df.loc[point_index, "context"]
                 feature_plot = plot_feature_activations(
                     results["all_graph_feature_acts"],
@@ -670,35 +672,26 @@ def main():
                     context,
                 )
                 st.plotly_chart(feature_plot, use_container_width=True)
-            else:
-                st.error(
-                    "The selected point is not in the current dataset. Please select a different point."
-                )
 
-    # Add network graph visualization
-    st.markdown('<p class="section-text">Subgraph Network</p>', unsafe_allow_html=True)
+    with bottom_right:
+        st.markdown(
+            '<p class="section-text">Token and Context</p>', unsafe_allow_html=True
+        )
+        if selected_points:
+            matching_points = pca_df[
+                (pca_df["PC2"] == selected_points[0]["x"])
+                & (pca_df["PC3"] == selected_points[0]["y"])
+            ]
+            if not matching_points.empty:
+                point_index = matching_points.index[0]
+                st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
+                st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
+        else:
+            st.info(
+                "Click on a point in the PCA plot to see token and context details."
+            )
 
-    # Generate subgraph plot data
-    subgraph, subgraph_df = generate_subgraph_plot_data(
-        thresholded_matrix, node_df, selected_subgraph
-    )
-
-    # Create network visualization with activations if available
-    _, html = plot_subgraph_interactive_from_nx(
-        subgraph=subgraph,
-        subgraph_df=subgraph_df,
-        node_info_df=node_df,
-        plot_token_factors=True,
-        height="600px",
-        colour_when_inactive=False,
-        activation_array=st.session_state.current_activations
-        if hasattr(st.session_state, "current_activations")
-        else None,
-    )
-
-    # Display the network visualization using streamlit components
-    components.html(html, height=600)
-
+    # Move Neuronpedia section below the quadrants
     st.markdown(
         '<p class="subtitle-text">Feature dashboards from Neuronpedia</p>',
         unsafe_allow_html=True,
