@@ -2808,7 +2808,7 @@ def plot_subgraph_interactive_from_nx(
     min_act = feature_acts.min()
     max_act = feature_acts.max()
     act_range = max_act - min_act
-    base_size = 10
+    base_size = 25
 
     if act_range != 0:
         normalized_sizes = (feature_acts - min_act) / act_range
@@ -2860,6 +2860,7 @@ def plot_subgraph_interactive_from_nx(
             color=color,
             size=node_sizes[i],
             borderWidth=2,
+            font=dict(size=20),
             title=f"Activation: {activation_array[i]:.2f}" if hover_info else None,
             x=float(x),  # Set fixed x position
             y=float(y),  # Set fixed y position
