@@ -250,7 +250,7 @@ def main():
             # Save results for this subgraph size
             output_file = pj(
                 output_dir,
-                f"graph_analysis_results_size_{subgraph_size}_nbatch_{n_batches_reconstruction}.h5",
+                f"{max_examples}cap_graph_analysis_results_size_{subgraph_size}_nbatch_{n_batches_reconstruction}.h5",
             )
             save_results_to_hdf5(output_file, results_dict, save_options=save_options)
 

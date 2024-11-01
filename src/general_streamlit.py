@@ -287,13 +287,15 @@ def load_subgraph_metadata(file_path, subgraph_id):
 
 
 @st.cache_data
-def get_available_sizes(results_root, sae_id_neat, n_batches_reconstruction):
+def get_available_sizes(
+    results_root, sae_id_neat, n_batches_reconstruction, max_examples
+):
     """Get all available subgraph sizes from the directory"""
     base_path = pj(results_root, f"{sae_id_neat}_pca_for_streamlit")
     files = glob.glob(
         pj(
             base_path,
-            f"graph_analysis_results_size_*_nbatch_{n_batches_reconstruction}.h5",
+            f"{max_examples}graph_analysis_results_size_*_nbatch_{n_batches_reconstruction}.h5",
         )
     )
     sizes = [int(re.search(r"size_(\d+)_nbatch_", f).group(1)) for f in files]  # type: ignore
@@ -382,11 +384,18 @@ def main():
     st.markdown("""
     The plot below shows the PCA projection of feature activations. 
     Colors represent different features. Click on any point to see detailed activations.
-""")
+    """)
     git_root = get_git_root()
-    config = load_streamlit_config(pj(git_root, "src", "config_pca_streamlit.toml"))
+    config = load_streamlit_config(
+        pj(git_root, "src", "config_pca_streamlit_maxexamples.toml")
+    )
     load_options = config["processing"]["load_options"]
+    models = config["streamlit"]["models"]
     model_to_batch_size = config["models"]["batch_sizes"]
+    use_max_examples = config["processing"]["load_options"]["use_max_examples"]
+    show_max_examples = config["streamlit"]["dev"]["show_max_examples"]
+    show_batch_size = config["streamlit"]["dev"]["show_batch_size"]
+    model_to_max_examples = config["models"]["max_examples"]
 
     with st.sidebar:
         st.markdown(
@@ -400,21 +409,19 @@ def main():
                 model_value = (
                     model_param[0] if isinstance(model_param, list) else model_param
                 )
-                default_model_idx = ["gpt2-small", "gemma-2-2b"].index(model_value)
+                default_model_idx = list(models.values()).index(model_value)
             except (ValueError, IndexError):
                 default_model_idx = 0
 
         model = st.selectbox(
             "Model",
-            ["gpt2-small", "gemma-2-2b"],
+            list(models.values()),
             index=default_model_idx,
             key="model_selector",
             on_change=lambda: update_url_params(
                 "model", st.session_state.model_selector
             ),
         )
-
-        st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
 
         # Load model configurations from config
         model_to_releases = config["models"]["releases"]
@@ -423,6 +430,11 @@ def main():
         available_sae_releases = model_to_releases[model]
 
         n_batches_reconstruction = model_to_batch_size[model]
+
+        if use_max_examples:
+            max_examples = str(model_to_max_examples[model]) + "cap_"
+        else:
+            max_examples = ""
 
         default_release_idx = 0
         if "sae_release" in query_params:
@@ -475,7 +487,7 @@ def main():
 
         # st.markdown('<p class="section-text">Size Settings</p>', unsafe_allow_html=True)
         available_sizes = get_available_sizes(
-            results_root, sae_id, n_batches_reconstruction
+            results_root, sae_id, n_batches_reconstruction, max_examples
         )
 
         default_size_idx = 0
@@ -502,7 +514,7 @@ def main():
     pca_results_path = pj(
         results_root,
         f"{sae_id}_pca_for_streamlit",
-        f"graph_analysis_results_size_{selected_size}_nbatch_{n_batches_reconstruction}.h5",
+        f"{max_examples}graph_analysis_results_size_{selected_size}_nbatch_{n_batches_reconstruction}.h5",
     )
 
     # Load available subgraphs
@@ -686,6 +698,12 @@ def main():
         st.text_input(
             "Copy this link to share current view:", shareable_link, key="share_link"
         )
+
+        st.sidebar.markdown("#### Dev Info")
+        if use_max_examples and show_max_examples:
+            st.sidebar.info(f"Max number of examples: {model_to_max_examples[model]}")
+        elif show_batch_size:
+            st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
 
 
 if __name__ == "__main__":
