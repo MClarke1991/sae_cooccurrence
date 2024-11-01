@@ -613,6 +613,21 @@ def main():
             key=f"pca_plot_{selected_subgraph}",
         )
 
+    # Store the current activations in session state
+    if selected_points:
+        selected_x = selected_points[0]["x"]
+        selected_y = selected_points[0]["y"]
+        matching_points = pca_df[
+            (pca_df["PC2"] == selected_x) & (pca_df["PC3"] == selected_y)
+        ]
+        if not matching_points.empty:
+            point_index = matching_points.index[0]
+            st.session_state.current_activations = results["all_graph_feature_acts"][
+                point_index
+            ]
+    else:
+        st.session_state.current_activations = None
+
     with col2:
         st.markdown(
             '<p class="section-text">Feature Activation</p>', unsafe_allow_html=True
@@ -668,18 +683,17 @@ def main():
         thresholded_matrix, node_df, selected_subgraph
     )
 
-    st.write(subgraph.nodes())
-    st.write(len(subgraph_df))
-    st.write(subgraph_df.shape[0])
-    st.write(subgraph.number_of_nodes())
-
-    # Create network visualization
+    # Create network visualization with activations if available
     _, html = plot_subgraph_interactive_from_nx(
         subgraph=subgraph,
         subgraph_df=subgraph_df,
         node_info_df=node_df,
         plot_token_factors=True,
         height="600px",
+        colour_when_inactive=False,
+        activation_array=st.session_state.current_activations
+        if hasattr(st.session_state, "current_activations")
+        else None,
     )
 
     # Display the network visualization using streamlit components
