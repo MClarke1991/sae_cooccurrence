@@ -8,9 +8,14 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 import streamlit_plotly_events as spe
 
 from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
+from sae_cooccurrence.pca import (
+    generate_subgraph_plot_data,
+    plot_subgraph_interactive_from_nx,
+)
 from sae_cooccurrence.streamlit import load_streamlit_config
 from sae_cooccurrence.utils.set_paths import get_git_root
 
@@ -272,6 +277,15 @@ def load_available_subgraphs(file_path):
         return sorted(
             [int(key.split("_")[1]) for key in f.keys() if key.startswith("subgraph_")]
         )
+
+
+@st.cache_data
+def load_thresholded_matrix(file_path: str) -> np.ndarray:
+    # Load and return the actual array data from the NPZ file
+    with np.load(file_path) as data:
+        # Assuming there's a single array in the NPZ file
+        # If there are multiple arrays, you'll need to specify the key
+        return data[data.files[0]]
 
 
 @st.cache_data
@@ -567,6 +581,12 @@ def main():
     node_df = pd.read_csv(
         pj(results_root, f"dataframes/node_info_df_{activation_threshold_safe}.csv")
     )
+    thresholded_matrix = load_thresholded_matrix(
+        pj(
+            results_root,
+            f"thresholded_matrices/thresholded_matrix_{activation_threshold_safe}.npz",
+        )
+    )
     fs_splitting_nodes = node_df.query("subgraph_id == @selected_subgraph")[
         "node_id"
     ].tolist()
@@ -639,6 +659,31 @@ def main():
                 st.error(
                     "The selected point is not in the current dataset. Please select a different point."
                 )
+
+    # Add network graph visualization
+    st.markdown('<p class="section-text">Subgraph Network</p>', unsafe_allow_html=True)
+
+    # Generate subgraph plot data
+    subgraph, subgraph_df = generate_subgraph_plot_data(
+        thresholded_matrix, node_df, selected_subgraph
+    )
+
+    st.write(subgraph.nodes())
+    st.write(len(subgraph_df))
+    st.write(subgraph_df.shape[0])
+    st.write(subgraph.number_of_nodes())
+
+    # Create network visualization
+    _, html = plot_subgraph_interactive_from_nx(
+        subgraph=subgraph,
+        subgraph_df=subgraph_df,
+        node_info_df=node_df,
+        plot_token_factors=True,
+        height="600px",
+    )
+
+    # Display the network visualization using streamlit components
+    components.html(html, height=600)
 
     st.markdown(
         '<p class="subtitle-text">Feature dashboards from Neuronpedia</p>',
