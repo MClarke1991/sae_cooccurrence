@@ -2775,36 +2775,34 @@ def plot_subgraph_interactive_from_nx(
     if subgraph.number_of_nodes() == 0:
         raise ValueError("subgraph must contain nodes")
 
+    # Calculate fixed positions using networkx layout
+    fixed_pos = nx.spring_layout(subgraph, seed=42, k=0.5)  # Fixed seed for consistency
+
     # Initialize pyvis network with notebook=True
     net = Network(
         height=height,
         width="100%",
         bgcolor="#ffffff",
         font_color=False,
-        notebook=True,  # Add this parameter
+        notebook=True,
     )
 
     # Get edge weights for scaling
     edge_weights = [subgraph[u][v]["weight"] for u, v in subgraph.edges()]
 
     # Rest of your existing configuration
-    net.toggle_physics(True)
-    net.barnes_hut(
-        gravity=-2000,
-        central_gravity=0.3,
-        spring_length=200,
-        spring_strength=0.05,
-        damping=0.09,
-        overlap=0,
-    )
+    net.toggle_physics(False)
 
     # Use provided activation_array if available
     if activation_array is None:
+        hover_info = False
         if colour_when_inactive:
             activation_array = np.array(subgraph_df["feature_activations"].values)
         else:
             activation_array = np.zeros(len(list(subgraph.nodes())))
 
+    else:
+        hover_info = True
     # Calculate node sizes
     feature_acts = np.array(subgraph_df["feature_activations"].values)
     min_act = feature_acts.min()
@@ -2823,7 +2821,7 @@ def plot_subgraph_interactive_from_nx(
     max_activation = max(activation_array)
     activation_range = max_activation - min_activation
 
-    # Add nodes
+    # Add nodes with fixed positions
     for i, node in enumerate(subgraph.nodes()):
         node_id = subgraph_df["node_id"].iloc[i]
 
@@ -2851,14 +2849,21 @@ def plot_subgraph_interactive_from_nx(
             else:
                 color = "#084594"
 
+        # Get fixed position for this node
+        pos = fixed_pos[node]
+        x, y = pos[0] * 500, pos[1] * 500  # Scale positions for better visibility
+
         # Add node
         net.add_node(
             node,
             label=label,
-            color=color,  # Changed from dict to string
+            color=color,
             size=node_sizes[i],
             borderWidth=2,
-            title=f"Activation: {subgraph_df['feature_activations'].iloc[i]:.2f}",
+            title=f"Activation: {activation_array[i]:.2f}" if hover_info else None,
+            x=float(x),  # Set fixed x position
+            y=float(y),  # Set fixed y position
+            physics=False,  # Disable physics for this node
         )
 
     # Add edges
