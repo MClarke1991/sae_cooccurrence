@@ -423,11 +423,6 @@ def main():
             ),
         )
 
-        if use_max_examples and show_max_examples:
-            st.sidebar.info(f"Max number of examples: {model_to_max_examples[model]}")
-        elif show_batch_size:
-            st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
-
         # Load model configurations from config
         model_to_releases = config["models"]["releases"]
         sae_release_to_ids = config["models"]["sae_ids"]
@@ -703,6 +698,12 @@ def main():
         st.text_input(
             "Copy this link to share current view:", shareable_link, key="share_link"
         )
+
+        st.sidebar.markdown("#### Dev Info")
+        if use_max_examples and show_max_examples:
+            st.sidebar.info(f"Max number of examples: {model_to_max_examples[model]}")
+        elif show_batch_size:
+            st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
 
 
 if __name__ == "__main__":
