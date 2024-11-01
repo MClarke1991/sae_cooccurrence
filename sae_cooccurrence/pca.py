@@ -2769,10 +2769,10 @@ def plot_subgraph_interactive_from_nx(
             "subgraph_df must contain the columns 'node_id' and 'feature_activations'"
         )
 
-    if subgraph.size() != len(subgraph_df):
+    if subgraph.number_of_nodes() != len(subgraph_df):
         raise IndexError("subgraph and subgraph_df must have the same number of nodes")
 
-    if subgraph.size() == 0:
+    if subgraph.number_of_nodes() == 0:
         raise ValueError("subgraph must contain nodes")
 
     # Initialize pyvis network with notebook=True
