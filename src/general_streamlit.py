@@ -384,12 +384,13 @@ def main():
     st.markdown("""
     The plot below shows the PCA projection of feature activations. 
     Colors represent different features. Click on any point to see detailed activations.
-""")
+    """)
     git_root = get_git_root()
     config = load_streamlit_config(
         pj(git_root, "src", "config_pca_streamlit_maxexamples.toml")
     )
     load_options = config["processing"]["load_options"]
+    models = config["streamlit"]["models"]
     model_to_batch_size = config["models"]["batch_sizes"]
     model_to_max_examples = config["models"]["max_examples"]
 
@@ -405,13 +406,13 @@ def main():
                 model_value = (
                     model_param[0] if isinstance(model_param, list) else model_param
                 )
-                default_model_idx = ["gpt2-small", "gemma-2-2b"].index(model_value)
+                default_model_idx = list(models.values()).index(model_value)
             except (ValueError, IndexError):
                 default_model_idx = 0
 
         model = st.selectbox(
             "Model",
-            ["gpt2-small", "gemma-2-2b"],
+            list(models.values()),
             index=default_model_idx,
             key="model_selector",
             on_change=lambda: update_url_params(

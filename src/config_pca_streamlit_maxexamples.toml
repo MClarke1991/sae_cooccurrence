@@ -42,6 +42,10 @@ max_feature_info = true
 examples_found = false
 token_dfs = false
 
+[streamlit.models]
+# gpt2-small = "gpt2-small"
+gemma-2-2b = "gemma-2-2b"
+
 [models.batch_sizes]
 # gpt2-small = 100
 gemma-2-2b = 100
