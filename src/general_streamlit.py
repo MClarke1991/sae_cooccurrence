@@ -12,10 +12,11 @@ import psutil
 import streamlit as st
 import streamlit.components.v1 as components
 import streamlit_plotly_events as spe
+from scipy import sparse
 
 from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
 from sae_cooccurrence.pca import (
-    generate_subgraph_plot_data,
+    generate_subgraph_plot_data_sparse,
     plot_subgraph_interactive_from_nx,
 )
 from sae_cooccurrence.streamlit import load_streamlit_config
@@ -299,6 +300,11 @@ def load_thresholded_matrix(file_path: str) -> np.ndarray:
         # Assuming there's a single array in the NPZ file
         # If there are multiple arrays, you'll need to specify the key
         return data[data.files[0]]
+
+
+@st.cache_data
+def load_sparse_thresholded_matrix(file_path: str) -> sparse.csr_matrix:
+    return sparse.load_npz(file_path)
 
 
 @st.cache_data
@@ -590,10 +596,10 @@ def main():
         pj(results_root, f"dataframes/node_info_df_{activation_threshold_safe}.csv")
     )
     log_memory_usage("after loading node_df")
-    thresholded_matrix = load_thresholded_matrix(
+    thresholded_matrix = load_sparse_thresholded_matrix(
         pj(
             results_root,
-            f"thresholded_matrices/thresholded_matrix_{activation_threshold_safe}.npz",
+            f"sparse_matrices/sparse_matrix_{activation_threshold_safe}.npz",
         )
     )
     log_memory_usage("after loading thresholded_matrix")
@@ -648,7 +654,7 @@ def main():
         st.markdown(
             '<p class="section-text">Subgraph Network</p>', unsafe_allow_html=True
         )
-        subgraph, subgraph_df = generate_subgraph_plot_data(
+        subgraph, subgraph_df = generate_subgraph_plot_data_sparse(
             thresholded_matrix, node_df, selected_subgraph
         )
 
@@ -656,7 +662,7 @@ def main():
             subgraph=subgraph,
             subgraph_df=subgraph_df,
             node_info_df=node_df,
-            plot_token_factors=True,
+            plot_token_factors=False,
             height="400px",
             colour_when_inactive=False,
             activation_array=st.session_state.current_activations,

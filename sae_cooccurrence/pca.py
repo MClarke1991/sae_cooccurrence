@@ -2593,10 +2593,24 @@ def generate_subgraph_plot_data_sparse(
     node_df: pd.DataFrame,
     subgraph_id: int,
 ):
+    if not isinstance(node_df, pd.DataFrame):
+        raise TypeError("node_df must be a pandas DataFrame")
+
+    if sparse_thresholded_matrix is None or node_df is None:
+        raise TypeError("sparse_thresholded_matrix and node_df cannot be None")
+
+    # raise error if sparse_thresholded_matrix or node_df are empty
+    if sparse_thresholded_matrix.size == 0 or node_df.size == 0:
+        raise ValueError("sparse_thresholded_matrix and node_df cannot be empty")
+
     # Get nodes for this subgraph
     subgraph_df = node_df[node_df["subgraph_id"] == subgraph_id]
     subgraph_df = subgraph_df[["node_id", "feature_activations"]]
     node_indices = subgraph_df["node_id"].tolist()
+
+    # ensure subgraph_df is dataframe
+    if not isinstance(subgraph_df, pd.DataFrame):
+        raise TypeError("subgraph_df must be a pandas DataFrame")
 
     # Extract submatrix using sparse indexing
     subgraph_matrix = sparse_thresholded_matrix[node_indices, :][:, node_indices]  # type: ignore
