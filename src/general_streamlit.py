@@ -599,7 +599,7 @@ def main():
     thresholded_matrix = load_sparse_thresholded_matrix(
         pj(
             results_root,
-            f"sparse_matrices/sparse_matrix_{activation_threshold_safe}.npz",
+            f"thresholded_matrices/sparse_thresholded_matrix_{activation_threshold_safe}.npz",
         )
     )
     log_memory_usage("after loading thresholded_matrix")
