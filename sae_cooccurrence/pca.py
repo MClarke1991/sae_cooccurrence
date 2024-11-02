@@ -20,6 +20,7 @@ import torch
 from PIL import Image
 from plotly.subplots import make_subplots
 from pyvis.network import Network
+from scipy import sparse
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.spatial.distance import pdist
 from sklearn.decomposition import PCA
@@ -2584,6 +2585,26 @@ def generate_subgraph_plot_data(
         :, subgraph_df["node_id"].tolist()
     ]
     subgraph = nx.from_numpy_array(subgraph_matrix)
+    return subgraph, subgraph_df
+
+
+def generate_subgraph_plot_data_sparse(
+    sparse_thresholded_matrix: sparse.csr_matrix,
+    node_df: pd.DataFrame,
+    subgraph_id: int,
+):
+    # Get nodes for this subgraph
+    subgraph_df = node_df[node_df["subgraph_id"] == subgraph_id]
+    subgraph_df = subgraph_df[["node_id", "feature_activations"]]
+    node_indices = subgraph_df["node_id"].tolist()
+
+    # Extract submatrix using sparse indexing
+    subgraph_matrix = sparse_thresholded_matrix[node_indices, :][:, node_indices]  # type: ignore
+
+    # Convert to networkx graph while keeping sparsity
+    subgraph = nx.from_scipy_sparse_array(subgraph_matrix)  # type: ignore[attr-defined]
+    # pyright reports access error but this function is in nx for the version we are using
+
     return subgraph, subgraph_df
 
 
