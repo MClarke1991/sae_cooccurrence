@@ -1,3 +1,4 @@
+import gc
 import glob
 import logging
 import re
@@ -115,6 +116,7 @@ def load_subgraph_data(file_path, subgraph_id, load_options):
 def load_data(file_path, subgraph_id, config):
     log_memory_usage("start of load_data")
     results, pca_df = load_subgraph_data(file_path, subgraph_id, config)
+    gc.collect()
     log_memory_usage("end of load_data")
     return results, pca_df
 
@@ -785,6 +787,12 @@ def main():
             st.sidebar.info(f"Max number of examples: {model_to_max_examples[model]}")
         elif show_batch_size:
             st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
+
+    # Add to main() when switching subgraphs/models
+    if "previous_subgraph" in st.session_state:
+        if st.session_state.previous_subgraph != selected_subgraph:
+            st.cache_data.clear()
+    st.session_state.previous_subgraph = selected_subgraph
 
     log_memory_usage("end of main")
 

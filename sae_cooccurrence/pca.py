@@ -1,4 +1,5 @@
 import ast
+import gc
 import io
 import logging
 import os
@@ -2371,8 +2372,6 @@ def analyze_specific_points_animated(
 
     return fig
 
-    return fig
-
 
 def create_frame_data(
     results,
@@ -2810,107 +2809,116 @@ def plot_subgraph_interactive_from_nx(
     if subgraph.number_of_nodes() == 0:
         raise ValueError("subgraph must contain nodes")
 
-    # Calculate fixed positions using networkx layout
-    fixed_pos = nx.spring_layout(subgraph, seed=42, k=0.5)  # Fixed seed for consistency
+    try:
+        # Calculate fixed positions using networkx layout
+        fixed_pos = nx.spring_layout(
+            subgraph, seed=42, k=0.5
+        )  # Fixed seed for consistency
 
-    # Initialize pyvis network with notebook=True
-    net = Network(
-        height=height,
-        width="100%",
-        bgcolor="#ffffff",
-        font_color=False,
-        notebook=True,
-    )
-
-    # Get edge weights for scaling
-    edge_weights = [subgraph[u][v]["weight"] for u, v in subgraph.edges()]
-
-    # Rest of your existing configuration
-    net.toggle_physics(False)
-
-    # Use provided activation_array if available
-    if activation_array is None:
-        hover_info = False
-        if colour_when_inactive:
-            activation_array = np.array(subgraph_df["feature_activations"].values)
-        else:
-            activation_array = np.zeros(len(list(subgraph.nodes())))
-
-    else:
-        hover_info = True
-    # Calculate node sizes
-    feature_acts = np.array(subgraph_df["feature_activations"].values)
-    min_act = feature_acts.min()
-    max_act = feature_acts.max()
-    act_range = max_act - min_act
-    base_size = 25
-
-    if act_range != 0:
-        normalized_sizes = (feature_acts - min_act) / act_range
-        node_sizes = base_size + (normalized_sizes * base_size)
-    else:
-        node_sizes = [base_size] * len(feature_acts)
-
-    # Color normalization
-    min_activation = min(activation_array)
-    max_activation = max(activation_array)
-    activation_range = max_activation - min_activation
-
-    # Add nodes with fixed positions
-    for i, node in enumerate(subgraph.nodes()):
-        node_id = subgraph_df["node_id"].iloc[i]
-
-        # Prepare label
-        if node_info_df is not None:
-            node_info = node_info_df[node_info_df["node_id"] == node_id].iloc[0]
-            if plot_token_factors:
-                top_tokens = ast.literal_eval(node_info["top_10_tokens"])
-                label = f"ID: {node_id}\n{top_tokens[0]}"
-            else:
-                label = f"ID: {node_id}"
-        else:
-            label = f"ID: {node_id}"
-
-        # Calculate color
-        if activation_array[i] == 0:
-            color = "#ffffff"
-        else:
-            if activation_range != 0:
-                normalized_activation = (
-                    activation_array[i] - min_activation
-                ) / activation_range
-                rgba = plt.cm.get_cmap("Blues")(normalized_activation)
-                color = f"#{int(rgba[0]*255):02x}{int(rgba[1]*255):02x}{int(rgba[2]*255):02x}"
-            else:
-                color = "#084594"
-
-        # Get fixed position for this node
-        pos = fixed_pos[node]
-        x, y = pos[0] * 500, pos[1] * 500  # Scale positions for better visibility
-
-        # Add node
-        net.add_node(
-            node,
-            label=label,
-            color=color,
-            size=node_sizes[i],
-            borderWidth=2,
-            font=dict(size=20),
-            title=f"Activation: {activation_array[i]:.2f}" if hover_info else None,
-            x=float(x),  # Set fixed x position
-            y=float(y),  # Set fixed y position
-            physics=False,  # Disable physics for this node
+        # Initialize pyvis network with notebook=True
+        net = Network(
+            height=height,
+            width="100%",
+            bgcolor="#ffffff",
+            font_color=False,
+            notebook=True,
         )
 
-    # Add edges
-    for u, v in subgraph.edges():
-        weight = subgraph[u][v]["weight"]
-        width = 1
-        if edge_weights:
-            width = 1 + 4 * (weight - min(edge_weights)) / (  # type: ignore
-                max(edge_weights) - min(edge_weights)  # type: ignore
-            )
-        net.add_edge(u, v, width=width, color={"color": "rgba(128, 128, 128, 0.75)"})
+        # Get edge weights for scaling
+        edge_weights = [subgraph[u][v]["weight"] for u, v in subgraph.edges()]
 
-    html = net.generate_html(notebook=False)
-    return net, html
+        # Rest of your existing configuration
+        net.toggle_physics(False)
+
+        # Use provided activation_array if available
+        if activation_array is None:
+            hover_info = False
+            if colour_when_inactive:
+                activation_array = np.array(subgraph_df["feature_activations"].values)
+            else:
+                activation_array = np.zeros(len(list(subgraph.nodes())))
+
+        else:
+            hover_info = True
+        # Calculate node sizes
+        feature_acts = np.array(subgraph_df["feature_activations"].values)
+        min_act = feature_acts.min()
+        max_act = feature_acts.max()
+        act_range = max_act - min_act
+        base_size = 25
+
+        if act_range != 0:
+            normalized_sizes = (feature_acts - min_act) / act_range
+            node_sizes = base_size + (normalized_sizes * base_size)
+        else:
+            node_sizes = [base_size] * len(feature_acts)
+
+        # Color normalization
+        min_activation = min(activation_array)
+        max_activation = max(activation_array)
+        activation_range = max_activation - min_activation
+
+        # Add nodes with fixed positions
+        for i, node in enumerate(subgraph.nodes()):
+            node_id = subgraph_df["node_id"].iloc[i]
+
+            # Prepare label
+            if node_info_df is not None:
+                node_info = node_info_df[node_info_df["node_id"] == node_id].iloc[0]
+                if plot_token_factors:
+                    top_tokens = ast.literal_eval(node_info["top_10_tokens"])
+                    label = f"ID: {node_id}\n{top_tokens[0]}"
+                else:
+                    label = f"ID: {node_id}"
+            else:
+                label = f"ID: {node_id}"
+
+            # Calculate color
+            if activation_array[i] == 0:
+                color = "#ffffff"
+            else:
+                if activation_range != 0:
+                    normalized_activation = (
+                        activation_array[i] - min_activation
+                    ) / activation_range
+                    rgba = plt.cm.get_cmap("Blues")(normalized_activation)
+                    color = f"#{int(rgba[0]*255):02x}{int(rgba[1]*255):02x}{int(rgba[2]*255):02x}"
+                else:
+                    color = "#084594"
+
+            # Get fixed position for this node
+            pos = fixed_pos[node]
+            x, y = pos[0] * 500, pos[1] * 500  # Scale positions for better visibility
+
+            # Add node
+            net.add_node(
+                node,
+                label=label,
+                color=color,
+                size=node_sizes[i],
+                borderWidth=2,
+                font=dict(size=20),
+                title=f"F{node}: {activation_array[i]:.2f}" if hover_info else None,
+                x=float(x),  # Set fixed x position
+                y=float(y),  # Set fixed y position
+                physics=False,  # Disable physics for this node
+            )
+
+        # Add edges
+        for u, v in subgraph.edges():
+            weight = subgraph[u][v]["weight"]
+            width = 1
+            if edge_weights:
+                width = 1 + 4 * (weight - min(edge_weights)) / (  # type: ignore
+                    max(edge_weights) - min(edge_weights)  # type: ignore
+                )
+            net.add_edge(
+                u, v, width=width, color={"color": "rgba(128, 128, 128, 0.75)"}
+            )
+
+        html = net.generate_html(notebook=False)
+        return net, html
+    finally:
+        # Clean up network object
+        del net  # type: ignore
+        gc.collect()
