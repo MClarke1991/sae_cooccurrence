@@ -111,8 +111,8 @@ def save_thresholded_matrices(thresholded_matrices: dict, results_path: str) -> 
         sparse_matrix = sparse.csr_matrix(matrix)
         sparse.save_npz(
             os.path.join(
-                sparse_matrices_dir,
-                f"sparse_matrix_{filepath_safe_threshold}.npz",
+                thresholded_matrices_dir,
+                f"sparse_thresholded_matrix_{filepath_safe_threshold}.npz",
             ),
             sparse_matrix,
         )
