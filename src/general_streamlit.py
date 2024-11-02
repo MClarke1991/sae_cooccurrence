@@ -1,4 +1,5 @@
 import glob
+import logging
 import re
 from os.path import join as pj
 
@@ -7,13 +8,15 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import psutil
 import streamlit as st
 import streamlit.components.v1 as components
 import streamlit_plotly_events as spe
+from scipy import sparse
 
 from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
 from sae_cooccurrence.pca import (
-    generate_subgraph_plot_data,
+    generate_subgraph_plot_data_sparse,
     plot_subgraph_interactive_from_nx,
 )
 from sae_cooccurrence.streamlit import load_streamlit_config
@@ -54,7 +57,15 @@ def decode_if_bytes(data):
     return data
 
 
+def log_memory_usage(location: str) -> None:
+    """Log current memory usage"""
+    process = psutil.Process()
+    memory_gb = process.memory_info().rss / 1024 / 1024 / 1024  # Convert to GB
+    logging.info(f"Memory usage at {location}: {memory_gb:.2f} GB")
+
+
 def load_subgraph_data(file_path, subgraph_id, load_options):
+    log_memory_usage("start of load_subgraph_data")
     with h5py.File(file_path, "r") as f:
         group = f[f"subgraph_{subgraph_id}"]
         results = {}
@@ -96,12 +107,15 @@ def load_subgraph_data(file_path, subgraph_id, load_options):
             )
         pca_df = pd.DataFrame(pca_df_data)
 
-        return results, pca_df
+    log_memory_usage("end of load_subgraph_data")
+    return results, pca_df
 
 
 @st.cache_data
 def load_data(file_path, subgraph_id, config):
+    log_memory_usage("start of load_data")
     results, pca_df = load_subgraph_data(file_path, subgraph_id, config)
+    log_memory_usage("end of load_data")
     return results, pca_df
 
 
@@ -289,6 +303,11 @@ def load_thresholded_matrix(file_path: str) -> np.ndarray:
 
 
 @st.cache_data
+def load_sparse_thresholded_matrix(file_path: str) -> sparse.csr_matrix:
+    return sparse.load_npz(file_path)
+
+
+@st.cache_data
 def load_subgraph_metadata(file_path, subgraph_id):
     top_3_tokens = []
     example_context = ""
@@ -349,6 +368,9 @@ def update_url_params(key, value):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO)
+    log_memory_usage("start of main")
+
     query_params = st.query_params
 
     # if "point_x" in st.query_params and "point_y" in st.query_params:
@@ -569,20 +591,25 @@ def main():
 
     activation_threshold = 1.5
     activation_threshold_safe = str(activation_threshold).replace(".", "_")
+    log_memory_usage("before loading node_df")
     node_df = pd.read_csv(
         pj(results_root, f"dataframes/node_info_df_{activation_threshold_safe}.csv")
     )
-    thresholded_matrix = load_thresholded_matrix(
+    log_memory_usage("after loading node_df")
+    thresholded_matrix = load_sparse_thresholded_matrix(
         pj(
             results_root,
-            f"thresholded_matrices/thresholded_matrix_{activation_threshold_safe}.npz",
+            f"sparse_matrices/sparse_matrix_{activation_threshold_safe}.npz",
         )
     )
+    log_memory_usage("after loading thresholded_matrix")
     fs_splitting_nodes = node_df.query("subgraph_id == @selected_subgraph")[
         "node_id"
     ].tolist()
 
+    log_memory_usage("before loading data")
     results, pca_df = load_data(pca_results_path, selected_subgraph, load_options)
+    log_memory_usage("after loading data")
 
     # Create 2x2 grid layout
     top_left, top_right = st.columns(2)
@@ -594,11 +621,13 @@ def main():
 
     with top_left:
         st.markdown('<p class="section-text">PCA</p>', unsafe_allow_html=True)
+        log_memory_usage("before PCA plot")
         pca_plot, color_map = plot_pca_2d(
             pca_df=pca_df,
             max_feature_info=results["all_max_feature_info"],
             fs_splitting_nodes=fs_splitting_nodes,
         )
+        log_memory_usage("after PCA plot")
 
         selected_points = spe.plotly_events(
             pca_plot,
@@ -625,7 +654,7 @@ def main():
         st.markdown(
             '<p class="section-text">Subgraph Network</p>', unsafe_allow_html=True
         )
-        subgraph, subgraph_df = generate_subgraph_plot_data(
+        subgraph, subgraph_df = generate_subgraph_plot_data_sparse(
             thresholded_matrix, node_df, selected_subgraph
         )
 
@@ -633,7 +662,7 @@ def main():
             subgraph=subgraph,
             subgraph_df=subgraph_df,
             node_info_df=node_df,
-            plot_token_factors=True,
+            plot_token_factors=False,
             height="400px",
             colour_when_inactive=False,
             activation_array=st.session_state.current_activations,
@@ -756,6 +785,8 @@ def main():
             st.sidebar.info(f"Max number of examples: {model_to_max_examples[model]}")
         elif show_batch_size:
             st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
+
+    log_memory_usage("end of main")
 
 
 if __name__ == "__main__":
