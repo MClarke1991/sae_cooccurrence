@@ -17,6 +17,7 @@ from scipy import sparse
 from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
 from sae_cooccurrence.pca import (
     generate_subgraph_plot_data_sparse,
+    plot_pca_feature_strength_single,
     plot_subgraph_interactive_from_nx,
 )
 from sae_cooccurrence.streamlit import load_streamlit_config
@@ -670,6 +671,20 @@ def main():
         components.html(html, height=400)
 
     with bottom_left:
+        if selected_points:
+            matching_points = pca_df[
+                (pca_df["PC2"] == selected_points[0]["x"])
+                & (pca_df["PC3"] == selected_points[0]["y"])
+            ]
+            if not matching_points.empty:
+                point_index = matching_points.index[0]
+                st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
+                st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
+        else:
+            st.info(
+                "Click on a point in the PCA plot to see token and context details."
+            )
+
         st.markdown(
             '<p class="section-text">Feature Activation</p>', unsafe_allow_html=True
         )
@@ -702,23 +717,48 @@ def main():
                 )
                 st.plotly_chart(feature_plot, use_container_width=True)
 
+    # with bottom_right:
+    #     st.markdown(
+    #         '<p class="section-text">Token and Context</p>', unsafe_allow_html=True
+    #     )
+    #     if selected_points:
+    #         matching_points = pca_df[
+    #             (pca_df["PC2"] == selected_points[0]["x"])
+    #             & (pca_df["PC3"] == selected_points[0]["y"])
+    #         ]
+    #         if not matching_points.empty:
+    #             point_index = matching_points.index[0]
+    #             st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
+    #             st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
+    #     else:
+    #         st.info(
+    #             "Click on a point in the PCA plot to see token and context details."
+    #         )
     with bottom_right:
         st.markdown(
-            '<p class="section-text">Token and Context</p>', unsafe_allow_html=True
+            '<p class="section-text">Latent Activation Strength</p>',
+            unsafe_allow_html=True,
         )
-        if selected_points:
-            matching_points = pca_df[
-                (pca_df["PC2"] == selected_points[0]["x"])
-                & (pca_df["PC3"] == selected_points[0]["y"])
-            ]
-            if not matching_points.empty:
-                point_index = matching_points.index[0]
-                st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
-                st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
-        else:
-            st.info(
-                "Click on a point in the PCA plot to see token and context details."
-            )
+        # Add feature selector dropdown
+        selected_feature = st.selectbox(
+            "Select feature to visualize activation strength:",
+            options=fs_splitting_nodes,
+            format_func=lambda x: f"Feature {x}",
+        )
+
+        # Get index of selected feature in fs_splitting_nodes
+        feature_idx = fs_splitting_nodes.index(selected_feature)
+
+        # Get activations for selected feature
+        feature_activations = results["all_graph_feature_acts"][:, feature_idx]
+
+        # Create and display the plot
+        feature_strength_plot = plot_pca_feature_strength_single(
+            pca_df=pca_df,
+            feature_activations=feature_activations,
+            feature_idx=selected_feature,
+        )
+        st.plotly_chart(feature_strength_plot, use_container_width=True)
 
     # Move Neuronpedia section below the quadrants
     st.markdown(
