@@ -12,11 +12,13 @@ import numpy as np
 import pandas as pd
 import torch
 from pyvis.network import Network
+from sae_lens import SAE
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial.distance import euclidean
 from torch import topk as torch_topk
-from tqdm.autonotebook import tqdm
+from tqdm.auto import tqdm
+from transformer_lens import HookedTransformer
 
 from sae_cooccurrence.utils.mc_neuronpedia import (
     get_neuronpedia_feature_dashboard_no_open,
@@ -24,19 +26,59 @@ from sae_cooccurrence.utils.mc_neuronpedia import (
 )
 
 
-def calculate_token_factors_inds(model, sae):
-    # Make labels
+def calculate_token_factors_inds(model: HookedTransformer, sae: SAE) -> np.ndarray:
+    """
+    Calculate the top 10 token indices most associated with each SAE feature.
+
+    This function computes the dot product between the model's token embeddings and
+    the SAE decoder weights to find which tokens most strongly activate each feature.
+    The computation is done on CPU to prevent underflow errors.
+
+    Args:
+        model: The transformer model containing token embeddings (W_E)
+        sae: The sparse autoencoder model containing decoder weights (W_dec)
+
+    Returns:
+        np.ndarray: Array of shape (n_features, 10) containing the indices of the
+                   top 10 tokens most associated with each feature
+
+    Note:
+        The computation is explicitly moved to CPU to prevent underflow errors that can
+        occur on some GPU architectures (particularly macOS MPS) due to float32 precision
+        limitations. See Issue #7 for more details.
+    """
+    # Compute dot product between token embeddings and decoder weights
     token_factors = model.W_E @ sae.W_dec.T
     print(token_factors.shape)
-    # Needs to be on CPU to prevent underflow errors, see Issue #7
+
+    # Get top 10 token indices for each feature
     vals, inds = torch_topk(token_factors.T.cpu(), k=10)
     print(inds.shape)
+
+    # Convert to numpy array
     token_factors_inds = inds.cpu().numpy()
+
+    # Check for potential numerical issues
     detect_zero_token_factors_inds(token_factors_inds)
+
     return token_factors_inds
 
 
-def calculate_token_factors_inds_efficient(model, sae, batch_size=1000, k=10):
+def calculate_token_factors_inds_efficient(
+    model: HookedTransformer, sae: SAE, batch_size: int = 1000, k: int = 10
+) -> np.ndarray:
+    """
+    Calculate the top k token indices most associated with each SAE feature efficiently by batching.
+
+    Args:
+        model: The transformer model containing token embeddings (W_E)
+        sae: The sparse autoencoder model containing decoder weights (W_dec)
+        batch_size: The number of features to process in each batch
+        k: The number of top tokens to return for each feature
+
+    Returns:
+        np.ndarray: Array of shape (n_features, k) containing the indices of the top k tokens most associated with each feature
+    """
     vocab_size, d_model = model.W_E.shape
     d_sae = sae.W_dec.shape[0]
 
@@ -65,7 +107,10 @@ def calculate_token_factors_inds_efficient(model, sae, batch_size=1000, k=10):
     return token_factors_inds
 
 
-def detect_zero_token_factors_inds_efficient(token_factors_inds):
+def detect_zero_token_factors_inds_efficient(token_factors_inds: np.ndarray) -> None:
+    """
+    Detects if there are any zero token factor indices in the given array.
+    """
     if np.all(token_factors_inds == 0):
         print(
             "Warning: All token factor indices are zero. May need to increase precision."
@@ -133,16 +178,29 @@ def remove_low_weight_edges(matrix: np.ndarray, edge_threshold: float) -> np.nda
     return matrix_copy
 
 
-def largest_component_size(sparse_matrix, threshold):
+def largest_component_size(sparse_matrix: csr_matrix, threshold: float) -> int:
+    """
+    Calculate the size of the largest connected component in a sparse matrix.
+    """
     binary_matrix = sparse_matrix >= threshold
     n_components, labels = connected_components(
         binary_matrix, directed=False, connection="weak"
     )
     print(f"n_components: {n_components}, labels: {np.max(np.bincount(labels))}")
-    return np.max(np.bincount(labels))
+    return int(np.max(np.bincount(labels)))
 
 
-def find_threshold(matrix, min_size=150, max_size=200, tolerance=1e-3):
+def find_threshold(
+    matrix: np.ndarray,
+    min_size: int = 150,
+    max_size: int = 200,
+    tolerance: float = 1e-3,
+) -> tuple[float, int]:
+    """
+    Find the threshold that results in the largest connected component being of a given
+    size by conducting a binary search, or at least below max_size (below min_size is tolerated).
+    """
+
     sparse_matrix = csr_matrix(matrix)
 
     low, high = 0, 1
@@ -168,6 +226,14 @@ def find_threshold(matrix, min_size=150, max_size=200, tolerance=1e-3):
         ):
             best_threshold = mid
             best_size = size
+
+    if best_threshold is None or best_size is None:
+        raise ValueError("No threshold found within the specified range.")
+
+    if best_size > max_size:
+        warnings.warn(
+            f"Largest component size ({best_size}) is above max_size ({max_size})."
+        )
 
     # If we didn't find an exact match, return the best approximation
     return best_threshold, best_size
