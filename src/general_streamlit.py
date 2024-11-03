@@ -17,6 +17,7 @@ from scipy import sparse
 from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
 from sae_cooccurrence.pca import (
     generate_subgraph_plot_data_sparse,
+    plot_pca_feature_strength_streamlit,
     plot_subgraph_interactive_from_nx,
 )
 from sae_cooccurrence.streamlit import load_streamlit_config
@@ -419,7 +420,7 @@ def main():
     )
     st.markdown("""
     The plot below shows the PCA projection of feature activations. 
-    Colors represent different features. Click on any point to see detailed activations.
+    Colours represent the most active latent in the cluster. Click on any point to see detailed activations.
     """)
     git_root = get_git_root()
     config = load_streamlit_config(
@@ -670,13 +671,27 @@ def main():
         components.html(html, height=400)
 
     with bottom_left:
+        if selected_points:
+            matching_points = pca_df[
+                (pca_df["PC2"] == selected_points[0]["x"])
+                & (pca_df["PC3"] == selected_points[0]["y"])
+            ]
+            if not matching_points.empty:
+                point_index = matching_points.index[0]
+                st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
+                st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
+        else:
+            st.info(
+                "Click on a point in the PCA plot to see token and context details."
+            )
+
         st.markdown(
             '<p class="section-text">Feature Activation</p>', unsafe_allow_html=True
         )
 
         if not selected_points:
             st.info(
-                "👆 Click on any point in the PCA plot to see its feature activations."
+                "👆 Click on any point in the PCA plot to see its latent activations in the cluster."
             )
             feature_plot = plot_feature_activations(
                 results["all_graph_feature_acts"],
@@ -702,23 +717,49 @@ def main():
                 )
                 st.plotly_chart(feature_plot, use_container_width=True)
 
+    # with bottom_right:
+    #     st.markdown(
+    #         '<p class="section-text">Token and Context</p>', unsafe_allow_html=True
+    #     )
+    #     if selected_points:
+    #         matching_points = pca_df[
+    #             (pca_df["PC2"] == selected_points[0]["x"])
+    #             & (pca_df["PC3"] == selected_points[0]["y"])
+    #         ]
+    #         if not matching_points.empty:
+    #             point_index = matching_points.index[0]
+    #             st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
+    #             st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
+    #     else:
+    #         st.info(
+    #             "Click on a point in the PCA plot to see token and context details."
+    #         )
     with bottom_right:
         st.markdown(
-            '<p class="section-text">Token and Context</p>', unsafe_allow_html=True
+            '<p class="section-text">Latent Activation Strength</p>',
+            unsafe_allow_html=True,
         )
-        if selected_points:
-            matching_points = pca_df[
-                (pca_df["PC2"] == selected_points[0]["x"])
-                & (pca_df["PC3"] == selected_points[0]["y"])
-            ]
-            if not matching_points.empty:
-                point_index = matching_points.index[0]
-                st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
-                st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
-        else:
-            st.info(
-                "Click on a point in the PCA plot to see token and context details."
-            )
+        # Add feature selector dropdown with sorted options
+        sorted_features = sorted(fs_splitting_nodes)
+        selected_feature = st.selectbox(
+            "Select latent to visualize activation strength:",
+            options=sorted_features,
+            format_func=lambda x: f"Feature {x}",
+        )
+
+        # Get index of selected feature in fs_splitting_nodes
+        feature_idx = fs_splitting_nodes.index(selected_feature)
+
+        # Get activations for selected feature
+        feature_activations = results["all_graph_feature_acts"][:, feature_idx]
+
+        # Create and display the plot
+        feature_strength_plot = plot_pca_feature_strength_streamlit(
+            pca_df=pca_df,
+            feature_activations=feature_activations,
+            feature_idx=selected_feature,
+        )
+        st.plotly_chart(feature_strength_plot, use_container_width=True)
 
     # Move Neuronpedia section below the quadrants
     st.markdown(
@@ -726,7 +767,7 @@ def main():
         unsafe_allow_html=True,
     )
     st.markdown(
-        "Showing visualizations for up to 10 features from the current graph, sorted by feature index."
+        "Showing visualizations for up to 10 latents from the current graph, sorted by latent index."
     )
     sorted_features = sorted(fs_splitting_nodes)[:10]
 

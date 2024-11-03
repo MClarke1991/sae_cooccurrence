@@ -619,6 +619,7 @@ def plot_pca_feature_strength(
     activation_threshold=0.1,
     save=False,
 ):
+    """Plot PCA colored by activation strength for all features."""
     # Create subplots
     n_features = len(fs_splitting_nodes)
     n_cols = 3  # You can adjust this for layout
@@ -723,6 +724,76 @@ def plot_pca_feature_strength(
     else:
         fig.show()
     return None
+
+
+def plot_pca_feature_strength_streamlit(
+    pca_df,
+    feature_activations,
+    feature_idx,
+    pc_x="PC2",
+    pc_y="PC3",
+    activation_threshold=0.1,
+):
+    """Plot PCA colored by activation strength for a single selected feature.
+
+    Args:
+        pca_df: DataFrame with PCA coordinates and metadata
+        feature_activations: Array of activation values for the selected feature
+        feature_idx: Index of the selected feature
+        pc_x: X-axis principal component (default "PC2")
+        pc_y: Y-axis principal component (default "PC3")
+        activation_threshold: Minimum activation value for color scale
+    """
+    # Create custom colormap that uses white for low values
+    cmap = plt.cm.get_cmap("viridis")
+    colormap_RGB = cmap(np.arange(cmap.N))
+    colormap_RGB[0] = (1, 1, 1, 1)  # Set first color to white
+
+    # Convert colormap to Plotly format
+    n_colors = 256
+    colorscale = [
+        [i / (n_colors - 1), mcolors.rgb2hex(colormap_RGB[i])] for i in range(n_colors)
+    ]
+
+    fig = go.Figure()
+
+    # Add scatter trace
+    fig.add_trace(
+        go.Scatter(
+            x=pca_df[pc_x],
+            y=pca_df[pc_y],
+            mode="markers",
+            marker=dict(
+                size=5,
+                color=feature_activations,
+                colorscale=colorscale,
+                colorbar=dict(title="Activation"),
+                line=dict(width=1, color="DarkSlateGrey"),
+                cmin=activation_threshold,
+                cmax=np.max(feature_activations),
+            ),
+            hovertemplate=(
+                "Token: %{customdata[0]}<br>"
+                "Context: %{customdata[1]}<br>"
+                "Activation: %{customdata[2]:.3f}<br>"
+                "<extra></extra>"
+            ),
+            customdata=np.column_stack(
+                (pca_df["tokens"], pca_df["context"], feature_activations)
+            ),
+        )
+    )
+
+    # Update layout
+    fig.update_layout(
+        title=f"Feature {feature_idx} Activation Strength",
+        xaxis_title=pc_x,
+        yaxis_title=pc_y,
+        hovermode="closest",
+        height=600,
+    )
+
+    return fig
 
 
 def plot_pca_single_feature_strength(
