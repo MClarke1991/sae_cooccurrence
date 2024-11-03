@@ -10,6 +10,7 @@ from pstats import SortKey
 
 import networkx as nx
 import numpy as np
+import scipy.sparse as sparse
 import toml
 import torch
 from sae_lens import SAE
@@ -135,19 +136,23 @@ def load_data(results_path: str) -> tuple:
 
 def save_thresholded_matrices(thresholded_matrices: dict, results_path: str) -> None:
     """
-    Save thresholded matrices to compressed npz files in a subdirectory.
+    Save thresholded matrices to compressed npz files and sparse matrices in a subdirectory.
 
     Args:
         thresholded_matrices (dict): A dictionary of thresholded matrices.
         results_path (str): The path where the matrices will be saved.
     """
     thresholded_matrices_dir = os.path.join(results_path, "thresholded_matrices")
+    # sparse_matrices_dir = os.path.join(results_path, "sparse_matrices")
     os.makedirs(thresholded_matrices_dir, exist_ok=True)
+    # os.makedirs(sparse_matrices_dir, exist_ok=True)
 
     for threshold, matrix in tqdm(
-        thresholded_matrices.items(), leave=False, desc="Saving thresholded matrices"
+        thresholded_matrices.items(), leave=False, desc="Saving matrices"
     ):
         filepath_safe_threshold = str(threshold).replace(".", "_")
+
+        # Save dense matrix
         np.savez_compressed(
             os.path.join(
                 thresholded_matrices_dir,
@@ -155,7 +160,20 @@ def save_thresholded_matrices(thresholded_matrices: dict, results_path: str) -> 
             ),
             matrix,
         )
-    logging.info("Thresholded matrices saved in 'thresholded_matrices' subdirectory.")
+
+        # Convert to sparse and save
+        sparse_matrix = sparse.csr_matrix(matrix)
+        sparse.save_npz(
+            os.path.join(
+                thresholded_matrices_dir,
+                f"sparse_thresholded_matrix_{filepath_safe_threshold}.npz",
+            ),
+            sparse_matrix,
+        )
+
+    logging.info(
+        "Matrices saved in 'thresholded_matrices' and 'sparse_matrices' subdirectories."
+    )
 
 
 def process_matrices(
