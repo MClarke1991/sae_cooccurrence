@@ -200,12 +200,16 @@ def find_threshold(
     Find the threshold that results in the largest connected component being of a given
     size by conducting a binary search, or at least below max_size (below min_size is tolerated).
     """
-
     sparse_matrix = csr_matrix(matrix)
-
     low, high = 0, 1
     best_threshold = None
     best_size = None
+
+    # # Check initial size at lowest threshold
+    # initial_size = largest_component_size(sparse_matrix, low)
+    # if initial_size > max_size:
+    #     warnings.warn(f"Largest component size ({initial_size}) is above max_size ({max_size}).")
+    #     return low, initial_size
 
     while high - low > tolerance:
         print(f"low: {low}, high: {high}")
@@ -213,6 +217,7 @@ def find_threshold(
         size = largest_component_size(sparse_matrix, mid)
 
         if min_size <= size <= max_size:
+            print(f"Found threshold: {mid}, size: {size}")
             return mid, size  # Early return if size is within desired range
 
         if size < min_size:
@@ -232,10 +237,12 @@ def find_threshold(
 
     if best_size > max_size:
         warnings.warn(
-            f"Largest component size ({best_size}) is above max_size ({max_size})."
+            f"Largest component size ({best_size}) is above max_size ({max_size}).",
+            category=UserWarning,
         )
 
     # If we didn't find an exact match, return the best approximation
+    print(f"best_threshold: {best_threshold}, best_size: {best_size}")
     return best_threshold, best_size
 
 
