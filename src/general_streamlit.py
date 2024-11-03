@@ -17,7 +17,7 @@ from scipy import sparse
 from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
 from sae_cooccurrence.pca import (
     generate_subgraph_plot_data_sparse,
-    plot_pca_feature_strength_single,
+    plot_pca_feature_strength_streamlit,
     plot_subgraph_interactive_from_nx,
 )
 from sae_cooccurrence.streamlit import load_streamlit_config
@@ -420,7 +420,7 @@ def main():
     )
     st.markdown("""
     The plot below shows the PCA projection of feature activations. 
-    Colors represent different features. Click on any point to see detailed activations.
+    Colours represent the most active latent in the cluster. Click on any point to see detailed activations.
     """)
     git_root = get_git_root()
     config = load_streamlit_config(
@@ -691,7 +691,7 @@ def main():
 
         if not selected_points:
             st.info(
-                "👆 Click on any point in the PCA plot to see its feature activations."
+                "👆 Click on any point in the PCA plot to see its latent activations in the cluster."
             )
             feature_plot = plot_feature_activations(
                 results["all_graph_feature_acts"],
@@ -739,10 +739,11 @@ def main():
             '<p class="section-text">Latent Activation Strength</p>',
             unsafe_allow_html=True,
         )
-        # Add feature selector dropdown
+        # Add feature selector dropdown with sorted options
+        sorted_features = sorted(fs_splitting_nodes)
         selected_feature = st.selectbox(
-            "Select feature to visualize activation strength:",
-            options=fs_splitting_nodes,
+            "Select latent to visualize activation strength:",
+            options=sorted_features,
             format_func=lambda x: f"Feature {x}",
         )
 
@@ -753,7 +754,7 @@ def main():
         feature_activations = results["all_graph_feature_acts"][:, feature_idx]
 
         # Create and display the plot
-        feature_strength_plot = plot_pca_feature_strength_single(
+        feature_strength_plot = plot_pca_feature_strength_streamlit(
             pca_df=pca_df,
             feature_activations=feature_activations,
             feature_idx=selected_feature,
@@ -766,7 +767,7 @@ def main():
         unsafe_allow_html=True,
     )
     st.markdown(
-        "Showing visualizations for up to 10 features from the current graph, sorted by feature index."
+        "Showing visualizations for up to 10 latents from the current graph, sorted by latent index."
     )
     sorted_features = sorted(fs_splitting_nodes)[:10]
 

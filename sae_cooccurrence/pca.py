@@ -726,7 +726,7 @@ def plot_pca_feature_strength(
     return None
 
 
-def plot_pca_feature_strength_single(
+def plot_pca_feature_strength_streamlit(
     pca_df,
     feature_activations,
     feature_idx,
