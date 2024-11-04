@@ -15,10 +15,10 @@ import toml
 import torch
 from sae_lens import SAE
 from tqdm.auto import tqdm
-from transformer_lens import HookedTransformer
 
 from sae_cooccurrence.graph_generation import (
     calculate_token_factors_inds_efficient,
+    create_decode_tokens_function,
     create_graph_from_matrix,
     create_node_info_dataframe,
     create_subgraph_plot,
@@ -118,13 +118,6 @@ def create_directories(results_path: str) -> None:
     os.makedirs(results_path, exist_ok=True)
     os.makedirs(pj(results_path, "histograms"), exist_ok=True)
     os.makedirs(pj(results_path, "dataframes"), exist_ok=True)
-
-
-def create_decode_tokens_function(model: HookedTransformer) -> np.vectorize:
-    def decode_tokens(idx: int) -> str:
-        return "None" if idx is None else model.tokenizer.decode([idx])  # type: ignore
-
-    return np.vectorize(decode_tokens)
 
 
 def load_data(results_path: str) -> tuple:

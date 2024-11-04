@@ -246,7 +246,16 @@ def find_threshold(
     return best_threshold, best_size
 
 
-def plot_subgraph_size_density(subgraphs, hist_path, filename, min_size, max_size):
+def plot_subgraph_size_density(
+    subgraphs: list[nx.Graph],
+    hist_path: str,
+    filename: str,
+    min_size: int,
+    max_size: int,
+) -> None:
+    """
+    Plot the density of subgraph sizes after finding a threshold.
+    """
     # Extract subgraph sizes from the dictionary
     subgraph_sizes = [len(subgraph) for subgraph in subgraphs]
 
@@ -272,68 +281,53 @@ def plot_subgraph_size_density(subgraphs, hist_path, filename, min_size, max_siz
     plt.close()
 
 
-def create_graph_from_matrix(matrix):
-    # Create a graph from the matrix
+def create_graph_from_matrix(matrix: np.ndarray) -> nx.Graph:
+    """
+    Create an nx graph from a numpy array, this includes all subgraphs.
+    """
     graph = nx.from_numpy_array(matrix)
     return graph
 
 
-def get_subgraphs(graph):
+def get_subgraphs(graph: nx.Graph) -> list[nx.Graph]:
+    """
+    Get all subgraphs from an nx graph.
+    """
     # Find connected components (subgraphs)
     subgraphs = [graph.subgraph(c) for c in nx.connected_components(graph)]
     return subgraphs
 
 
-# def create_node_info_dataframe(subgraphs,
-#                                activity_threshold: float,
-#                                feature_activations,
-#                                token_factors_inds,
-#                                tokenizer,
-#                                sae_id,
-#                                model_name,
-#                                sae_release_short):
-#     # Create a DataFrame with node information
+def create_decode_tokens_function(model: HookedTransformer) -> np.vectorize:
+    """
+    Create a vectorized function to decode token indices to tokens.
+    """
 
-#     sae_layer = re.search(r'blocks\.(\d+)', sae_id).group(1) # type: ignore
-#     node_info_data = []
-#     for i, subgraph in tqdm(enumerate(subgraphs)):
-#         for node in subgraph.nodes():
-#             # Get feature activations for the node
-#             node_activations = feature_activations[node]
+    def decode_tokens(idx: int) -> str:
+        return "None" if idx is None else model.tokenizer.decode([idx])  # type: ignore
 
-#             # Get top 10 token indices for the node
-#             top_10_token_indices = token_factors_inds[node][:10]
-
-#             # Decode token indices to actual tokens
-#             top_10_tokens = [tokenizer.decode([idx]) for idx in top_10_token_indices]
-
-#             if sae_release_short == "res-jb-feature-splitting":
-#                 sae_release_short_quicklist = "res-jb-fs"
-#             else:
-#                 sae_release_short_quicklist = sae_release_short
-
-#             node_info_data.append({
-#                 'node_id': node,
-#                 'activity_threshold': activity_threshold,
-#                 'subgraph_id': i,
-#                 'subgraph_size': len(subgraph),
-#                 'feature_activations': node_activations,
-#                 'top_10_tokens': top_10_tokens,
-#                 'neuronpedia_link': mc_neuronpedia_link(node, int(sae_layer), model_name, sae_release_short_quicklist)
-#             })
-#     node_info_df = pd.DataFrame(node_info_data)
-#     return node_info_df
+    return np.vectorize(decode_tokens)
 
 
 def create_node_info_dataframe(
-    subgraphs,
+    subgraphs: list[nx.Graph],
     activity_threshold: float,
-    feature_activations,
-    token_factors_inds,
-    decode_tokens,
-    SAE,
+    feature_activations: np.ndarray,
+    token_factors_inds: np.ndarray,
+    decode_tokens: np.vectorize,
+    SAE: SAE,
     include_metrics: bool = False,
-):
+) -> pd.DataFrame:
+    """
+    Create a dataframe of node information for each subgraph.
+    subgraphs: list of nx.Graphs after thresholding
+    activity_threshold: float, threshold for feature activations
+    feature_activations: np.ndarray, activations of each feature
+    token_factors_inds: np.ndarray, indices of top 10 tokens for each feature
+    decode_tokens: np.vectorize, function to decode token indices to tokens, created by create_decode_tokens_function
+    SAE: SAE, SAE object
+    include_metrics: bool, whether to include graph metrics
+    """
     # sae_layer = get_layer_from_id(sae_id)
 
     # Vectorize token decoding
