@@ -430,6 +430,7 @@ def process_custom_prompts(
     feature_list,
     remove_special_tokens=False,
     device="cpu",
+    batch_size=10,
 ):
     """
     Process custom prompts using the given model and SAE, extract the tokens that the
@@ -442,72 +443,110 @@ def process_custom_prompts(
     - feature_list: List of features to be considered i.e. those within a cluster/subgraph
     - remove_special_tokens: Whether to remove special tokens from the processed examples e.g. BOS, EOS, PAD
     - device: Device to run computations on
+    - batch_size: Number of prompts to process at once (default: 10)
 
     Returns:
     - ProcessedExamples: A data class containing processed examples and related information
     """
-    examples_found = 0
-
     feature_list_tensor = torch.tensor(feature_list, device=sae.W_dec.device)
 
-    # Convert prompts to tokens
-    tokens = model.to_tokens(prompts, prepend_bos=True)
+    # Initialize lists to store results
+    all_filtered_tokens_df = []
+    all_fired_tokens = []
+    all_reconstructions = []
+    all_graph_feature_acts = []
+    all_feature_acts = []
+    all_max_feature_info = []
 
-    # Create a DataFrame containing token information
-    tokens_df = make_token_df(tokens, model)
+    # Process prompts in batches
+    for i in tqdm(range(0, len(prompts), batch_size), desc="Processing prompts"):
+        batch_prompts = prompts[i : i + batch_size]
 
-    # Flatten the tokens tensor for easier processing
-    flat_tokens = tokens.flatten()
+        # Convert prompts to tokens
+        tokens = model.to_tokens(batch_prompts, prepend_bos=True)
 
-    # Run the model and get activations
-    sae_in = run_model_with_cache(model, tokens, sae)
-    # Encode the activations using the SAE
-    feature_acts = sae.encode(sae_in).squeeze()
-    # Flatten the feature activations to 2D
-    feature_acts = feature_acts.flatten(0, 1).to(device)
+        # Create a DataFrame containing token information
+        tokens_df = make_token_df(tokens, model)
 
-    # Create a mask for tokens where any feature in the feature_list is activated
-    fired_mask = (feature_acts[:, feature_list]).sum(dim=-1) > 0
-    fired_mask = fired_mask.to(device)
+        # Flatten the tokens tensor for easier processing
+        flat_tokens = tokens.flatten()
 
-    if remove_special_tokens:
-        special_tokens = get_special_tokens(model)
-        non_special_mask = ~torch.isin(
-            flat_tokens,
-            torch.tensor(list(special_tokens), device=device),
+        # Run the model and get activations
+        sae_in = run_model_with_cache(model, tokens, sae)
+        # Encode the activations using the SAE
+        feature_acts = sae.encode(sae_in).squeeze()
+        # Flatten the feature activations to 2D
+        feature_acts = feature_acts.flatten(0, 1).to(device)
+
+        # Create a mask for tokens where any feature in the feature_list is activated
+        fired_mask = (feature_acts[:, feature_list]).sum(dim=-1) > 0
+        fired_mask = fired_mask.to(device)
+
+        if remove_special_tokens:
+            special_tokens = get_special_tokens(model)
+            non_special_mask = ~torch.isin(
+                flat_tokens,
+                torch.tensor(list(special_tokens), device=device),
+            )
+            # Combine the fired_mask with the non_special_mask
+            fired_mask = fired_mask & non_special_mask
+
+        # Skip batch if no tokens fired
+        if not fired_mask.any():
+            continue
+
+        # Convert the fired tokens to string representations
+        fired_tokens = model.to_str_tokens(flat_tokens[fired_mask])
+
+        # Reconstruct the activations for the fired tokens
+        reconstruction = (
+            feature_acts[fired_mask][:, feature_list] @ sae.W_dec[feature_list]
         )
-        # Combine the fired_mask with the non_special_mask
-        fired_mask = fired_mask & non_special_mask
 
-    # Convert the fired tokens to string representations
-    fired_tokens = model.to_str_tokens(flat_tokens[fired_mask])
+        # Get max feature info
+        max_feature_info = get_max_feature_info(
+            feature_acts, fired_mask, feature_list_tensor, device=device
+        )
 
-    # Reconstruct the activations for the fired tokens using only the features in the feature_list
-    reconstruction = feature_acts[fired_mask][:, feature_list] @ sae.W_dec[feature_list]
+        # Get the rows of tokens_df where fired_mask is True
+        filtered_tokens_df = tokens_df.iloc[
+            fired_mask.cpu().nonzero().flatten().numpy()
+        ]
 
-    # Get max feature info
-    max_feature_info = get_max_feature_info(
-        feature_acts, fired_mask, feature_list_tensor, device=device
-    )
+        # Append batch results
+        all_filtered_tokens_df.append(filtered_tokens_df)
+        all_fired_tokens.extend(fired_tokens)
+        all_reconstructions.append(reconstruction)
+        all_graph_feature_acts.append(feature_acts[fired_mask][:, feature_list])
+        all_feature_acts.append(feature_acts[fired_mask])
+        all_max_feature_info.append(max_feature_info)
 
-    # Get the rows of tokens_df where fired_mask is True
-    filtered_tokens_df = tokens_df.iloc[fired_mask.cpu().nonzero().flatten().numpy()]
+    # Combine results from all batches
+    if not all_filtered_tokens_df:
+        print("No tokens fired for any prompts")
+        return None
 
-    examples_found = len(fired_tokens)
+    combined_tokens_df = pd.concat(all_filtered_tokens_df, ignore_index=True)
+    combined_reconstructions = torch.cat(all_reconstructions, dim=0)
+    combined_graph_feature_acts = torch.cat(all_graph_feature_acts, dim=0)
+    combined_feature_acts = torch.cat(all_feature_acts, dim=0)
+    combined_max_feature_info = torch.cat(all_max_feature_info, dim=0)
+
+    examples_found = len(all_fired_tokens)
     print(f"Total examples found: {examples_found}")
 
     top_3_tokens, example_context = get_top_tokens_and_context(
-        fired_tokens, filtered_tokens_df
+        all_fired_tokens, combined_tokens_df
     )
 
     return ProcessedExamples(
-        all_token_dfs=filtered_tokens_df,
-        all_fired_tokens=fired_tokens,
-        all_reconstructions=reconstruction,
-        all_graph_feature_acts=feature_acts[fired_mask][:, feature_list],
+        all_token_dfs=combined_tokens_df,
+        all_fired_tokens=all_fired_tokens,
+        all_reconstructions=combined_reconstructions,
+        all_graph_feature_acts=combined_graph_feature_acts,
         all_examples_found=examples_found,
-        all_max_feature_info=max_feature_info,
-        all_feature_acts=feature_acts[fired_mask],
+        all_max_feature_info=combined_max_feature_info,
+        all_feature_acts=combined_feature_acts,
         top_3_tokens=top_3_tokens,
         example_context=example_context,
     )
@@ -594,6 +633,8 @@ def generate_data(
             remove_special_tokens,
             device=device,
         )
+    if results is None:
+        raise ValueError("No results found")
     pca_df, pca = perform_pca_on_results(results, n_components=3)
     if decoder:
         pca_decoder, pca_decoder_df = calculate_pca_decoder(sae, fs_splitting_nodes)
