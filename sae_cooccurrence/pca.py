@@ -423,6 +423,96 @@ def process_examples(
     )
 
 
+def process_custom_prompts(
+    prompts: list[str],
+    model,
+    sae,
+    feature_list,
+    remove_special_tokens=False,
+    device="cpu",
+):
+    """
+    Process custom prompts using the given model and SAE, extract the tokens that the
+    features of the cluster/subgraph fire on, with context.
+
+    Args:
+    - prompts: List of strings to process
+    - model: The model used for processing
+    - sae: The SAE model instance
+    - feature_list: List of features to be considered i.e. those within a cluster/subgraph
+    - remove_special_tokens: Whether to remove special tokens from the processed examples e.g. BOS, EOS, PAD
+    - device: Device to run computations on
+
+    Returns:
+    - ProcessedExamples: A data class containing processed examples and related information
+    """
+    examples_found = 0
+
+    feature_list_tensor = torch.tensor(feature_list, device=sae.W_dec.device)
+
+    # Convert prompts to tokens
+    tokens = model.to_tokens(prompts, prepend_bos=True)
+
+    # Create a DataFrame containing token information
+    tokens_df = make_token_df(tokens, model)
+
+    # Flatten the tokens tensor for easier processing
+    flat_tokens = tokens.flatten()
+
+    # Run the model and get activations
+    sae_in = run_model_with_cache(model, tokens, sae)
+    # Encode the activations using the SAE
+    feature_acts = sae.encode(sae_in).squeeze()
+    # Flatten the feature activations to 2D
+    feature_acts = feature_acts.flatten(0, 1).to(device)
+
+    # Create a mask for tokens where any feature in the feature_list is activated
+    fired_mask = (feature_acts[:, feature_list]).sum(dim=-1) > 0
+    fired_mask = fired_mask.to(device)
+
+    if remove_special_tokens:
+        special_tokens = get_special_tokens(model)
+        non_special_mask = ~torch.isin(
+            flat_tokens,
+            torch.tensor(list(special_tokens), device=device),
+        )
+        # Combine the fired_mask with the non_special_mask
+        fired_mask = fired_mask & non_special_mask
+
+    # Convert the fired tokens to string representations
+    fired_tokens = model.to_str_tokens(flat_tokens[fired_mask])
+
+    # Reconstruct the activations for the fired tokens using only the features in the feature_list
+    reconstruction = feature_acts[fired_mask][:, feature_list] @ sae.W_dec[feature_list]
+
+    # Get max feature info
+    max_feature_info = get_max_feature_info(
+        feature_acts, fired_mask, feature_list_tensor, device=device
+    )
+
+    # Get the rows of tokens_df where fired_mask is True
+    filtered_tokens_df = tokens_df.iloc[fired_mask.cpu().nonzero().flatten().numpy()]
+
+    examples_found = len(fired_tokens)
+    print(f"Total examples found: {examples_found}")
+
+    top_3_tokens, example_context = get_top_tokens_and_context(
+        fired_tokens, filtered_tokens_df
+    )
+
+    return ProcessedExamples(
+        all_token_dfs=filtered_tokens_df,
+        all_fired_tokens=fired_tokens,
+        all_reconstructions=reconstruction,
+        all_graph_feature_acts=feature_acts[fired_mask][:, feature_list],
+        all_examples_found=examples_found,
+        all_max_feature_info=max_feature_info,
+        all_feature_acts=feature_acts[fired_mask],
+        top_3_tokens=top_3_tokens,
+        example_context=example_context,
+    )
+
+
 def perform_pca_on_results(
     results: ProcessedExamples,
     n_components: int = 3,
@@ -481,18 +571,29 @@ def generate_data(
     device="cpu",
     max_examples=5_000_000,
     trim_excess=False,
+    custom_prompts=None,
 ):
-    results = process_examples(
-        activation_store,
-        model,
-        sae,
-        fs_splitting_nodes,
-        n_batches_reconstruction,
-        remove_special_tokens,
-        device=device,
-        max_examples=max_examples,
-        trim_excess=trim_excess,
-    )
+    if custom_prompts is None:
+        results = process_examples(
+            activation_store,
+            model,
+            sae,
+            fs_splitting_nodes,
+            n_batches_reconstruction,
+            remove_special_tokens,
+            device=device,
+            max_examples=max_examples,
+            trim_excess=trim_excess,
+        )
+    else:
+        results = process_custom_prompts(
+            custom_prompts,
+            model,
+            sae,
+            fs_splitting_nodes,
+            remove_special_tokens,
+            device=device,
+        )
     pca_df, pca = perform_pca_on_results(results, n_components=3)
     if decoder:
         pca_decoder, pca_decoder_df = calculate_pca_decoder(sae, fs_splitting_nodes)
