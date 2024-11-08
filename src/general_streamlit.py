@@ -304,6 +304,29 @@ def update_url_params(key, value):
     st.query_params.update(current_params)
 
 
+def simplify_token_display(tokens: list, remove_counts: bool = True) -> list:
+    """Clean up token display by optionally removing count numbers and parentheses.
+
+    Args:
+        tokens: List of token strings
+        remove_counts: If True, removes count numbers from tokens
+
+    Returns:
+        List of cleaned token strings
+    """
+    if not remove_counts:
+        return tokens
+
+    cleaned = [str(token) for token in tokens]
+    # Remove count numbers and clean up formatting
+    cleaned = [re.sub(r'(?<=", )\d+(?=\))', "", token) for token in cleaned]
+    cleaned = [re.sub(r"(?<=', )\d+(?=\))", "", token) for token in cleaned]
+    cleaned = [re.sub(r"^\(", "", token) for token in cleaned]
+    cleaned = [re.sub(r"\)$", "", token) for token in cleaned]
+
+    return cleaned
+
+
 def main():
     logging.basicConfig(level=logging.INFO)
     log_memory_usage("start of main")
@@ -495,9 +518,11 @@ def main():
 
     # Load metadata for all subgraphs
     subgraph_options = []
+    remove_token_counts = config["streamlit"].get("remove_token_counts", True)
     for sg_id in available_subgraphs:
         top_3_tokens, example_context = load_subgraph_metadata(pca_results_path, sg_id)
-        label = f"Subgraph {sg_id} - Top tokens: {', '.join(top_3_tokens)} | Example: {example_context}"  # type: ignore
+        top_3_tokens_simple = simplify_token_display(top_3_tokens, remove_token_counts)  # type: ignore
+        label = f"Subgraph {sg_id} - Top tokens: {' '.join(top_3_tokens_simple)} | Example: '{example_context}'"
         subgraph_options.append({"label": label, "value": sg_id})
 
     default_subgraph_idx = 0

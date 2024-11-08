@@ -33,6 +33,7 @@ token_dfs = false
 pca = true
 
 [processing.load_options]
+thresholded_matrix = true
 use_max_examples = true
 fired_tokens = false
 reconstructions = false
@@ -41,6 +42,9 @@ feature_acts = false
 max_feature_info = true
 examples_found = false
 token_dfs = false
+
+[streamlit]
+remove_token_counts = true
 
 [streamlit.models]
 # gpt2-small = "gpt2-small"
@@ -65,8 +69,8 @@ gemma-2-2b = 5000
 # "res-jb" = ["blocks.0.hook_resid_pre"]
 # "res-jb-feature-splitting" = ["blocks.8.hook_resid_pre_24576"]
 "gemma-scope-2b-pt-res-canonical" = [
-    # "layer_0/width_16k/canonical",
-    # "layer_12/width_16k/canonical",
+    "layer_0/width_16k/canonical",
+    "layer_12/width_16k/canonical",
     # "layer_12/width_32k/canonical",
     # "layer_12/width_65k/canonical",
     "layer_18/width_16k/canonical",
@@ -74,10 +78,10 @@ gemma-2-2b = 5000
 ]
 "gemma-scope-2b-pt-res" = [
      "layer_12/width_16k/average_l0_22",
-#     "layer_12/width_16k/average_l0_41",
-#     "layer_12/width_16k/average_l0_82",
-#     "layer_12/width_16k/average_l0_176",
-#     "layer_12/width_16k/average_l0_445"
+    "layer_12/width_16k/average_l0_41",
+    "layer_12/width_16k/average_l0_82",
+    "layer_12/width_16k/average_l0_176",
+    "layer_12/width_16k/average_l0_445"
 ]
 
 [streamlit.dev]
