@@ -71,7 +71,7 @@ def test_plot_pca_feature_strength_single_layout_properties(sample_data):
     )
 
     # Check layout properties
-    assert fig.layout.title.text == f"Feature {feature_idx} Activation Strength"
+    assert fig.layout.title.text == f"SAE Latent {feature_idx} Activation Strength"
     assert fig.layout.xaxis.title.text == "PC2"
     assert fig.layout.yaxis.title.text == "PC3"
     assert fig.layout.hovermode == "closest"

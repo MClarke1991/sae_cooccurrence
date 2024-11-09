@@ -928,7 +928,7 @@ def plot_pca_feature_strength_streamlit(
 
     # Update layout
     fig.update_layout(
-        title=f"Feature {feature_idx} Activation Strength",
+        title=f"SAE Latent {feature_idx} Activation Strength",
         xaxis_title=pc_x,
         yaxis_title=pc_y,
         hovermode="closest",
