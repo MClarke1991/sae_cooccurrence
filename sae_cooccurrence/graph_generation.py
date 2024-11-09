@@ -343,7 +343,7 @@ def create_node_info_dataframe(
     node_info_data = []
     subgraph_nodes = {}
 
-    for i, subgraph in enumerate(tqdm(subgraphs)):
+    for i, subgraph in enumerate(tqdm(subgraphs, desc="Generating node info")):
         nodes = list(subgraph.nodes())
         subgraph_nodes[i] = nodes
         subgraph_size = len(subgraph)

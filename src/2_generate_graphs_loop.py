@@ -288,7 +288,9 @@ def process_subgraphs(
 ):
     graphs, subgraph_lists, node_info_dfs = {}, {}, {}
 
-    for key, matrix in tqdm(thresholded_matrices.items(), leave=False):
+    for key, matrix in tqdm(
+        thresholded_matrices.items(), leave=False, desc="Processing subgraphs"
+    ):
         graph = create_graph_from_matrix(matrix)
         graphs[key] = graph
         subgraphs = get_subgraphs(graph)
