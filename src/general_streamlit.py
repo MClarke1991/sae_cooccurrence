@@ -617,7 +617,8 @@ def main():
 
     with top_right:
         st.markdown(
-            '<p class="section-text">Subgraph Network</p>', unsafe_allow_html=True
+            '<p class="section-text">SAE Latent Co-occurrence Graph</p>',
+            unsafe_allow_html=True,
         )
         st.markdown(
             """
@@ -648,24 +649,9 @@ def main():
             ]
             if not matching_points.empty:
                 point_index = matching_points.index[0]
-                st.markdown(
-                    """
-                    <div style="
-                        border: 1px solid #ddd;
-                        border-radius: 5px;
-                        padding: 15px;
-                        background-color: #f8f9fa;
-                        margin-bottom: 15px;
-                    ">
-                        <p style="margin: 0;"><strong>Token:</strong> {}</p>
-                        <p style="margin: 10px 0 0 0;"><strong>Context:</strong> {}</p>
-                    </div>
-                """.format(
-                        pca_df.loc[point_index, "tokens"],
-                        pca_df.loc[point_index, "context"],
-                    ),
-                    unsafe_allow_html=True,
-                )
+                # Create two columns for token and context display
+                st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
+                st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
         else:
             st.info(
                 " 👆 Click on a point in the PCA plot to see token and context details."
@@ -680,6 +666,7 @@ def main():
             The plot below shows the relative strength of SAE latent activations for all latents in the cluster at a particular point in the PCA. 
             """
         )
+        st.write("#")
         if not selected_points:
             # st.info(
             #     "👆 Click on any point in the PCA plot to see its SAE latent activations in the cluster."
@@ -709,23 +696,20 @@ def main():
                 st.plotly_chart(feature_plot, use_container_width=True)
 
     # with bottom_right:
-    #     st.markdown(
-    #         '<p class="section-text">Token and Context</p>', unsafe_allow_html=True
-    #     )
-    #     if selected_points:
-    #         matching_points = pca_df[
-    #             (pca_df["PC2"] == selected_points[0]["x"])
-    #             & (pca_df["PC3"] == selected_points[0]["y"])
-    #         ]
-    #         if not matching_points.empty:
-    #             point_index = matching_points.index[0]
-    #             st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
-    #             st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
-    #     else:
-    #         st.info(
-    #             "Click on a point in the PCA plot to see token and context details."
-    #         )
+    st.markdown('<p class="section-text">Token and Context</p>', unsafe_allow_html=True)
+    if selected_points:
+        matching_points = pca_df[
+            (pca_df["PC2"] == selected_points[0]["x"])
+            & (pca_df["PC3"] == selected_points[0]["y"])
+        ]
+        if not matching_points.empty:
+            point_index = matching_points.index[0]
+            st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
+            st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
+    else:
+        st.info("Click on a point in the PCA plot to see token and context details.")
     with bottom_right:
+        st.write("#")
         st.markdown(
             '<p class="section-text">SAE Latent Activation Landscape</p>',
             unsafe_allow_html=True,
