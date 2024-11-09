@@ -4,7 +4,20 @@ n_batches = 1000
 model_name = "gpt2-small"
 sae_release_short = "res-jb"
 # sae_ids = ["blocks.0.hook_resid_pre", "blocks.7.hook_resid_pre", "blocks.11.hook_resid_pre"]
-sae_ids = ["blocks.7.hook_resid_pre"]
+sae_ids = ["blocks.0.hook_resid_pre", 
+    "blocks.1.hook_resid_pre",
+    "blocks.2.hook_resid_pre",
+    "blocks.3.hook_resid_pre",
+    "blocks.4.hook_resid_pre",
+    "blocks.5.hook_resid_pre",
+    "blocks.6.hook_resid_pre",
+    "blocks.7.hook_resid_pre",
+    "blocks.8.hook_resid_pre",
+    "blocks.9.hook_resid_pre",
+    "blocks.10.hook_resid_pre",
+    "blocks.11.hook_resid_pre",
+    "blocks.12.hook_resid_pre",
+]
 # activation_thresholds = [0.0, 0.1, 0.5, 1.5]
 activation_thresholds = [1.5]
 remove_special_tokens = false

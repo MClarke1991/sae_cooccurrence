@@ -113,7 +113,7 @@ def main():
     torch.set_grad_enabled(False)
     device = set_device()
     git_root = get_git_root()
-    config = toml.load(pj(git_root, "src", "config_gemma.toml"))
+    config = toml.load(pj(git_root, "src", "config.toml"))
 
     n_batches = config["generation"]["n_batches"]
     model_name = config["generation"]["model_name"]
