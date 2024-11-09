@@ -552,6 +552,150 @@ def process_custom_prompts(
     )
 
 
+def process_batch(batch_data):
+    """Helper function to process a single batch of data"""
+    tokens, model, sae, feature_list, remove_special_tokens, device = batch_data
+
+    # Create a DataFrame containing token information
+    tokens_df = make_token_df(tokens, model)
+
+    # Flatten the tokens tensor for easier processing
+    flat_tokens = tokens.flatten()
+
+    # Run the model and get activations
+    sae_in = run_model_with_cache(model, tokens, sae)
+    # Encode the activations using the SAE
+    feature_acts = sae.encode(sae_in).squeeze()
+    # Flatten the feature activations to 2D
+    feature_acts = feature_acts.flatten(0, 1).to(device)
+
+    # Create a mask for tokens where any feature in the feature_list is activated
+    fired_mask = (feature_acts[:, feature_list]).sum(dim=-1) > 0
+    fired_mask = fired_mask.to(device)
+
+    if remove_special_tokens:
+        special_tokens = get_special_tokens(model)
+        non_special_mask = ~torch.isin(
+            flat_tokens,
+            torch.tensor(list(special_tokens), device=device),
+        )
+        fired_mask = fired_mask & non_special_mask
+
+    # Convert the fired tokens to string representations
+    fired_tokens = model.to_str_tokens(flat_tokens[fired_mask])
+
+    # Reconstruct the activations
+    reconstruction = feature_acts[fired_mask][:, feature_list] @ sae.W_dec[feature_list]
+
+    # Get max feature info
+    feature_list_tensor = torch.tensor(feature_list, device=sae.W_dec.device)
+    max_feature_info = get_max_feature_info(
+        feature_acts, fired_mask, feature_list_tensor, device=device
+    )
+
+    return {
+        "tokens_df": tokens_df.iloc[fired_mask.cpu().nonzero().flatten().numpy()],
+        "fired_tokens": fired_tokens,
+        "reconstruction": reconstruction,
+        "graph_feature_acts": feature_acts[fired_mask][:, feature_list],
+        "feature_acts": feature_acts[fired_mask],
+        "max_feature_info": max_feature_info,
+        "n_examples": len(fired_tokens),
+    }
+
+
+def process_examples_parallel(
+    activation_store,
+    model,
+    sae,
+    feature_list,
+    n_batches_reconstruction,
+    remove_special_tokens=False,
+    device="cpu",
+    max_examples=5_000_000,
+    trim_excess=False,
+    num_workers=4,  # Number of parallel workers
+):
+    """Parallelized version of process_examples"""
+    from torch.multiprocessing import Pool, set_start_method
+
+    try:
+        set_start_method("spawn")
+    except RuntimeError:
+        pass
+
+    examples_found = 0
+    all_results = []
+
+    # Create a pool of workers
+    with Pool(num_workers) as pool:
+        # Prepare batch data
+        batch_data = [
+            (
+                activation_store.get_batch_tokens(),
+                model,
+                sae,
+                feature_list,
+                remove_special_tokens,
+                device,
+            )
+            for _ in range(n_batches_reconstruction)
+        ]
+
+        # Process batches in parallel
+        for result in tqdm(
+            pool.imap(process_batch, batch_data),
+            total=n_batches_reconstruction,
+            desc="Processing batches",
+        ):
+            all_results.append(result)
+            examples_found += result["n_examples"]
+
+            if max_examples is not None and examples_found >= max_examples:
+                if trim_excess:
+                    # Trim excess examples from the last batch
+                    excess = examples_found - max_examples
+                    if excess > 0:
+                        last_result = all_results[-1]
+                        for key in [
+                            "tokens_df",
+                            "fired_tokens",
+                            "reconstruction",
+                            "graph_feature_acts",
+                            "feature_acts",
+                            "max_feature_info",
+                        ]:
+                            if isinstance(last_result[key], (list, torch.Tensor)):
+                                last_result[key] = last_result[key][:-excess]
+                        last_result["n_examples"] -= excess
+                        examples_found = max_examples
+                break
+
+    # Combine results
+    all_token_dfs = pd.concat([r["tokens_df"] for r in all_results])
+    all_fired_tokens = list_flatten([r["fired_tokens"] for r in all_results])
+    all_reconstructions = torch.cat([r["reconstruction"] for r in all_results])
+    all_graph_feature_acts = torch.cat([r["graph_feature_acts"] for r in all_results])
+    all_feature_acts = torch.cat([r["feature_acts"] for r in all_results])
+    all_max_feature_info = torch.cat([r["max_feature_info"] for r in all_results])
+
+    top_3_tokens, example_context = get_top_tokens_and_context(
+        all_fired_tokens, all_token_dfs
+    )
+
+    return ProcessedExamples(
+        all_token_dfs=all_token_dfs,
+        all_fired_tokens=all_fired_tokens,
+        all_reconstructions=all_reconstructions,
+        all_graph_feature_acts=all_graph_feature_acts,
+        all_examples_found=examples_found,
+        all_max_feature_info=all_max_feature_info,
+        all_feature_acts=all_feature_acts,
+        top_3_tokens=top_3_tokens,
+        example_context=example_context,
+    )
+
+
 def perform_pca_on_results(
     results: ProcessedExamples,
     n_components: int = 3,
