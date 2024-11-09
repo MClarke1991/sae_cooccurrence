@@ -252,12 +252,11 @@ def main():
     )
     load_options = config["processing"]["load_options"]
     models = config["streamlit"]["models"]
-    model_to_batch_size = config["models"]["batch_sizes"]
+    model_to_batch_size = config["models"]["pca_batch_sizes"]
     use_max_examples = config["processing"]["load_options"]["use_max_examples"]
     show_max_examples = config["streamlit"]["dev"]["show_max_examples"]
     show_batch_size = config["streamlit"]["dev"]["show_batch_size"]
     model_to_max_examples = config["models"]["max_examples"]
-    n_batches_generation = config["generation"]["n_batches"]
 
     with st.sidebar:
         st.markdown(
@@ -342,6 +341,9 @@ def main():
                 "sae_id", st.session_state.sae_id_selector
             ),
         )
+
+        release_to_generation_batch_size = config["releases"]["generation_batch_sizes"]
+        n_batches_generation = release_to_generation_batch_size[sae_release]
 
         results_root = create_results_dir(
             model, sae_release, sae_id, n_batches_generation

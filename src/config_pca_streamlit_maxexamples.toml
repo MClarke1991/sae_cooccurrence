@@ -1,6 +1,3 @@
-[generation]
-n_batches = 100
-
 [model]
 name = "gemma-2-2b"
 # name = "gpt2-small"
@@ -50,26 +47,32 @@ token_dfs = false
 remove_token_counts = true
 
 [streamlit.models]
-# gpt2-small = "gpt2-small"
+gpt2-small = "gpt2-small"
 gemma-2-2b = "gemma-2-2b"
 
-[models.batch_sizes]
-# gpt2-small = 100
+[releases.generation_batch_sizes]
+res-jb = 1000
+res-jb-feature-splitting = 500
+gemma-scope-2b-pt-res-canonical = 100
+gemma-scope-2b-pt-res = 100
+
+[models.pca_batch_sizes]
+gpt2-small = 100
 gemma-2-2b = 100
 
 [models.max_examples]
-# gpt2-small = 1000
+gpt2-small = 5000
 gemma-2-2b = 5000
 
 [models.releases]
-# "gpt2-small" = ["res-jb", "res-jb-feature-splitting"]
+"gpt2-small" = ["res-jb", "res-jb-feature-splitting"]
 "gemma-2-2b" = [
     "gemma-scope-2b-pt-res-canonical",
     "gemma-scope-2b-pt-res"
 ]
 
 [models.sae_ids]
-# "res-jb" = ["blocks.0.hook_resid_pre"]
+"res-jb" = ["blocks.0.hook_resid_pre"]
 # "res-jb-feature-splitting" = ["blocks.8.hook_resid_pre_24576"]
 "gemma-scope-2b-pt-res-canonical" = [
     "layer_0/width_16k/canonical",
