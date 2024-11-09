@@ -374,13 +374,10 @@ def main():
     )
 
     st.markdown(
-        '<p class="title-text">Feature Cooccurrence Explorer</p>',
+        '<p class="title-text">SAE Latent Cooccurrence Explorer</p>',
         unsafe_allow_html=True,
     )
-    st.markdown("""
-    The plot below shows the PCA projection of feature activations. 
-    Colours represent the most active latent in the cluster. Click on any point to see detailed activations.
-    """)
+
     git_root = get_git_root()
     config = load_streamlit_config(
         pj(git_root, "src", "config_pca_streamlit_maxexamples.toml")
@@ -498,7 +495,7 @@ def main():
                 default_size_idx = 0
 
         selected_size = st.selectbox(
-            "Subgraph Size",
+            "Cluster Size",
             options=available_sizes,
             index=default_size_idx,
             format_func=lambda x: f"Size {x}",
@@ -583,6 +580,12 @@ def main():
 
     with top_left:
         st.markdown('<p class="section-text">PCA</p>', unsafe_allow_html=True)
+        st.markdown(
+            """
+            The plot below shows the PCA projection of SAE latent activations. 
+            Colours represent the most active latent in the cluster. Click on any point to see detailed activations.
+            """
+        )
         log_memory_usage("before PCA plot")
         pca_plot, color_map = plot_pca_2d(
             pca_df=pca_df,
@@ -616,6 +619,12 @@ def main():
         st.markdown(
             '<p class="section-text">Subgraph Network</p>', unsafe_allow_html=True
         )
+        st.markdown(
+            """
+            Graph of the co-occurrence relations between latents in this cluster. Node size represents latent density, edge weight represents co-occurrence strength. 
+            Click on a point in the PCA plot to see relative strength of latent activations for that token and context. 
+            """
+        )
         subgraph, subgraph_df = generate_subgraph_plot_data_sparse(
             thresholded_matrix, node_df, selected_subgraph
         )
@@ -639,21 +648,42 @@ def main():
             ]
             if not matching_points.empty:
                 point_index = matching_points.index[0]
-                st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
-                st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
+                st.markdown(
+                    """
+                    <div style="
+                        border: 1px solid #ddd;
+                        border-radius: 5px;
+                        padding: 15px;
+                        background-color: #f8f9fa;
+                        margin-bottom: 15px;
+                    ">
+                        <p style="margin: 0;"><strong>Token:</strong> {}</p>
+                        <p style="margin: 10px 0 0 0;"><strong>Context:</strong> {}</p>
+                    </div>
+                """.format(
+                        pca_df.loc[point_index, "tokens"],
+                        pca_df.loc[point_index, "context"],
+                    ),
+                    unsafe_allow_html=True,
+                )
         else:
             st.info(
-                "Click on a point in the PCA plot to see token and context details."
+                " 👆 Click on a point in the PCA plot to see token and context details."
             )
 
         st.markdown(
-            '<p class="section-text">Feature Activation</p>', unsafe_allow_html=True
+            '<p class="section-text">All Latent Activations at point</p>',
+            unsafe_allow_html=True,
         )
-
+        st.markdown(
+            """
+            The plot below shows the relative strength of SAE latent activations for all latents in the cluster at a particular point in the PCA. 
+            """
+        )
         if not selected_points:
-            st.info(
-                "👆 Click on any point in the PCA plot to see its latent activations in the cluster."
-            )
+            # st.info(
+            #     "👆 Click on any point in the PCA plot to see its SAE latent activations in the cluster."
+            # )
             feature_plot = plot_feature_activations(
                 results["all_graph_feature_acts"],
                 point_index=None,
@@ -697,15 +727,20 @@ def main():
     #         )
     with bottom_right:
         st.markdown(
-            '<p class="section-text">Latent Activation Strength</p>',
+            '<p class="section-text">SAE Latent Activation Landscape</p>',
             unsafe_allow_html=True,
+        )
+        st.markdown(
+            """
+            Activation of an SAE latent for all points in the PCA. 
+            """
         )
         # Add feature selector dropdown with sorted options
         sorted_features = sorted(fs_splitting_nodes)
         selected_feature = st.selectbox(
             "Select latent to visualize activation strength:",
             options=sorted_features,
-            format_func=lambda x: f"Feature {x}",
+            format_func=lambda x: f"SAE Latent {x}",
         )
 
         # Get index of selected feature in fs_splitting_nodes
@@ -724,7 +759,7 @@ def main():
 
     # Move Neuronpedia section below the quadrants
     st.markdown(
-        '<p class="subtitle-text">Feature dashboards from Neuronpedia</p>',
+        '<p class="subtitle-text">SAE latent dashboards from Neuronpedia</p>',
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -741,7 +776,7 @@ def main():
             embed_url = get_neuronpedia_embed_url(
                 model, sae_release, feature_idx, sae_id
             )
-            st.markdown(f"#### Feature {feature_idx}")
+            st.markdown(f"#### SAE Latent {feature_idx}")
             st.markdown(
                 f'<iframe src="{embed_url}" '
                 'title="Neuronpedia" '
@@ -755,7 +790,7 @@ def main():
                 embed_url = get_neuronpedia_embed_url(
                     model, sae_release, feature_idx, sae_id
                 )
-                st.markdown(f"#### Feature {feature_idx}")
+                st.markdown(f"#### SAE Latent {feature_idx}")
                 st.markdown(
                     f'<iframe src="{embed_url}" '
                     'title="Neuronpedia" '
