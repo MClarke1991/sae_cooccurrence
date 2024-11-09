@@ -377,6 +377,23 @@ def main():
         '<p class="title-text">SAE Latent Cooccurrence Explorer</p>',
         unsafe_allow_html=True,
     )
+    with st.expander("What is SAE Latent Co-occurrence?"):
+        st.markdown("""
+            SAE (Sparse Autoencoder) latent co-occurrence analysis helps us understand how different features learned by 
+            the autoencoder tend to activate together. When two features frequently activate at the same time across many examples,
+            we say they "co-occur". This tool visualizes these co-occurrence patterns to help understand the relationships
+            between different learned SAE latents, and demonstrates how this co-occurrence maps interpretable subspaces. 
+            
+            For a given cluster of SAE latents we:
+
+            - Search through the training data for examples of prompts that activate these latents
+            - Use a PCA to represent the vectors made up of the same of feature activations from only the SAE latents in that cluster
+            - This is to explore if these latents are more explicable as a group
+            
+            For a cluster of co-occurring latents we show this PCA plot, and the corresponding co-occurrence graph. 
+            Click on any point in the PCA plot to see the relative strength of activations for that token and context, and 
+            how these separate across the PCA dimensions. We also show the Neuronpedia links for the SAE latents in the cluster to show their general properties. 
+        """)
 
     git_root = get_git_root()
     config = load_streamlit_config(
