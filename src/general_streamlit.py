@@ -324,7 +324,7 @@ def simplify_token_display(tokens: list, remove_counts: bool = True) -> list:
     cleaned = [re.sub(r"^\(", "", token) for token in cleaned]
     cleaned = [re.sub(r"\)$", "", token) for token in cleaned]
 
-    return cleaned
+    return list(cleaned)
 
 
 def main():
