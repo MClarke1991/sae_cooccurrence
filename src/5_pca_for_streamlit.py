@@ -167,7 +167,7 @@ def main():
     git_root = get_git_root()
 
     # Load configuration from TOML
-    config = load_streamlit_config("config_pca_streamlit.toml")
+    config = load_streamlit_config("config_pca_streamlit_maxexamples.toml")
 
     model_name = config["model"]["name"]
     sae_release_short = config["model"]["sae_release_short"]
@@ -178,7 +178,7 @@ def main():
     subgraph_sizes_to_plot = config["processing"]["subgraph_sizes_to_plot"]
     max_examples = config["processing"]["max_examples"]
     trim_excess = config["processing"]["trim_excess"]
-    n_batches_generation = config["generation"]["n_batches"]
+    n_batches_generation = config["generation"]["n_batches_generation"]
 
     if model_name == "gemma-2-2b" and not remove_special_tokens:
         raise ValueError("Gemma requires removing special tokens")
