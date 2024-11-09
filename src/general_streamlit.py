@@ -1,6 +1,7 @@
 import glob
 import logging
 import re
+from html import escape
 from os.path import join as pj
 
 import h5py
@@ -668,7 +669,11 @@ def main():
                 point_index = matching_points.index[0]
                 # Create two columns for token and context display
                 st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
-                st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
+                # Sanitize the context
+                sanitized_context = escape(
+                    str(pca_df.loc[point_index, "context"])
+                ).replace("\n", "\\n")
+                st.markdown(f"**Context:** {sanitized_context}")
         else:
             st.info(
                 " 👆 Click on a point in the PCA plot to see token and context details."
@@ -683,7 +688,7 @@ def main():
             The plot below shows the relative strength of SAE latent activations for all latents in the cluster at a particular point in the PCA. 
             """
         )
-        st.write("#")
+        # st.write("#")
         if not selected_points:
             # st.info(
             #     "👆 Click on any point in the PCA plot to see its SAE latent activations in the cluster."
@@ -713,18 +718,18 @@ def main():
                 st.plotly_chart(feature_plot, use_container_width=True)
 
     # with bottom_right:
-    st.markdown('<p class="section-text">Token and Context</p>', unsafe_allow_html=True)
-    if selected_points:
-        matching_points = pca_df[
-            (pca_df["PC2"] == selected_points[0]["x"])
-            & (pca_df["PC3"] == selected_points[0]["y"])
-        ]
-        if not matching_points.empty:
-            point_index = matching_points.index[0]
-            st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
-            st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
-    else:
-        st.info("Click on a point in the PCA plot to see token and context details.")
+    # st.markdown('<p class="section-text">Token and Context</p>', unsafe_allow_html=True)
+    # if selected_points:
+    #     matching_points = pca_df[
+    #         (pca_df["PC2"] == selected_points[0]["x"])
+    #         & (pca_df["PC3"] == selected_points[0]["y"])
+    #     ]
+    #     if not matching_points.empty:
+    #         point_index = matching_points.index[0]
+    #         st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
+    #         st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
+    # else:
+    #     st.info("Click on a point in the PCA plot to see token and context details.")
     with bottom_right:
         st.write("#")
         st.markdown(
