@@ -4,10 +4,31 @@ from os.path import join as pj
 import h5py
 import numpy as np
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import psutil
 import toml
 
 from sae_cooccurrence.utils.set_paths import get_git_root
+
+
+def generate_color_palette(n_colors):
+    # Start with qualitative color scales
+    colors = (
+        px.colors.qualitative.Plotly
+        + px.colors.qualitative.D3
+        + px.colors.qualitative.G10
+        + px.colors.qualitative.T10
+        + px.colors.qualitative.Alphabet
+    )
+
+    # If we need more colors, interpolate between existing ones
+    if n_colors > len(colors):
+        return n_colors(
+            "rgb(5, 200, 200)", "rgb(200, 10, 10)", max(n_colors, len(colors))
+        )[:n_colors]
+    else:
+        return colors[:n_colors]
 
 
 def log_memory_usage(location: str) -> None:
@@ -83,3 +104,138 @@ def load_subgraph_data(file_path, subgraph_id, load_options):
 
     log_memory_usage("end of load_subgraph_data")
     return results, pca_df
+
+
+def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
+    # Extract max feature indices and whether they're in the graph
+    max_feature_indices = max_feature_info[:, 1].astype(int)
+    max_feature_in_graph = max_feature_info[:, 2].astype(bool)
+
+    # Create a color map for fs_splitting_nodes
+    unique_features = np.unique(fs_splitting_nodes)
+    n_unique = len(unique_features)
+
+    color_palette = generate_color_palette(n_unique)
+    color_map = dict(zip(unique_features, color_palette))
+
+    # Create figure with points grouped by feature for legend
+    fig = go.Figure()
+
+    # Add grey points for features not in graph
+    grey_points = ~max_feature_in_graph
+    if any(grey_points):
+        fig.add_trace(
+            go.Scatter(
+                x=pca_df.loc[grey_points, "PC2"],
+                y=pca_df.loc[grey_points, "PC3"],
+                mode="markers",
+                marker=dict(color="grey"),
+                name="Not in graph",
+                hovertemplate=(
+                    "Token: %{customdata[0]}<br>"
+                    "Context: %{customdata[1]}<br>"
+                    "Feature: %{customdata[2]}<br>"
+                    "<extra></extra>"
+                ),
+                customdata=np.column_stack(
+                    (
+                        pca_df.loc[grey_points, "tokens"],
+                        pca_df.loc[grey_points, "context"],
+                        max_feature_indices[grey_points],
+                    )
+                ),
+            )
+        )
+
+    # Add points for each feature in fs_splitting_nodes
+    for feature in unique_features:
+        feature_points = (max_feature_indices == feature) & max_feature_in_graph
+        if any(feature_points):
+            fig.add_trace(
+                go.Scatter(
+                    x=pca_df.loc[feature_points, "PC2"],
+                    y=pca_df.loc[feature_points, "PC3"],
+                    mode="markers",
+                    marker=dict(color=color_map[feature]),
+                    name=f"Feature {feature}",
+                    hovertemplate=(
+                        "Token: %{customdata[0]}<br>"
+                        "Context: %{customdata[1]}<br>"
+                        "Feature: %{customdata[2]}<br>"
+                        "<extra></extra>"
+                    ),
+                    customdata=np.column_stack(
+                        (
+                            pca_df.loc[feature_points, "tokens"],
+                            pca_df.loc[feature_points, "context"],
+                            max_feature_indices[feature_points],
+                        )
+                    ),
+                )
+            )
+
+    fig.update_layout(
+        xaxis_title="PC2",
+        yaxis_title="PC3",
+        hovermode="closest",
+        hoverdistance=5,
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="right",
+            x=0.99,
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            bordercolor="rgba(0,0,0,0.2)",
+            borderwidth=1,
+            font=dict(size=10),
+        ),
+        margin=dict(l=40, r=40, t=40, b=60),
+        autosize=True,
+        # height = 600,
+        # width=800,  # You can adjust this value
+        # height=800,  # Make height equal to width
+    )
+
+    return fig, color_map
+
+
+def plot_feature_activations(
+    all_graph_feature_acts, point_index, fs_splitting_nodes, context=None
+):
+    if point_index is None:
+        fig = go.Figure()
+        fig.update_layout(
+            autosize=True,
+            # height=600,
+            # width=800,
+            title="Instructions",
+            annotations=[
+                dict(
+                    text="Click on a point in the PCA plot to see its feature activations",
+                    xref="paper",
+                    yref="paper",
+                    x=0.5,
+                    y=0.5,
+                    showarrow=False,
+                )
+            ],
+        )
+        return fig
+
+    activations = all_graph_feature_acts[point_index]
+    trace = go.Bar(
+        x=[f"Feature {i}" for i in fs_splitting_nodes],
+        y=activations,
+        marker_color="blue",
+    )
+
+    fig = go.Figure(data=[trace])
+    fig.update_layout(
+        height=600,
+        width=800,
+        title=f'Context: "{context}"' if context else "Feature Activations",
+        xaxis_title="Feature",
+        yaxis_title="Activation",
+        hovermode=False,
+    )
+    return fig
