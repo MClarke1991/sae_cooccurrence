@@ -13,7 +13,10 @@ import streamlit.components.v1 as components
 import streamlit_plotly_events as spe
 from scipy import sparse
 
-from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
+from sae_cooccurrence.normalised_cooc_functions import (
+    create_results_dir,
+    neat_sae_id,
+)
 from sae_cooccurrence.pca import (
     generate_subgraph_plot_data_sparse,
     plot_pca_feature_strength_streamlit,
@@ -254,6 +257,7 @@ def main():
     show_max_examples = config["streamlit"]["dev"]["show_max_examples"]
     show_batch_size = config["streamlit"]["dev"]["show_batch_size"]
     model_to_max_examples = config["models"]["max_examples"]
+    n_batches_generation = config["generation"]["n_batches"]
 
     with st.sidebar:
         st.markdown(
@@ -338,9 +342,9 @@ def main():
                 "sae_id", st.session_state.sae_id_selector
             ),
         )
-        results_root = pj(
-            git_root,
-            f"results/{model}/{sae_release}/{sae_id}",
+
+        results_root = create_results_dir(
+            model, sae_release, sae_id, n_batches_generation
         )
 
         # st.markdown('<p class="section-text">Size Settings</p>', unsafe_allow_html=True)

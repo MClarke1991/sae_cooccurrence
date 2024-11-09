@@ -9,7 +9,11 @@ import torch
 from sae_lens import ActivationsStore
 from tqdm.autonotebook import tqdm
 
-from sae_cooccurrence.normalised_cooc_functions import get_sae_release, neat_sae_id
+from sae_cooccurrence.normalised_cooc_functions import (
+    create_results_dir,
+    get_sae_release,
+    neat_sae_id,
+)
 from sae_cooccurrence.pca import perform_pca_on_results, process_examples
 from sae_cooccurrence.streamlit import load_streamlit_config
 from sae_cooccurrence.utils.saving_loading import load_model_and_sae, set_device
@@ -174,6 +178,7 @@ def main():
     subgraph_sizes_to_plot = config["processing"]["subgraph_sizes_to_plot"]
     max_examples = config["processing"]["max_examples"]
     trim_excess = config["processing"]["trim_excess"]
+    n_batches_generation = config["generation"]["n_batches"]
 
     if model_name == "gemma-2-2b" and not remove_special_tokens:
         raise ValueError("Gemma requires removing special tokens")
@@ -185,7 +190,9 @@ def main():
     for sae_id in sae_ids:
         # Paths and logging setup
         sae_id_neat = neat_sae_id(sae_id)
-        results_dir = f"results/{model_name}/{sae_release_short}/{sae_id_neat}"
+        results_dir = create_results_dir(
+            model_name, sae_release_short, sae_id_neat, n_batches_generation
+        )
         results_path = pj(git_root, results_dir)
 
         output_dir = pj(git_root, results_dir, f"{sae_id_neat}_pca_for_streamlit")
