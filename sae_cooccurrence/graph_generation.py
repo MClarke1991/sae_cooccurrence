@@ -173,7 +173,7 @@ def remove_low_weight_edges(matrix: np.ndarray, edge_threshold: float) -> np.nda
     matrix_copy = np.copy(matrix)
 
     # Set edges below the threshold to 0
-    matrix_copy[matrix_copy < edge_threshold] = 0
+    matrix_copy[matrix_copy < edge_threshold] = 0  # type: ignore
 
     return matrix_copy
 
@@ -343,7 +343,9 @@ def create_node_info_dataframe(
     node_info_data = []
     subgraph_nodes = {}
 
-    for i, subgraph in enumerate(tqdm(subgraphs, desc="Generating node info")):
+    for i, subgraph in enumerate(
+        tqdm(subgraphs, desc="Generating node info", leave=False)
+    ):
         nodes = list(subgraph.nodes())
         subgraph_nodes[i] = nodes
         subgraph_size = len(subgraph)
@@ -458,7 +460,7 @@ def create_subgraph_plot(subgraph, node_info_df, edge_threshold):
     min_weight = min(edge_weights)
     max_weight = max(edge_weights)
     normalized_edge_weights = [
-        (weight - min_weight) / (max_weight - min_weight + 1e6)
+        (weight - float(min_weight)) / (float(max_weight) - float(min_weight) + 1e6)
         for weight in edge_weights
     ]
 
@@ -610,7 +612,7 @@ def plot_subgraph_static(
         min_activation = min(subgraph_activations)
         max_activation = max(subgraph_activations)
 
-    activation_range = max_activation - min_activation
+    activation_range = float(max_activation) - float(min_activation)
 
     # Prepare node labels and colors
     labels = {}
