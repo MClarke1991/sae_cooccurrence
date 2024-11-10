@@ -631,6 +631,8 @@ def main():
             pca_df=pca_df,
             feature_activations=feature_activations,
             feature_idx=selected_feature,
+            pc_x=x_dim,
+            pc_y=y_dim,
         )
         st.plotly_chart(feature_strength_plot, use_container_width=True)
 

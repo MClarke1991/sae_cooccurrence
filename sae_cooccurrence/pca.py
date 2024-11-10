@@ -1013,22 +1013,21 @@ def plot_pca_feature_strength(
 
 
 def plot_pca_feature_strength_streamlit(
-    pca_df,
-    feature_activations,
-    feature_idx,
-    pc_x="PC2",
-    pc_y="PC3",
-    activation_threshold=0.1,
-):
+    pca_df: pd.DataFrame,
+    feature_activations: np.ndarray,
+    feature_idx: int,
+    pc_x: str = "PC1",
+    pc_y: str = "PC2",
+    activation_threshold: float = 0.1,
+) -> go.Figure:
     """Plot PCA colored by activation strength for a single selected feature.
 
     Args:
         pca_df: DataFrame with PCA coordinates and metadata
         feature_activations: Array of activation values for the selected feature
         feature_idx: Index of the selected feature
-        pc_x: X-axis principal component (default "PC2")
-        pc_y: Y-axis principal component (default "PC3")
-        activation_threshold: Minimum activation value for color scale
+        pc_x: X-axis principal component (default "PC1")
+        pc_y: Y-axis principal component (default "PC2")
     """
     # Create custom colormap that uses white for low values
     cmap = plt.cm.get_cmap("viridis")
