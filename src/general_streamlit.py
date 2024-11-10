@@ -13,7 +13,10 @@ import streamlit.components.v1 as components
 import streamlit_plotly_events as spe
 from scipy import sparse
 
-from sae_cooccurrence.normalised_cooc_functions import neat_sae_id
+from sae_cooccurrence.normalised_cooc_functions import (
+    create_results_dir,
+    neat_sae_id,
+)
 from sae_cooccurrence.pca import (
     generate_subgraph_plot_data_sparse,
     plot_pca_feature_strength_streamlit,
@@ -249,7 +252,7 @@ def main():
     )
     load_options = config["processing"]["load_options"]
     models = config["streamlit"]["models"]
-    model_to_batch_size = config["models"]["batch_sizes"]
+    model_to_batch_size = config["models"]["pca_batch_sizes"]
     use_max_examples = config["processing"]["load_options"]["use_max_examples"]
     show_max_examples = config["streamlit"]["dev"]["show_max_examples"]
     show_batch_size = config["streamlit"]["dev"]["show_batch_size"]
@@ -338,9 +341,12 @@ def main():
                 "sae_id", st.session_state.sae_id_selector
             ),
         )
-        results_root = pj(
-            git_root,
-            f"results/{model}/{sae_release}/{sae_id}",
+
+        release_to_generation_batch_size = config["releases"]["generation_batch_sizes"]
+        n_batches_generation = release_to_generation_batch_size[sae_release]
+
+        results_root = create_results_dir(
+            model, sae_release, sae_id, n_batches_generation
         )
 
         # st.markdown('<p class="section-text">Size Settings</p>', unsafe_allow_html=True)
