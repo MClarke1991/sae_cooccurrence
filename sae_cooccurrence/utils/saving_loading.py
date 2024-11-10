@@ -103,7 +103,7 @@ def load_npz_files(directory, file_prefix):
     if not file_list:
         # Try looking in a subdirectory
         subdirectory = os.path.join(
-            directory, f"raw_cooc_{os.path.basename(directory)}"
+            directory, f"raw_cooc_{os.path.basename(os.path.dirname(directory))}"
         )
         if os.path.exists(subdirectory):
             directory = subdirectory
