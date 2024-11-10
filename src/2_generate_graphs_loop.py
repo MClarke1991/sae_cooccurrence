@@ -29,6 +29,7 @@ from sae_cooccurrence.graph_generation import (
     remove_self_loops_inplace,
 )
 from sae_cooccurrence.normalised_cooc_functions import (
+    create_results_dir,
     get_sae_release,
     neat_sae_id,
     setup_logging,
@@ -49,7 +50,8 @@ def process_sae_for_graph(sae_id: str, config: dict, device: str) -> None:
 
     This first: finds a threshold of edge weight such that we decompose the graph into connected components,
     that are below a threshold in size.
-    Then: generates graphs from the normalised feature co-occurrence matrices and outputs dataframes of their nodes' information, as well as visualisations of their subgraphs, and pickle files of the subgraph objects for later revisualisation.
+    Then: generates graphs from the normalised feature co-occurrence matrices and outputs dataframes of their nodes' information,
+    as well as visualisations of their subgraphs, and pickle files of the subgraph objects for later revisualisation.
 
     Parameters:
     sae_id (str): The unique identifier for the SAE.
@@ -60,8 +62,11 @@ def process_sae_for_graph(sae_id: str, config: dict, device: str) -> None:
     sae_release = get_sae_release(
         config["generation"]["model_name"], config["generation"]["sae_release_short"]
     )
-    results_dir = (
-        f"results/{config['generation']['model_name']}/{sae_release}/{sae_id_neat}"
+    results_dir = create_results_dir(
+        config["generation"]["model_name"],
+        config["generation"]["sae_release_short"],
+        sae_id_neat,
+        config["generation"]["n_batches"],
     )
     results_path = pj(get_git_root(), results_dir)
 
@@ -283,7 +288,9 @@ def process_subgraphs(
 ):
     graphs, subgraph_lists, node_info_dfs = {}, {}, {}
 
-    for key, matrix in tqdm(thresholded_matrices.items(), leave=False):
+    for key, matrix in tqdm(
+        thresholded_matrices.items(), leave=False, desc="Processing subgraphs"
+    ):
         graph = create_graph_from_matrix(matrix)
         graphs[key] = graph
         subgraphs = get_subgraphs(graph)

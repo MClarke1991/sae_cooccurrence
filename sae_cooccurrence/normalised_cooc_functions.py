@@ -655,3 +655,11 @@ def load_all_feature_matrices(
     prop_matrices = load_npz_files(directory, "feature_acts_cooc_prop")
 
     return total_matrices, prop_matrices
+
+
+def create_results_dir(
+    model_name: str, sae_release_short: str, sae_id_neat: str, n_batches: int
+) -> str:
+    return (
+        f"results/{model_name}/{sae_release_short}/{sae_id_neat}/n_batches_{n_batches}"
+    )

@@ -14,7 +14,7 @@ from sae_cooccurrence.graph_generation import (
     remove_self_loops_inplace,
 )
 from sae_cooccurrence.normalised_cooc_functions import (
-    get_sae_release,
+    create_results_dir,
     neat_sae_id,
     setup_logging,
 )
@@ -32,11 +32,14 @@ def process_sae_for_graph(sae_id: str, config: dict) -> None:
     Only generates and saves thresholded matrices.
     """
     sae_id_neat = neat_sae_id(sae_id)
-    sae_release = get_sae_release(
-        config["generation"]["model_name"], config["generation"]["sae_release_short"]
-    )
-    results_dir = (
-        f"results/{config['generation']['model_name']}/{sae_release}/{sae_id_neat}"
+    # sae_release = get_sae_release(
+    #     config["generation"]["model_name"], config["generation"]["sae_release_short"]
+    # )
+    results_dir = create_results_dir(
+        config["generation"]["model_name"],
+        config["generation"]["sae_release_short"],
+        sae_id_neat,
+        n_batches=config["generation"]["n_batches"],
     )
     results_path = pj(get_git_root(), results_dir)
 
@@ -139,7 +142,7 @@ def main():
     torch.set_grad_enabled(False)
     git_root = get_git_root()
 
-    config = toml.load(pj(git_root, "src", "config_gemma.toml"))
+    config = toml.load(pj(git_root, "src", "config.toml"))
 
     for sae_id in tqdm(config["generation"]["sae_ids"], desc="Processing SAE IDs"):
         process_sae_for_graph(sae_id, config)
