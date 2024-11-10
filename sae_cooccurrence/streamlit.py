@@ -106,7 +106,7 @@ def load_subgraph_data(file_path, subgraph_id, load_options):
     return results, pca_df
 
 
-def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
+def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes, pc_x="PC2", pc_y="PC3"):
     # Extract max feature indices and whether they're in the graph
     max_feature_indices = max_feature_info[:, 1].astype(int)
     max_feature_in_graph = max_feature_info[:, 2].astype(bool)
@@ -126,8 +126,8 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
     if any(grey_points):
         fig.add_trace(
             go.Scatter(
-                x=pca_df.loc[grey_points, "PC2"],
-                y=pca_df.loc[grey_points, "PC3"],
+                x=pca_df.loc[grey_points, pc_x],
+                y=pca_df.loc[grey_points, pc_y],
                 mode="markers",
                 marker=dict(color="grey"),
                 name="Not in graph",
@@ -153,8 +153,8 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
         if any(feature_points):
             fig.add_trace(
                 go.Scatter(
-                    x=pca_df.loc[feature_points, "PC2"],
-                    y=pca_df.loc[feature_points, "PC3"],
+                    x=pca_df.loc[feature_points, pc_x],
+                    y=pca_df.loc[feature_points, pc_y],
                     mode="markers",
                     marker=dict(color=color_map[feature]),
                     name=f"Feature {feature}",
@@ -175,8 +175,8 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
             )
 
     fig.update_layout(
-        xaxis_title="PC2",
-        yaxis_title="PC3",
+        xaxis_title=pc_x,
+        yaxis_title=pc_y,
         hovermode="closest",
         hoverdistance=5,
         legend=dict(
@@ -191,9 +191,6 @@ def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes):
         ),
         margin=dict(l=40, r=40, t=40, b=60),
         autosize=True,
-        # height = 600,
-        # width=800,  # You can adjust this value
-        # height=800,  # Make height equal to width
     )
 
     return fig, color_map

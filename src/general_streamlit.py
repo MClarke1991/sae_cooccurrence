@@ -457,11 +457,29 @@ def main():
             Colours represent the most active latent in the cluster. Click on any point to see detailed activations.
             """
         )
+
+        # Add PCA dimension selector
+        pca_dims = st.selectbox(
+            "Select PCA dimensions to plot:",
+            options=["PC1 vs PC2", "PC2 vs PC3", "PC1 vs PC3"],
+            index=1,  # Default to PC2 vs PC3
+        )
+
+        # Map selection to column names
+        dim_mapping = {
+            "PC1 vs PC2": ("PC1", "PC2"),
+            "PC2 vs PC3": ("PC2", "PC3"),
+            "PC1 vs PC3": ("PC1", "PC3"),
+        }
+        x_dim, y_dim = dim_mapping[pca_dims]
+
         log_memory_usage("before PCA plot")
         pca_plot, color_map = plot_pca_2d(
             pca_df=pca_df,
             max_feature_info=results["all_max_feature_info"],
             fs_splitting_nodes=fs_splitting_nodes,
+            pc_x=x_dim,
+            pc_y=y_dim,
         )
         log_memory_usage("after PCA plot")
 
@@ -476,7 +494,7 @@ def main():
             selected_x = selected_points[0]["x"]
             selected_y = selected_points[0]["y"]
             matching_points = pca_df[
-                (pca_df["PC2"] == selected_x) & (pca_df["PC3"] == selected_y)
+                (pca_df[x_dim] == selected_x) & (pca_df[y_dim] == selected_y)
             ]
             if not matching_points.empty:
                 point_index = matching_points.index[0]
@@ -515,8 +533,8 @@ def main():
     with bottom_left:
         if selected_points:
             matching_points = pca_df[
-                (pca_df["PC2"] == selected_points[0]["x"])
-                & (pca_df["PC3"] == selected_points[0]["y"])
+                (pca_df[x_dim] == selected_points[0]["x"])
+                & (pca_df[y_dim] == selected_points[0]["y"])
             ]
             if not matching_points.empty:
                 point_index = matching_points.index[0]
@@ -556,8 +574,8 @@ def main():
             update_url_params("point_x", str(selected_points[0]["x"]))
             update_url_params("point_y", str(selected_points[0]["y"]))
             matching_points = pca_df[
-                (pca_df["PC2"] == selected_points[0]["x"])
-                & (pca_df["PC3"] == selected_points[0]["y"])
+                (pca_df[x_dim] == selected_points[0]["x"])
+                & (pca_df[y_dim] == selected_points[0]["y"])
             ]
             if not matching_points.empty:
                 point_index = matching_points.index[0]
