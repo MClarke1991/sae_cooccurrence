@@ -6,7 +6,7 @@ import pickle
 from collections import Counter
 from dataclasses import dataclass, field
 from os.path import join as pj
-from typing import Any, Literal
+from typing import Any, Literal, Mapping
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -2982,20 +2982,207 @@ def analyze_specific_points_animated(
 
     return fig
 
+
+def analyze_specific_points_animated_from_thresholded(
+    results: ProcessedExamples | ReprocessedResults,
+    thresholded_matrix: np.ndarray,
+    fs_splitting_nodes: list[int],
+    fs_splitting_cluster: int,
+    # activation_threshold: float,
+    node_df: pd.DataFrame,
+    # results_path: str,
+    pca_df: pd.DataFrame,
+    point_ids: list[int],
+    plot_only_fs_nodes: bool = False,
+    save_gif: bool = False,
+    gif_path: str = "animation.gif",
+):
+    # Create subplots
+    fig = make_subplots(
+        rows=1,
+        cols=3,
+        subplot_titles=("PCA Plot", "Feature Activation", "Subgraph Visualization"),
+        specs=[[{"type": "xy"}, {"type": "xy"}, {"type": "xy"}]],
+        horizontal_spacing=0.1,
+    )
+
+    # Calculate fixed node positions for the subgraph
+    subgraph, subgraph_df = generate_subgraph_plot_data(
+        thresholded_matrix, node_df, fs_splitting_cluster
+    )
+    fixed_pos = nx.spring_layout(
+        subgraph, seed=42, k=0.5
+    )  # Use a fixed seed for consistency
+
+    # Calculate global maximum activation
+    global_max_activation = 0
+    for point_id in point_ids:
+        point_result = get_point_result(results, point_id)
+        df, _ = prepare_data(point_result, fs_splitting_nodes, node_df)
+        global_max_activation = max(global_max_activation, df["Activation"].max())
+
+    # Create frames for animation
+    frames = []
+    for point_id in point_ids:
+        frame_data, context = create_frame_data_from_thresholded(
+            results=results,
+            thresholded_matrix=thresholded_matrix,
+            fs_splitting_nodes=fs_splitting_nodes,
+            fs_splitting_cluster=fs_splitting_cluster,
+            # activation_threshold=activation_threshold,
+            node_df=node_df,
+            # results_path=results_path,
+            pca_df=pca_df,
+            point_id=point_id,
+            plot_only_fs_nodes=plot_only_fs_nodes,
+            fixed_pos=fixed_pos,
+        )
+        frame = go.Frame(
+            data=frame_data,
+            name=str(point_id),
+            layout=go.Layout(title=f"Point ID: {point_id}<br>{context}"),
+        )
+        frames.append(frame)
+
+    # Add traces for initial state (first point)
+    initial_frame_data = frames[0].data
+    for trace in initial_frame_data:
+        fig.add_trace(trace)
+
+    # Update layout
+    fig.update_layout(
+        updatemenus=[
+            {
+                "buttons": [
+                    {
+                        "args": [
+                            None,
+                            {
+                                "frame": {"duration": 500, "redraw": True},
+                                "fromcurrent": True,
+                            },
+                        ],
+                        "label": "Play",
+                        "method": "animate",
+                    },
+                    {
+                        "args": [
+                            [None],
+                            {
+                                "frame": {"duration": 0, "redraw": True},
+                                "mode": "immediate",
+                                "transition": {"duration": 0},
+                            },
+                        ],
+                        "label": "Pause",
+                        "method": "animate",
+                    },
+                ],
+                "direction": "left",
+                "pad": {"r": 10, "t": 87},
+                "showactive": False,
+                "type": "buttons",
+                "x": 0.1,
+                "xanchor": "right",
+                "y": 0,
+                "yanchor": "top",
+            }
+        ],
+        sliders=[
+            {
+                "active": 0,
+                "yanchor": "top",
+                "xanchor": "left",
+                "currentvalue": {
+                    "font": {"size": 20},
+                    "prefix": "Point ID: ",
+                    "visible": True,
+                    "xanchor": "right",
+                },
+                "transition": {"duration": 300, "easing": "cubic-in-out"},
+                "pad": {"b": 10, "t": 50},
+                "len": 0.9,
+                "x": 0.1,
+                "y": 0,
+                "steps": [
+                    {
+                        "args": [
+                            [str(point_id)],
+                            {
+                                "frame": {"duration": 300, "redraw": True},
+                                "mode": "immediate",
+                                "transition": {"duration": 300},
+                            },
+                        ],
+                        "label": str(point_id),
+                        "method": "animate",
+                    }
+                    for point_id in point_ids
+                ],
+            }
+        ],
+        height=600,
+        width=1500,
+        title=f"Point ID: {point_ids[0]}<br>{frames[0].layout.title.text.split('<br>')[1]}",
+        yaxis2=dict(
+            range=[0, global_max_activation]
+        ),  # Set fixed y-axis range for bar plot
+    )
+
+    # Add frames to the figure
+    fig.frames = frames
+
+    if save_gif:
+        # Create a folder to save individual frames
+        gif_name = os.path.splitext(os.path.basename(gif_path))[0]
+        gif_dir = os.path.dirname(gif_path)
+        frames_folder = os.path.join(gif_dir, f"{gif_name}_gif_frames")
+        print(frames_folder)
+        os.makedirs(frames_folder, exist_ok=True)
+
+        # Generate images for each frame in the animation
+        gif_frames = []
+        for i, frame in enumerate(fig.frames):
+            # Set main traces to appropriate traces within plotly frame
+            fig.update(data=frame.data)
+            # Update the title with the context for this frame
+            fig.update_layout(title=frame.layout.title)
+            # Generate image of current state with higher resolution
+            img_bytes = fig.to_image(format="png", scale=4.0)
+
+            # Save the frame as PNG
+            frame_path = os.path.join(frames_folder, f"frame_{i:04d}.png")
+            with open(frame_path, "wb") as f:
+                f.write(img_bytes)
+
+            gif_frames.append(Image.open(io.BytesIO(img_bytes)))
+
+        # Create animated GIF
+        gif_frames[0].save(
+            gif_path,
+            save_all=True,
+            append_images=gif_frames[1:],
+            optimize=True,
+            duration=1000,
+            loop=0,
+        )
+        print(f"Animation saved as GIF: {gif_path}")
+        print(f"Individual frames saved in folder: {frames_folder}")
+
     return fig
 
 
 def create_frame_data(
-    results,
-    fs_splitting_nodes,
-    fs_splitting_cluster,
-    activation_threshold,
-    node_df,
-    results_path,
-    pca_df,
-    point_id,
-    plot_only_fs_nodes,
-    fixed_pos,
+    results: ProcessedExamples,
+    fs_splitting_nodes: list[int],
+    fs_splitting_cluster: int,
+    activation_threshold: float,
+    node_df: pd.DataFrame,
+    results_path: str,
+    pca_df: pd.DataFrame,
+    point_id: int,
+    plot_only_fs_nodes: bool = False,
+    fixed_pos: Mapping[int, tuple[float, float]] | None = None,
 ):
     frame_data = []
 
@@ -3066,6 +3253,100 @@ def create_frame_data(
 
     # Subgraph Visualization
     subgraph = load_subgraph(results_path, activation_threshold, fs_splitting_cluster)
+    activation_array = point_result.all_feature_acts.flatten().cpu().numpy()
+
+    edge_trace, node_trace = create_subgraph_traces(
+        subgraph, node_df, activation_array, fixed_pos
+    )
+    frame_data.extend([edge_trace, node_trace])
+
+    return frame_data, context
+
+
+def create_frame_data_from_thresholded(
+    results: ProcessedExamples | ReprocessedResults,
+    thresholded_matrix: np.ndarray,
+    fs_splitting_nodes: list[int],
+    fs_splitting_cluster: int,
+    # activation_threshold: float,
+    node_df: pd.DataFrame,
+    # results_path: str,
+    pca_df: pd.DataFrame,
+    point_id: int,
+    plot_only_fs_nodes: bool = False,
+    fixed_pos: Mapping[int, tuple[float, float]] | None = None,
+):
+    frame_data = []
+
+    # PCA Plot
+    pca_trace = go.Scatter(
+        x=pca_df["PC2"],
+        y=pca_df["PC3"],
+        mode="markers",
+        marker=dict(
+            color=["red" if idx == point_id else "lightgrey" for idx in pca_df.index],
+            size=[15 if idx == point_id else 5 for idx in pca_df.index],
+        ),
+        text=[
+            context if idx == point_id else None
+            for idx, context in zip(pca_df.index, pca_df["context"])
+        ],
+        hoverinfo="text",
+        showlegend=False,
+        xaxis="x",
+        yaxis="y",
+    )
+    frame_data.append(pca_trace)
+
+    # Bar Plot
+    point_result = get_point_result(results, point_id)
+
+    if isinstance(point_result, ReprocessedResults):
+        raise ValueError(
+            "Passed ReprocessedResults, but cannot plot other subgraphs from Streamlit data. "
+            "Please set plot_without_other_subgraphs=True when loading data from generation or pass ProcessedExamples."
+        )
+
+    df, context = prepare_data(point_result, fs_splitting_nodes, node_df)
+
+    # Add missing fs_splitting_nodes with activity 0
+    missing_nodes = set(fs_splitting_nodes) - set(df["Feature Index"])
+    if missing_nodes:
+        missing_df = pd.DataFrame(
+            {
+                "Feature Index": list(missing_nodes),
+                "Activation": [0] * len(missing_nodes),
+                "subgraph_id": [None] * len(missing_nodes),
+                "subgraph_size": [None] * len(missing_nodes),
+            }
+        )
+        df = pd.concat([df, missing_df], ignore_index=True)
+
+    if plot_only_fs_nodes:
+        df["Feature Index"] = df["Feature Index"].astype(int)
+        df = df[df["Feature Index"].isin(fs_splitting_nodes)]
+        df = df.sort_values("Feature Index")  # type: ignore
+        df["Feature Index"] = df["Feature Index"].astype(str)
+    else:  # Sort by activation
+        df = df.sort_values("Activation", ascending=False)
+
+    bar_trace = go.Bar(
+        x=df["Feature Index"].astype(str),
+        y=df["Activation"],
+        marker_color=[
+            "red" if idx == fs_splitting_cluster else "blue"
+            for idx in df["subgraph_id"]
+        ],
+        showlegend=False,
+        xaxis="x2",
+        yaxis="y2",
+    )
+    frame_data.append(bar_trace)
+
+    # Subgraph Visualization
+    subgraph, subgraph_df = generate_subgraph_plot_data(
+        thresholded_matrix, node_df, fs_splitting_cluster
+    )
     activation_array = point_result.all_feature_acts.flatten().cpu().numpy()
 
     edge_trace, node_trace = create_subgraph_traces(
