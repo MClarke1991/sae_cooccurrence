@@ -39,7 +39,7 @@ def test_plot_pca_feature_strength_single_trace_properties(sample_data):
     """Test properties of the scatter trace in the figure."""
     pca_df, feature_activations = sample_data
     fig = plot_pca_feature_strength_streamlit(
-        pca_df, feature_activations, feature_idx=0
+        pca_df, feature_activations, feature_idx=0, pc_x="PC2", pc_y="PC3"
     )
 
     # Check there is exactly one trace
@@ -67,7 +67,7 @@ def test_plot_pca_feature_strength_single_layout_properties(sample_data):
     pca_df, feature_activations = sample_data
     feature_idx = 42
     fig = plot_pca_feature_strength_streamlit(
-        pca_df, feature_activations, feature_idx=feature_idx
+        pca_df, feature_activations, feature_idx=feature_idx, pc_x="PC2", pc_y="PC3"
     )
 
     # Check layout properties
