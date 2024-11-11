@@ -179,6 +179,32 @@ class ProcessedExamples:
     example_context: str = ""
 
 
+@dataclass
+class ReprocessedResults:
+    all_graph_feature_acts: torch.Tensor
+    all_max_feature_info: torch.Tensor
+
+
+def reprocess_results_to_processed_examples(existing_results):
+    """
+    Reprocess existing results to match the ProcessedExamples class format.
+
+    Args:
+        existing_results: The existing results to be reprocessed.
+
+    Returns:
+        ProcessedExamples: A new instance of ProcessedExamples with reprocessed data.
+    """
+    all_graph_feature_acts = existing_results["all_graph_feature_acts"]
+    all_max_feature_info = existing_results["all_max_feature_info"]
+
+    # Create a new ProcessedExamples object
+    return ReprocessedResults(
+        all_graph_feature_acts=all_graph_feature_acts,
+        all_max_feature_info=all_max_feature_info,
+    )
+
+
 def run_model_with_cache(model, tokens, sae):
     """
     Run the model with caching and return the cached activations for the SAE hook.
@@ -1929,16 +1955,24 @@ def print_statistics(df, fs_splitting_nodes, activation_threshold):
     )
 
 
-def get_point_result(results: ProcessedExamples, idx: int) -> ProcessedExamples:
-    point_result = ProcessedExamples(
-        all_token_dfs=results.all_token_dfs.iloc[[idx]],
-        all_fired_tokens=[results.all_fired_tokens[idx]],
-        all_reconstructions=results.all_reconstructions[[idx]],
-        all_graph_feature_acts=results.all_graph_feature_acts[[idx]],
-        all_feature_acts=results.all_feature_acts[[idx]],
-        all_max_feature_info=results.all_max_feature_info[[idx]],
-        all_examples_found=1,
-    )
+def get_point_result(
+    results: ProcessedExamples | ReprocessedResults, idx: int
+) -> ProcessedExamples | ReprocessedResults:
+    if isinstance(results, ReprocessedResults):
+        point_result = ReprocessedResults(
+            all_graph_feature_acts=results.all_graph_feature_acts[[idx]],
+            all_max_feature_info=results.all_max_feature_info[[idx]],
+        )
+    else:
+        point_result = ProcessedExamples(
+            all_token_dfs=results.all_token_dfs.iloc[[idx]],
+            all_fired_tokens=[results.all_fired_tokens[idx]],
+            all_reconstructions=results.all_reconstructions[[idx]],
+            all_graph_feature_acts=results.all_graph_feature_acts[[idx]],
+            all_feature_acts=results.all_feature_acts[[idx]],
+            all_max_feature_info=results.all_max_feature_info[[idx]],
+            all_examples_found=1,
+        )
     return point_result
 
 
@@ -2399,6 +2433,13 @@ def analyze_specific_points(
 
         # Extract data for this point
         point_result = get_point_result(results, point_id)
+
+        if isinstance(point_result, ReprocessedResults):
+            raise ValueError(
+                "Passed ReprocessedResults, but cannot plot other subgraphs from Streamlit data. "
+                "Please set plot_without_other_subgraphs=True when loading data from generation or pass ProcessedExamples."
+            )
+
         point_pca_path = pj(pca_path, f"point_{point_id}") if pca_path else None
 
         if point_pca_path is not None:
@@ -2554,7 +2595,7 @@ def analyze_specific_points(
 
 
 def analyze_specific_points_from_thresholded(
-    results: ProcessedExamples,
+    results: ProcessedExamples | ReprocessedResults,
     thresholded_matrix: np.ndarray,
     fs_splitting_nodes: list[int],
     fs_splitting_cluster: int,
@@ -2566,6 +2607,7 @@ def analyze_specific_points_from_thresholded(
     subdir: str | None = None,
     save_figs: bool = False,
     pca_path: str | None = None,
+    plot_without_other_subgraphs: bool = False,
 ) -> None:
     """
     Analyze and visualize specific points from the PCA plot based on their IDs.
@@ -2603,8 +2645,23 @@ def analyze_specific_points_from_thresholded(
         pie_fig = create_pie_charts(df, activation_threshold, context, color=colors[i])
 
         # Get active subgraphs
-        activation_array = point_result.all_feature_acts.flatten().cpu().numpy()
-        active_subgraph_ids = get_active_subgraph_ids(df, activation_threshold)
+        if plot_without_other_subgraphs:
+            # If loading data from the generation for streamlit then all graph feature apps
+            # will not have been saved and therefore we cannot plot the feature
+            # activations of the other subgraphs
+            activation_array = (
+                point_result.all_graph_feature_acts.flatten().cpu().numpy()
+            )
+            active_subgraph_ids = [fs_splitting_cluster]
+        elif isinstance(point_result, ProcessedExamples):
+            activation_array = point_result.all_feature_acts.flatten().cpu().numpy()
+            # If all feature acts is not part of point result raise a error that we cannot plot other subgraphs from Streamlit data
+            active_subgraph_ids = get_active_subgraph_ids(df, activation_threshold)
+        else:
+            raise ValueError(
+                "Passed ReprocessedResults, but cannot plot other subgraphs from Streamlit data. "
+                "Please set plot_without_other_subgraphs=True when loading data from generation or pass ProcessedExamples."
+            )
 
         if save_figs and pca_path:
             if subdir is not None:
@@ -2964,6 +3021,13 @@ def create_frame_data(
 
     # Bar Plot
     point_result = get_point_result(results, point_id)
+
+    if isinstance(point_result, ReprocessedResults):
+        raise ValueError(
+            "Passed ReprocessedResults, but cannot plot other subgraphs from Streamlit data. "
+            "Please set plot_without_other_subgraphs=True when loading data from generation or pass ProcessedExamples."
+        )
+
     df, context = prepare_data(point_result, fs_splitting_nodes, node_df)
 
     # Add missing fs_splitting_nodes with activity 0

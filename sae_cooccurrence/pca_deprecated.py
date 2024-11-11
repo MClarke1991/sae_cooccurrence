@@ -14,6 +14,7 @@ from plotly.subplots import make_subplots
 from sae_cooccurrence.graph_generation import plot_subgraph_static
 from sae_cooccurrence.pca import (
     ProcessedExamples,
+    ReprocessedResults,
     assign_category,
     create_bar_plot,
     create_pie_charts,
@@ -578,6 +579,11 @@ def create_comprehensive_plot_subgraph_matplotlib(
     # Plot bar charts and subgraphs for each user-specified point
     for i, idx in enumerate(highlighted_indices):
         point_result = get_point_result(results, idx)
+        if isinstance(point_result, ReprocessedResults):
+            raise ValueError(
+                "Passed ReprocessedResults, but cannot plot other subgraphs from Streamlit data. "
+                "Please set plot_without_other_subgraphs=True when loading data from generation or pass ProcessedExamples."
+            )
         df, context = prepare_data(point_result, fs_splitting_nodes, node_df)
         activation_array = point_result.all_feature_acts.squeeze().cpu().numpy()
 
