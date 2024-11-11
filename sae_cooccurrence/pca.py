@@ -3248,7 +3248,7 @@ def plot_subgraph_static_from_nx(
     activation_array: np.ndarray | None = None,
     save_figs: bool = False,
     normalize_globally: bool = True,
-    base_node_size: int = 1000,
+    base_node_size: int = 500,
     colour_when_inactive: bool = True,
     plot_token_factors: bool = False,
     show_plot: bool = True,
@@ -3278,8 +3278,11 @@ def plot_subgraph_static_from_nx(
     # Create a new figure
     plt.figure(figsize=(7, 7))
 
-    # Create a layout for our nodes
-    pos = nx.spring_layout(subgraph, k=0.5, iterations=50, seed=1234)
+    # Create a layout for our nodes - matched to interactive version
+    pos = nx.spring_layout(subgraph, seed=42, k=0.5)  # Fixed seed and k value to match
+
+    # Scale positions to match interactive version's scale
+    pos = {node: (coord[0] * 500, coord[1] * 500) for node, coord in pos.items()}
 
     # Use provided activation_array if available, otherwise use subgraph_df
     if activation_array is None:
@@ -3359,23 +3362,24 @@ def plot_subgraph_static_from_nx(
     else:
         edge_thickness = []
 
-    # Draw the graph
+    # Draw the graph with adjusted parameters
     nx.draw(
         subgraph,
         pos,
         with_labels=False,
-        node_size=node_sizes,  # Use calculated node sizes
+        node_size=node_sizes,
         node_color=node_colors,
         edgecolors="black",
-        linewidths=3,
+        linewidths=2,  # Changed to match interactive version
         edge_color=(0.5, 0.5, 0.5, 0.75),
         width=edge_thickness,
         arrows=True,
     )
 
-    # Add node labels outside the nodes
-    # Adjust label positions based on node sizes
-    label_pos = {k: (v[0], v[1] - 0.15) for k, v in pos.items()}
+    # Adjust label positions with scaled coordinates
+    label_pos = {
+        k: (v[0], v[1] - 75) for k, v in pos.items()
+    }  # Adjusted offset for scale
     nx.draw_networkx_labels(subgraph, label_pos, labels, font_size=8)
 
     plt.axis("off")
