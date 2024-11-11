@@ -3,6 +3,7 @@ import io
 import logging
 import os
 import pickle
+import re
 from collections import Counter
 from dataclasses import dataclass, field
 from os.path import join as pj
@@ -31,6 +32,12 @@ from sae_cooccurrence.graph_generation import load_subgraph, plot_subgraph_stati
 from sae_cooccurrence.normalised_cooc_functions import (
     get_special_tokens,
 )
+
+# Disable mathjax for plotly
+# This is required because the context for Gemma contains a lot of
+# LaTeX symbols and no matter how you try to escape the dollar signs they
+# WILL cause the formatting to mess up in plotly.
+plotly.io.kaleido.scope.mathjax = None
 
 
 def assign_category(row, fs_splitting_cluster, order_other_subgraphs=False):
@@ -2946,6 +2953,9 @@ def analyze_specific_points_animated(
     if save_gif:
         # Create a folder to save individual frames
         gif_name = os.path.splitext(os.path.basename(gif_path))[0]
+        # if gif_name does not end in .gif append this
+        if not gif_name.endswith(".gif"):
+            gif_name += ".gif"
         gif_dir = os.path.dirname(gif_path)
         frames_folder = os.path.join(gif_dir, f"{gif_name}_gif_frames")
         print(frames_folder)
@@ -2957,7 +2967,7 @@ def analyze_specific_points_animated(
             # Set main traces to appropriate traces within plotly frame
             fig.update(data=frame.data)
             # Update the title with the context for this frame
-            fig.update_layout(title=frame.layout.title)
+            fig.update_layout(title=repr(frame.layout.title.text))
             # Generate image of current state with higher resolution
             img_bytes = fig.to_image(format="png", scale=4.0)
 
@@ -2996,6 +3006,8 @@ def analyze_specific_points_animated_from_thresholded(
     plot_only_fs_nodes: bool = False,
     save_gif: bool = False,
     gif_path: str = "animation.gif",
+    gif_filename: str = "animation.gif",
+    frame_folder_name: str = "gif_frames",
 ):
     # Create subplots
     fig = make_subplots(
@@ -3037,10 +3049,13 @@ def analyze_specific_points_animated_from_thresholded(
             plot_only_fs_nodes=plot_only_fs_nodes,
             fixed_pos=fixed_pos,
         )
+        # context = "TESTTESTTEST"
         frame = go.Frame(
             data=frame_data,
             name=str(point_id),
-            layout=go.Layout(title=f"Point ID: {point_id}<br>{context}"),
+            layout=go.Layout(
+                title=f"Point ID: {point_id}<br>{sanitise_context(context)}"
+            ),
         )
         frames.append(frame)
 
@@ -3048,7 +3063,7 @@ def analyze_specific_points_animated_from_thresholded(
     initial_frame_data = frames[0].data
     for trace in initial_frame_data:
         fig.add_trace(trace)
-
+    print(frames[0].layout.title.text)
     # Update layout
     fig.update_layout(
         updatemenus=[
@@ -3123,7 +3138,7 @@ def analyze_specific_points_animated_from_thresholded(
         ],
         height=600,
         width=1500,
-        title=f"Point ID: {point_ids[0]}<br>{frames[0].layout.title.text.split('<br>')[1]}",
+        # title=f"Point ID: {point_ids[0]}<br>{frames[0].layout.title.text.split('<br>')[1]}",
         yaxis2=dict(
             range=[0, global_max_activation]
         ),  # Set fixed y-axis range for bar plot
@@ -3133,10 +3148,11 @@ def analyze_specific_points_animated_from_thresholded(
     fig.frames = frames
 
     if save_gif:
+        if not gif_filename.endswith(".gif"):
+            gif_filename += ".gif"
+        print(gif_filename)
         # Create a folder to save individual frames
-        gif_name = os.path.splitext(os.path.basename(gif_path))[0]
-        gif_dir = os.path.dirname(gif_path)
-        frames_folder = os.path.join(gif_dir, f"{gif_name}_gif_frames")
+        frames_folder = os.path.join(gif_path, frame_folder_name)
         print(frames_folder)
         os.makedirs(frames_folder, exist_ok=True)
 
@@ -3146,7 +3162,7 @@ def analyze_specific_points_animated_from_thresholded(
             # Set main traces to appropriate traces within plotly frame
             fig.update(data=frame.data)
             # Update the title with the context for this frame
-            fig.update_layout(title=frame.layout.title)
+            fig.update_layout(title=repr(frame.layout.title.text))
             # Generate image of current state with higher resolution
             img_bytes = fig.to_image(format="png", scale=4.0)
 
@@ -3159,7 +3175,7 @@ def analyze_specific_points_animated_from_thresholded(
 
         # Create animated GIF
         gif_frames[0].save(
-            gif_path,
+            os.path.join(gif_path, gif_filename),
             save_all=True,
             append_images=gif_frames[1:],
             optimize=True,
@@ -3195,11 +3211,11 @@ def create_frame_data(
             color=["red" if idx == point_id else "lightgrey" for idx in pca_df.index],
             size=[15 if idx == point_id else 5 for idx in pca_df.index],
         ),
-        text=[
-            context if idx == point_id else None
-            for idx, context in zip(pca_df.index, pca_df["context"])
-        ],
-        hoverinfo="text",
+        # text=[
+        #     context if idx == point_id else None
+        #     for idx, context in zip(pca_df.index, pca_df["context"])
+        # ],
+        # hoverinfo="text",
         showlegend=False,
         xaxis="x",
         yaxis="y",
@@ -3256,11 +3272,46 @@ def create_frame_data(
     activation_array = point_result.all_feature_acts.flatten().cpu().numpy()
 
     edge_trace, node_trace = create_subgraph_traces(
-        subgraph, node_df, activation_array, fixed_pos
+        subgraph, activation_array, fixed_pos
     )
     frame_data.extend([edge_trace, node_trace])
 
     return frame_data, context
+
+
+def escape_latex(string: str) -> str:
+    string = string.replace("$", "\\$")
+    return string
+
+
+def remove_markdown(string: str) -> str:
+    # Remove markdown formatting
+    # Bold and italic
+    string = re.sub(r"\*\*.*?\*\*", lambda m: m.group(0).replace("**", ""), string)
+    string = re.sub(r"\*.*?\*", lambda m: m.group(0).replace("*", ""), string)
+    string = re.sub(r"__.*?__", lambda m: m.group(0).replace("__", ""), string)
+    string = re.sub(r"_.*?_", lambda m: m.group(0).replace("_", ""), string)
+
+    # Headers
+    string = re.sub(r"#{1,6}\s", "", string)
+
+    # Links
+    string = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", string)
+
+    # Backticks for code
+    string = re.sub(r"`([^`]+)`", r"\1", string)
+
+    return string
+
+
+def sanitise_context(context: str) -> str:
+    """Sanitize context string by escaping special characters, unless already quoted."""
+    # context = escape(context, quote=True)
+    # context = remove_markdown(context)
+    # context = escape_latex(context)
+    if context.startswith('"') and context.endswith('"'):
+        return context
+    return repr(str(context))[1:-1]
 
 
 def create_frame_data_from_thresholded(
@@ -3278,6 +3329,14 @@ def create_frame_data_from_thresholded(
 ):
     frame_data = []
 
+    # Convert the context to a string
+    # Use repr() to escape special characters as plaintext (e.g., \n becomes \\n)
+    # Remove the quotes that repr() adds by slicing [1:-1]
+    # title = [
+    #         sanitise_context(context) if idx == point_id else None
+    #         for idx, context in zip(pca_df.index, pca_df["context"])
+    #     ]
+
     # PCA Plot
     pca_trace = go.Scatter(
         x=pca_df["PC2"],
@@ -3287,11 +3346,8 @@ def create_frame_data_from_thresholded(
             color=["red" if idx == point_id else "lightgrey" for idx in pca_df.index],
             size=[15 if idx == point_id else 5 for idx in pca_df.index],
         ),
-        text=[
-            context if idx == point_id else None
-            for idx, context in zip(pca_df.index, pca_df["context"])
-        ],
-        hoverinfo="text",
+        # text=title,
+        # hoverinfo="text",
         showlegend=False,
         xaxis="x",
         yaxis="y",
@@ -3302,6 +3358,7 @@ def create_frame_data_from_thresholded(
     point_result = get_point_result(results, point_id)
 
     df, context = prepare_data(point_result, fs_splitting_nodes, node_df)
+    # context = sanitise_context(context)
 
     # Add missing fs_splitting_nodes with activity 0
     missing_nodes = set(fs_splitting_nodes) - set(df["Feature Index"])
@@ -3341,17 +3398,38 @@ def create_frame_data_from_thresholded(
     subgraph, subgraph_df = generate_subgraph_plot_data(
         thresholded_matrix, node_df, fs_splitting_cluster
     )
+
+    # Relabel nodes with their actual node_ids from subgraph_df
+    node_mapping = {i: node_id for i, node_id in enumerate(subgraph_df["node_id"])}
+    subgraph = nx.relabel_nodes(subgraph, node_mapping)
     activation_array = point_result.all_graph_feature_acts.flatten().cpu().numpy()
+    fixed_pos_seq = fixed_pos
+    fixed_pos = (
+        {node_mapping[idx]: pos for idx, pos in fixed_pos_seq.items()}
+        if fixed_pos_seq
+        else None
+    )
+
+    if fixed_pos is None:
+        raise ValueError("fixed_pos is None")
 
     edge_trace, node_trace = create_subgraph_traces(
-        subgraph, node_df, activation_array, fixed_pos
+        subgraph, activation_array, fixed_pos, short_array=True
     )
     frame_data.extend([edge_trace, node_trace])
 
     return frame_data, context
 
 
-def create_subgraph_traces(subgraph, node_df, activation_array, pos):
+def create_subgraph_traces(
+    subgraph: nx.Graph,
+    activation_array: np.ndarray,
+    pos: Mapping[int, tuple[float, float]] | None,
+    short_array: bool = False,
+):
+    if pos is None:
+        raise ValueError("pos is None")
+
     edge_x, edge_y = [], []
     for edge in subgraph.edges():
         x0, y0 = pos[edge[0]]
@@ -3377,7 +3455,10 @@ def create_subgraph_traces(subgraph, node_df, activation_array, pos):
         node_y.append(y)
 
     # Normalize activation values for color scaling
-    node_activations = [activation_array[node] for node in subgraph.nodes()]
+    if not short_array:
+        node_activations = [activation_array[node] for node in subgraph.nodes()]
+    else:
+        node_activations = activation_array
     normalized_activations = (
         np.array(node_activations) - np.min(node_activations)  # type: ignore
     ) / (np.max(node_activations) - np.min(node_activations))  # type: ignore
@@ -3429,15 +3510,15 @@ def create_subgraph_traces(subgraph, node_df, activation_array, pos):
         yaxis="y3",
     )
 
-    node_hover_text = []
-    for node in subgraph.nodes():
-        node_info = node_df[node_df["node_id"] == node].iloc[0]
-        top_tokens = ast.literal_eval(node_info["top_10_tokens"])
-        node_hover_text.append(
-            f"Feature: {node}<br>Activation: {activation_array[node]:.4f}<br>Top token: {top_tokens[0]}"
-        )
+    # node_hover_text = []
+    # for node in subgraph.nodes():
+    #     node_info = node_df[node_df["node_id"] == node].iloc[0]
+    #     top_tokens = ast.literal_eval(node_info["top_10_tokens"])
+    #     node_hover_text.append(
+    #         f"Feature: {node}<br>Activation: {node_activations[node]:.4f}<br>Top token: {top_tokens[0]}"
+    #     )
 
-    node_trace.hovertext = node_hover_text
+    # node_trace.hovertext = node_hover_text
 
     return edge_trace, node_trace
 
