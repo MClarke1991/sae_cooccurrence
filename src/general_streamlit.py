@@ -530,26 +530,8 @@ def main():
         )
         components.html(html, height=400)
 
-    with bottom_left:
-        if selected_points:
-            matching_points = pca_df[
-                (pca_df[x_dim] == selected_points[0]["x"])
-                & (pca_df[y_dim] == selected_points[0]["y"])
-            ]
-            if not matching_points.empty:
-                point_index = matching_points.index[0]
-                # Create two columns for token and context display
-                st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
-                # Sanitize the context
-                sanitized_context = escape(
-                    str(pca_df.loc[point_index, "context"])
-                ).replace("\n", "\\n")
-                st.markdown(f"**Context:** {sanitized_context}")
-        else:
-            st.info(
-                " 👆 Click on a point in the PCA plot to see token and context details."
-            )
-
+    with bottom_right:
+        st.write("#")
         st.markdown(
             '<p class="section-text">All Latent Activations at point</p>',
             unsafe_allow_html=True,
@@ -601,8 +583,25 @@ def main():
     #         st.markdown(f"**Context:** {pca_df.loc[point_index, 'context']}")
     # else:
     #     st.info("Click on a point in the PCA plot to see token and context details.")
-    with bottom_right:
-        st.write("#")
+    with bottom_left:
+        if selected_points:
+            matching_points = pca_df[
+                (pca_df[x_dim] == selected_points[0]["x"])
+                & (pca_df[y_dim] == selected_points[0]["y"])
+            ]
+            if not matching_points.empty:
+                point_index = matching_points.index[0]
+                # Create two columns for token and context display
+                st.markdown(f"**Token:** {pca_df.loc[point_index, 'tokens']}")
+                # Sanitize the context
+                sanitized_context = escape(
+                    str(pca_df.loc[point_index, "context"])
+                ).replace("\n", "\\n")
+                st.markdown(f"**Context:** {sanitized_context}")
+        else:
+            st.info(
+                " 👆 Click on a point in the PCA plot to see token and context details."
+            )
         st.markdown(
             '<p class="section-text">SAE Latent Activation Landscape</p>',
             unsafe_allow_html=True,
@@ -631,6 +630,8 @@ def main():
             pca_df=pca_df,
             feature_activations=feature_activations,
             feature_idx=selected_feature,
+            pc_x=x_dim,
+            pc_y=y_dim,
         )
         st.plotly_chart(feature_strength_plot, use_container_width=True)
 
