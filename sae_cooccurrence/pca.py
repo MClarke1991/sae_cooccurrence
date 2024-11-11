@@ -279,6 +279,7 @@ def process_examples(
     device="cpu",
     max_examples=5_000_000,  # Add max_examples parameter
     trim_excess=False,
+    activation_threshold=0.0,
 ):
     """
     Process examples from the activation store using the given model and SAE, extract the tokens that the
@@ -326,7 +327,7 @@ def process_examples(
         feature_acts = feature_acts.flatten(0, 1).to(device)
 
         # Create a mask for tokens where any feature in the feature_list is activated
-        fired_mask = (feature_acts[:, feature_list]).sum(dim=-1) > 0
+        fired_mask = (feature_acts[:, feature_list]).sum(dim=-1) > activation_threshold
         fired_mask = fired_mask.to(device)
 
         if remove_special_tokens:
@@ -755,6 +756,7 @@ def generate_data(
     max_examples=5_000_000,
     trim_excess=False,
     custom_prompts=None,
+    activation_threshold=0.0,
 ):
     if custom_prompts is None:
         results = process_examples(
@@ -767,6 +769,7 @@ def generate_data(
             device=device,
             max_examples=max_examples,
             trim_excess=trim_excess,
+            activation_threshold=activation_threshold,
         )
     else:
         results = process_custom_prompts(
