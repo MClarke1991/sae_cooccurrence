@@ -3301,12 +3301,6 @@ def create_frame_data_from_thresholded(
     # Bar Plot
     point_result = get_point_result(results, point_id)
 
-    if isinstance(point_result, ReprocessedResults):
-        raise ValueError(
-            "Passed ReprocessedResults, but cannot plot other subgraphs from Streamlit data. "
-            "Please set plot_without_other_subgraphs=True when loading data from generation or pass ProcessedExamples."
-        )
-
     df, context = prepare_data(point_result, fs_splitting_nodes, node_df)
 
     # Add missing fs_splitting_nodes with activity 0
@@ -3347,7 +3341,7 @@ def create_frame_data_from_thresholded(
     subgraph, subgraph_df = generate_subgraph_plot_data(
         thresholded_matrix, node_df, fs_splitting_cluster
     )
-    activation_array = point_result.all_feature_acts.flatten().cpu().numpy()
+    activation_array = point_result.all_graph_feature_acts.flatten().cpu().numpy()
 
     edge_trace, node_trace = create_subgraph_traces(
         subgraph, node_df, activation_array, fixed_pos
