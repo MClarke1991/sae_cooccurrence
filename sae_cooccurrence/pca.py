@@ -3142,6 +3142,8 @@ def analyze_specific_points_animated_from_thresholded(
         yaxis2=dict(
             range=[0, global_max_activation]
         ),  # Set fixed y-axis range for bar plot
+        paper_bgcolor="white",  # Set paper background to white
+        plot_bgcolor="white",
     )
 
     # Add frames to the figure
@@ -3464,7 +3466,7 @@ def create_subgraph_traces(
     ) / (np.max(node_activations) - np.min(node_activations))  # type: ignore
 
     # Prepare the color map
-    cmap = plt.cm.get_cmap("viridis")
+    cmap = plt.cm.get_cmap("Blues")
     n_colors = 256
 
     # Get the colormap in RGB
@@ -3499,6 +3501,7 @@ def create_subgraph_traces(
                 title="Normalized Activation",
                 xanchor="left",
                 titleside="right",
+                bgcolor="white",
             ),
             line_width=2,
         ),
