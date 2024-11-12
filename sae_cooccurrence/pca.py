@@ -2283,6 +2283,91 @@ def plot_feature_activation_trends_representative_points(
     fig.show()
 
 
+def plot_feature_activation_counts(
+    results: ProcessedExamples | ReprocessedResults,
+    point_ids: list[int],
+    pca_df: pd.DataFrame,
+    activation_threshold: float = 0.1,
+    save_figs: bool = False,
+    pca_path: str | None = None,
+    subdir: str | None = None,
+    filename: str = "feature_activation_counts",
+) -> None:
+    """Plot bar graph showing count of active features at each point.
+
+    Args:
+        results: Results containing feature activations
+        fs_splitting_nodes: List of feature nodes to analyze
+        point_ids: List of point IDs to analyze
+        pca_df: DataFrame with PCA results and context info
+        activation_threshold: Threshold for considering a feature active
+        save_figs: Whether to save the figures
+        pca_path: Path to save figures
+        subdir: Optional subdirectory for saving figures
+        filename: Filename for the saved figures
+    """
+    # Get activations for each point
+    activation_counts = []
+    contexts = []
+
+    for point_id in point_ids:
+        point_result = get_point_result(results, point_id)
+        activation_array = point_result.all_graph_feature_acts.flatten().cpu().numpy()
+
+        # Count features above threshold
+        active_features = np.sum(activation_array > activation_threshold)
+        activation_counts.append(active_features)
+        contexts.append(pca_df.loc[point_id, "context"])
+
+    # Create bar plot
+    fig = go.Figure()
+
+    # Add bars
+    fig.add_trace(
+        go.Bar(
+            x=list(range(len(point_ids))),
+            y=activation_counts,
+            text=activation_counts,
+            textposition="auto",
+            hovertemplate=(
+                "Point %{x}<br>" "Active Features: %{y}<br>" "<extra></extra>"
+            ),
+        )
+    )
+
+    # Update layout
+    fig.update_layout(
+        title=f"Number of Features Active Above {activation_threshold} Threshold",
+        xaxis_title="Point Index",
+        yaxis_title="Number of Active Features",
+        xaxis=dict(
+            tickmode="array",
+            ticktext=[
+                f"..{ctx.split('|')[0][-10:]}|{ctx.split('|')[1]}|{ctx.split('|')[2][:5]}..."
+                for id, ctx in zip(point_ids, contexts)
+            ],
+            tickvals=list(range(len(point_ids))),
+        ),
+        width=800,
+        height=600,
+        showlegend=False,
+    )
+
+    # Save if requested
+    if save_figs and pca_path:
+        save_path = pca_path
+        if subdir:
+            save_path = pj(save_path, subdir)
+        os.makedirs(save_path, exist_ok=True)
+
+        fig.write_image(pj(save_path, filename + ".png"), scale=4.0)
+        fig.write_image(pj(save_path, filename + ".svg"))
+        fig.write_image(pj(save_path, filename + ".pdf"))
+        fig.write_html(pj(save_path, filename + ".html"))
+
+    fig.show()
+
+
 def plot_feature_activations(
     results,
     fs_splitting_nodes,
@@ -2714,7 +2799,11 @@ def analyze_specific_points_from_thresholded(
     Analyze and visualize specific points from the PCA plot based on their IDs.
     """
     # Color palette for plots
-    colors = px.colors.qualitative.Safe[: len(point_ids)]
+    # This wraps around the colors if you have more than about 10 points
+    colors = [
+        px.colors.qualitative.Safe[i % len(px.colors.qualitative.Safe)]
+        for i in range(len(point_ids))
+    ]
 
     for i, point_id in enumerate(point_ids):
         print(f"\nAnalyzing point with ID {point_id}:")
