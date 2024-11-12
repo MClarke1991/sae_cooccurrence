@@ -2189,6 +2189,103 @@ def analyze_representative_points(
         )
 
 
+def plot_feature_activation_trends_representative_points(
+    results: ProcessedExamples | ReprocessedResults,
+    fs_splitting_nodes: list[int],
+    point_ids: list[int],
+    pca_df: pd.DataFrame,
+    save_figs: bool = False,
+    pca_path: str | None = None,
+    subdir: str | None = None,
+    filename: str = "feature_activation_trends",
+) -> None:
+    """Plot line graph showing how feature activations change across points.
+
+    Args:
+        results: Results containing feature activations
+        fs_splitting_nodes: List of feature nodes to analyze
+        point_ids: List of point IDs to analyze
+        pca_df: DataFrame with PCA results and context info
+        save_figs: Whether to save the figures
+        pca_path: Path to save figures
+        subdir: Optional subdirectory for saving figures
+        filename: Filename for the saved figures
+    """
+    # Get activations for each point
+    activation_data = []
+    contexts = []
+
+    for point_id in point_ids:
+        point_result = get_point_result(results, point_id)
+        if isinstance(point_result, ProcessedExamples):
+            activation_array = (
+                point_result.all_graph_feature_acts.flatten().cpu().numpy()
+            )
+        else:
+            activation_array = (
+                point_result.all_graph_feature_acts.flatten().cpu().numpy()
+            )
+
+        activation_data.append(activation_array)
+        contexts.append(pca_df.loc[point_id, "context"])
+
+    # Convert to array for easier plotting
+    activation_matrix = np.array(activation_data)
+
+    # Create line plot
+    fig = go.Figure()
+
+    # Add a line for each feature
+    for i, feature_idx in enumerate(fs_splitting_nodes):
+        fig.add_trace(
+            go.Scatter(
+                x=list(range(len(point_ids))),
+                y=activation_matrix[:, i],
+                mode="lines+markers",
+                name=f"Feature {feature_idx}",
+                hovertemplate=(
+                    f"Feature {feature_idx}<br>"
+                    "Point: %{x}<br>"
+                    "Activation: %{y:.3f}<br>"
+                    "<extra></extra>"
+                ),
+            )
+        )
+
+    # Update layout
+    fig.update_layout(
+        title="Feature Activation Trends Across Points",
+        xaxis_title="Point Index",
+        yaxis_title="Activation Value",
+        xaxis=dict(
+            tickmode="array",
+            ticktext=[
+                f"..{ctx.split('|')[0][-10:]}|{ctx.split('|')[1]}|{ctx.split('|')[2][:5]}..."
+                for id, ctx in zip(point_ids, contexts)
+            ],
+            tickvals=list(range(len(point_ids))),
+        ),
+        showlegend=True,
+        width=800,
+        height=600,
+        hovermode="x unified",
+    )
+
+    # Save if requested
+    if save_figs and pca_path:
+        save_path = pca_path
+        if subdir:
+            save_path = pj(save_path, subdir)
+        os.makedirs(save_path, exist_ok=True)
+
+        fig.write_image(pj(save_path, filename + ".png"), scale=4.0)
+        fig.write_image(pj(save_path, filename + ".svg"))
+        fig.write_image(pj(save_path, filename + ".pdf"))
+        fig.write_html(pj(save_path, filename + ".html"))
+
+    fig.show()
+
+
 def plot_feature_activations(
     results,
     fs_splitting_nodes,
