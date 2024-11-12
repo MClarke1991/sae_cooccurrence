@@ -23,18 +23,26 @@ from sae_cooccurrence.pca import (
 
 
 def analyze_specific_points_animated(
-    results,
-    fs_splitting_nodes,
-    fs_splitting_cluster,
-    activation_threshold,
-    node_df,
-    results_path,
-    pca_df,
-    point_ids,
-    plot_only_fs_nodes=False,
-    save_gif=False,
-    gif_path="animation.gif",
+    results: ProcessedExamples | ReprocessedResults,
+    fs_splitting_nodes: list[int],
+    fs_splitting_cluster: int,
+    activation_threshold: float,
+    node_df: pd.DataFrame,
+    results_path: str,
+    pca_df: pd.DataFrame,
+    point_ids: list[int],
+    plot_only_fs_nodes: bool = False,
+    save_gif: bool = False,
+    gif_path: str = "animation.gif",
 ):
+    """
+    Animate the PCA plot, feature activation, and subgraph visualization for a set of points through the PCA.
+
+    Note: This function is deprecated in favour of analyze_specific_points_animated_from_thresholded. (This is a
+    legacy function that depends on subgraphs being saved as pickles which is not current practice see equivalent
+    function with from_thresholded instead).
+    """
+
     # Create subplots
     fig = make_subplots(
         rows=1,
@@ -224,6 +232,27 @@ def analyze_specific_points_animated_from_thresholded(
     gif_filename: str = "animation.gif",
     frame_folder_name: str = "gif_frames",
 ):
+    """
+        Animate the PCA plot, feature activation, and subgraph visualization for a set of points through the PCA.
+
+        results: ProcessedExamples | ReprocessedResults
+        thresholded_matrix: np.ndarray
+        fs_splitting_nodes: list[int]
+        fs_splitting_cluster: int
+        node_df: pd.DataFrame
+        pca_df: pd.DataFrame
+        point_ids: list[int]
+        plot_only_fs_nodes: bool = False
+        This decides whether or not to plot subgraphs that are active but are not the subgraph of interest.
+        This can only be done if you are using data where all feature activations were saved which is not the standard
+        practice when running the script that generates data for the Streamlit app.
+        save_gif: bool = False
+        gif_path: str = "animation.gif"
+        gif_filename: str = "animation.gif"
+        frame_folder_name: str = "gif_frames"
+    ):
+    """
+
     # Create subplots
     fig = make_subplots(
         rows=1,
@@ -406,7 +435,7 @@ def analyze_specific_points_animated_from_thresholded(
 
 
 def create_frame_data(
-    results: ProcessedExamples,
+    results: ProcessedExamples | ReprocessedResults,
     fs_splitting_nodes: list[int],
     fs_splitting_cluster: int,
     activation_threshold: float,
@@ -417,6 +446,23 @@ def create_frame_data(
     plot_only_fs_nodes: bool = False,
     fixed_pos: Mapping[int, tuple[float, float]] | None = None,
 ):
+    """
+    Create the data for a single frame of the animation including the PCA plot, feature activation, and subgraph visualization.
+
+    This is a legacy function that depends on subgraphs being saved as pickles which is not current practice see equivalent function with from thresholded instead
+
+    results: ProcessedExamples | ReprocessedResults
+    fs_splitting_nodes: list[int]
+    fs_splitting_cluster: int
+    activation_threshold: float
+    node_df: pd.DataFrame
+    results_path: str
+    pca_df: pd.DataFrame
+    point_id: int
+    plot_only_fs_nodes: bool = False
+    fixed_pos: Mapping[int, tuple[float, float]] | None = None
+    """
+
     frame_data = []
 
     # PCA Plot
@@ -544,6 +590,10 @@ def create_frame_data_from_thresholded(
     plot_only_fs_nodes: bool = False,
     fixed_pos: Mapping[int, tuple[float, float]] | None = None,
 ):
+    """
+    Create the data for a single frame of the animation including the PCA plot, feature activation, and subgraph visualization.
+    """
+
     frame_data = []
 
     # Convert the context to a string
@@ -644,6 +694,14 @@ def create_subgraph_traces(
     pos: Mapping[int, tuple[float, float]] | None,
     short_array: bool = False,
 ):
+    """
+    Create the traces for the subgraph visualization.
+
+    This function is used for both the legacy function that depends on subgraphs being saved as pickles which is not current practice see equivalent function with from thresholded instead
+    and the function that creates the subgraph traces from the thresholded matrix.
+
+    """
+
     if pos is None:
         raise ValueError("pos is None")
 
