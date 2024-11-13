@@ -286,6 +286,7 @@ def main():
 
         # Load model configurations from config
         model_to_releases = config["models"]["releases"]
+        # st.write(model_to_releases)
         sae_release_to_ids = config["models"]["sae_ids"]
 
         available_sae_releases = model_to_releases[model]
@@ -384,14 +385,32 @@ def main():
     # Load available subgraphs
     available_subgraphs = load_available_subgraphs(pca_results_path)
 
+    if not available_subgraphs:
+        st.error(
+            "No subgraphs found with enough examples to generate a PCA for that size category."
+        )
+        return  # Exit the main function early
+
     # Load metadata for all subgraphs
     subgraph_options = []
     remove_token_counts = config["streamlit"].get("remove_token_counts", True)
-    for sg_id in available_subgraphs:
-        top_3_tokens, example_context = load_subgraph_metadata(pca_results_path, sg_id)
-        top_3_tokens_simple = simplify_token_display(top_3_tokens, remove_token_counts)  # type: ignore
-        label = f"Subgraph {sg_id} - Top tokens: {' '.join(top_3_tokens_simple)} | Example: '{example_context}'"
-        subgraph_options.append({"label": label, "value": sg_id})
+
+    try:
+        for sg_id in available_subgraphs:
+            top_3_tokens, example_context = load_subgraph_metadata(
+                pca_results_path, sg_id
+            )
+            top_3_tokens_simple = simplify_token_display(
+                top_3_tokens,  # type: ignore
+                remove_token_counts,  # type: ignore
+            )  # type: ignore
+            label = f"Subgraph {sg_id} - Top tokens: {' '.join(top_3_tokens_simple)} | Example: '{example_context}'"
+            subgraph_options.append({"label": label, "value": sg_id})
+    except (OSError, KeyError):
+        st.error(
+            "Error loading subgraph metadata. The file may be corrupted or in an unexpected format."
+        )
+        return
 
     default_subgraph_idx = 0
     if "subgraph" in query_params:
