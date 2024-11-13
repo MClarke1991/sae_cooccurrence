@@ -67,7 +67,7 @@ gemma-scope-2b-pt-res-canonical = 100
 gemma-scope-2b-pt-res = 100
 
 [models.pca_batch_sizes]
-gpt2-small = 100
+gpt2-small = 10000
 gemma-2-2b = 100
 
 [models.max_examples]
@@ -83,7 +83,14 @@ gemma-2-2b = 5000
 
 [models.sae_ids]
 "res-jb" = ["blocks.0.hook_resid_pre"]
-# "res-jb-feature-splitting" = ["blocks.8.hook_resid_pre_24576"]
+"res-jb-feature-splitting" = [
+    "blocks.8.hook_resid_pre_768",
+    "blocks.8.hook_resid_pre_1536",
+    "blocks.8.hook_resid_pre_3072",
+    "blocks.8.hook_resid_pre_6144",
+    "blocks.8.hook_resid_pre_12288",
+    "blocks.8.hook_resid_pre_24576"
+]
 "gemma-scope-2b-pt-res-canonical" = [
     "layer_0/width_16k/canonical",
     "layer_12/width_16k/canonical",
