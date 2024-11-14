@@ -244,6 +244,11 @@ def main():
             For a cluster of co-occurring latents we show this PCA plot, and the corresponding co-occurrence graph. 
             Click on any point in the PCA plot to see the relative strength of activations for that token and context, and 
             how these separate across the PCA dimensions. We also show the Neuronpedia links for the SAE latents in the cluster to show their general properties. 
+            
+            Note: we follow [Lieberum et al., 2024](https://arxiv.org/abs/2408.05147) in referring to the directions learned by the SAE as latents, 
+            to disambiguate from the underlying LLM features. This is in contrast with earlier work that uses 'feature' for both 
+            (e.g. [Bricken et al., 2023](https://transformer-circuits.pub/2023/monosemantic-features), [Rajamanoharan et al., 2024a](https://arxiv.org/abs/2407.14435v1), 
+            and [Rajamanoharan et al., 2024b](https://arxiv.org/abs/2404.16014)). 
         """)
 
     git_root = get_git_root()
