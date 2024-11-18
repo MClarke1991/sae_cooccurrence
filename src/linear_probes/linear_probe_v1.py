@@ -5,6 +5,7 @@ import torch.nn as nn
 from sae_lens import SAE
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
+from tqdm.autonotebook import tqdm
 from transformer_lens import HookedTransformer
 from transformers import AutoModel, AutoTokenizer
 
@@ -80,57 +81,148 @@ class ActivationDataset(Dataset):
 #     return examples, labels
 
 
+# def generate_examples(n_samples=1000):
+#     """Generate example sentences with and without 'monday'"""
+#     templates_with = [
+#         "I have a meeting on Monday {}",
+#         "Monday {} is always busy",
+#         "Let's schedule it for Monday {}",
+#         "The Monday {} session was productive",
+#         "I'll start the project on Monday {}",
+#         "Monday {} is the deadline",
+#         "We always have team meetings on Monday {}",
+#         "The Monday {} report needs to be finished",
+#     ]
+
+#     templates_without = [
+#         "I have a meeting on Tuesday {}",
+#         "The weekend {} is always busy",
+#         "Let's schedule it for tomorrow {}",
+#         "The weekly {} session was productive",
+#         "I'll start the project tomorrow {}",
+#         "Friday {} is the deadline",
+#         "We always have team meetings on Wednesday {}",
+#         "The daily {} report needs to be finished",
+#     ]
+
+#     time_phrases = [
+#         "morning",
+#         "afternoon",
+#         "evening",
+#         "next week",
+#         "this month",
+#         "at 2 PM",
+#         "after lunch",
+#         "before noon",
+#         "during the meeting",
+#         "at the office",
+#     ]
+
+#     examples = []
+#     labels = []
+
+#     for _ in range(n_samples // 2):
+#         # Generate positive example (with "monday")
+#         template = np.random.choice(templates_with)
+#         time_phrase = np.random.choice(time_phrases)
+#         examples.append(template.format(time_phrase))
+#         labels.append(1)
+
+#         # Generate negative example (without "monday")
+#         template = np.random.choice(templates_without)
+#         time_phrase = np.random.choice(time_phrases)
+#         examples.append(template.format(time_phrase))
+#         labels.append(0)
+
+#     # Shuffle the examples and labels together
+#     combined = list(zip(examples, labels))
+#     np.random.shuffle(combined)
+#     examples, labels = zip(*combined)
+
+#     return list(examples), list(labels)
+
+
 def generate_examples(n_samples=1000):
-    """Generate example sentences with and without 'monday'"""
+    """Generate example sentences with number words (one-ten) and without"""
+
     templates_with = [
-        "I have a meeting on Monday {}",
-        "Monday {} is always busy",
-        "Let's schedule it for Monday {}",
-        "The Monday {} session was productive",
-        "I'll start the project on Monday {}",
-        "Monday {} is the deadline",
-        "We always have team meetings on Monday {}",
-        "The Monday {} report needs to be finished",
+        "I ate {} {} for lunch",
+        "There are {} {} on the shelf",
+        "We walked {} {} in the park",
+        "She bought {} {} at the store",
+        "They have {} {} at home",
+        "I waited {} {} for the bus",
+        "The garden has {} {} planted",
+        "He scored {} {} in the game",
+        "We saw {} {} in the tree",
+        "The class has {} {} enrolled",
     ]
 
     templates_without = [
-        "I have a meeting on Tuesday {}",
-        "The weekend {} is always busy",
-        "Let's schedule it for tomorrow {}",
-        "The weekly {} session was productive",
-        "I'll start the project tomorrow {}",
-        "Friday {} is the deadline",
-        "We always have team meetings on Wednesday {}",
-        "The daily {} report needs to be finished",
+        "I ate {} {} for lunch",  # Will use digits instead of words
+        "There are {} {} on the shelf",
+        "We walked {} {} in the park",
+        "She bought {} {} at the store",
+        "They have {} {} at home",
+        "I waited {} {} for the bus",
+        "The garden has {} {} planted",
+        "He scored {} {} in the game",
+        "We saw {} {} in the tree",
+        "The class has {} {} enrolled",
     ]
 
-    time_phrases = [
-        "morning",
-        "afternoon",
-        "evening",
-        "next week",
-        "this month",
-        "at 2 PM",
-        "after lunch",
-        "before noon",
-        "during the meeting",
-        "at the office",
+    number_words = [
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "ten",
+    ]
+
+    objects = [
+        "cookies",
+        "books",
+        "miles",
+        "shirts",
+        "cats",
+        "minutes",
+        "flowers",
+        "goals",
+        "birds",
+        "students",
+        "apples",
+        "boxes",
+        "papers",
+        "pictures",
+        "tasks",
     ]
 
     examples = []
     labels = []
 
     for _ in range(n_samples // 2):
-        # Generate positive example (with "monday")
+        # Generate positive example (with number word)
         template = np.random.choice(templates_with)
-        time_phrase = np.random.choice(time_phrases)
-        examples.append(template.format(time_phrase))
+        number = np.random.choice(number_words)
+        object_word = np.random.choice(objects)
+        examples.append(template.format(number, object_word))
         labels.append(1)
 
-        # Generate negative example (without "monday")
+        # Generate negative example (with digit or no number)
         template = np.random.choice(templates_without)
-        time_phrase = np.random.choice(time_phrases)
-        examples.append(template.format(time_phrase))
+        if np.random.random() < 0.5:
+            # Use digit
+            number = str(np.random.randint(1, 11))
+        else:
+            # Use phrase without number
+            number = "some"
+        object_word = np.random.choice(objects)
+        examples.append(template.format(number, object_word))
         labels.append(0)
 
     # Shuffle the examples and labels together
@@ -149,7 +241,7 @@ def get_layer_activations(
     device = device or get_device()
 
     with torch.no_grad():
-        for text in texts:
+        for text in tqdm(texts):
             if is_hooked_transformer:
                 # HookedTransformer interface
                 tokens = model.to_tokens(text, truncate=True)
@@ -241,7 +333,7 @@ def train_probe(
     optimizer = torch.optim.Adam(probe.parameters(), lr=learning_rate)
 
     # Training loop
-    for epoch in range(n_epochs):
+    for epoch in tqdm(range(n_epochs), desc="Training"):
         probe.train()
         total_loss = 0
 
@@ -331,12 +423,15 @@ def find_similar_sae_features(probe, sae, top_k=10):
 # Example usage
 if __name__ == "__main__":
     # Train the probe
-    # probe, model, tokenizer = train_probe(model_name="gemma-2-2b", layer_idx=12)
-    probe, model, tokenizer = train_probe(model_name="gpt2-small", layer_idx=0)
+    probe, model, tokenizer = train_probe(model_name="gemma-2-2b", layer_idx=0)
+    # probe, model, tokenizer = train_probe(model_name="gpt2-small", layer_idx=0)
 
     # Load SAE
-    # sae = load_sae(sae_release="gemma-scope-2b-pt-res-canonical", sae_id="layer_0/width_16k/canonical")
-    sae = load_sae(sae_release="gpt2-small-res-jb", sae_id="blocks.0.hook_resid_pre")
+    sae = load_sae(
+        sae_release="gemma-scope-2b-pt-res-canonical",
+        sae_id="layer_0/width_16k/canonical",
+    )
+    # sae = load_sae(sae_release="gpt2-small-res-jb", sae_id="blocks.0.hook_resid_pre")
 
     # Analyze the most important neurons
     top_neurons, top_weights = analyze_neurons(probe)
