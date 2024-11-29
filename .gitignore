@@ -223,7 +223,16 @@ flycheck_*.el
 **/*.pickle
 **/*.pkl
 **/*.tar.gz
+**/*.tar.gz.tmp
+**/*.tar.lz4
+**/*.zip
 *.html
 *.parquet
 *.h5
 figures/
+results/**/*.npz
+results/**/*.txt
+results/**/*.png
+results/wormholes/
+results/gemma-2-2b/gemma-scope-2b-pt-res-canonical/BCKUP_layer_18_width_16k_canonical/
+**/Note.rtf

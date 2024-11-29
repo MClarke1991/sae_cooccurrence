@@ -1,0 +1,238 @@
+import logging
+from os.path import join as pj
+
+import h5py
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import psutil
+import toml
+
+from sae_cooccurrence.utils.set_paths import get_git_root
+
+
+def generate_color_palette(n_colors):
+    # Start with qualitative color scales
+    colors = (
+        px.colors.qualitative.Plotly
+        + px.colors.qualitative.D3
+        + px.colors.qualitative.G10
+        + px.colors.qualitative.T10
+        + px.colors.qualitative.Alphabet
+    )
+
+    # If we need more colors, interpolate between existing ones
+    if n_colors > len(colors):
+        return n_colors(
+            "rgb(5, 200, 200)", "rgb(200, 10, 10)", max(n_colors, len(colors))
+        )[:n_colors]
+    else:
+        return colors[:n_colors]
+
+
+def log_memory_usage(location: str) -> None:
+    """Log current memory usage"""
+    process = psutil.Process()
+    memory_gb = process.memory_info().rss / 1024 / 1024 / 1024  # Convert to GB
+    logging.info(f"Memory usage at {location}: {memory_gb:.2f} GB")
+
+
+def load_streamlit_config(filename):
+    config_path = pj(get_git_root(), "src", filename)
+    with open(config_path) as f:
+        return toml.load(f)
+
+
+def load_dataset(dataset):
+    if dataset.shape == ():  # Scalar dataset
+        return dataset[()]
+    else:  # Array dataset
+        return dataset[:]
+
+
+def decode_if_bytes(data):
+    if isinstance(data, bytes):
+        return data.decode("utf-8")
+    elif isinstance(data, np.ndarray) and data.dtype.char == "S":
+        return np.char.decode(data, "utf-8")
+    return data
+
+
+def load_subgraph_data(file_path, subgraph_id, load_options):
+    log_memory_usage("start of load_subgraph_data")
+    with h5py.File(file_path, "r") as f:
+        group = f[f"subgraph_{subgraph_id}"]
+        results = {}
+
+        # Conditionally load each component based on config
+        if load_options["fired_tokens"]:
+            results["all_fired_tokens"] = decode_if_bytes(
+                load_dataset(group["all_fired_tokens"])  # type: ignore
+            )
+
+        if load_options["reconstructions"]:
+            results["all_reconstructions"] = load_dataset(group["all_reconstructions"])  # type: ignore
+
+        if load_options["graph_feature_acts"]:
+            results["all_graph_feature_acts"] = load_dataset(
+                group["all_graph_feature_acts"]  # type: ignore
+            )  # type: ignore
+
+        if load_options["feature_acts"]:
+            results["all_feature_acts"] = load_dataset(group["all_feature_acts"])  # type: ignore
+
+        if load_options["max_feature_info"]:
+            results["all_max_feature_info"] = load_dataset(
+                group["all_max_feature_info"]  # type: ignore
+            )  # type: ignore
+
+        if load_options["examples_found"]:
+            results["all_examples_found"] = load_dataset(group["all_examples_found"])  # type: ignore
+
+        if load_options["token_dfs"]:
+            results["token_dfs"] = load_dataset(group["token_dfs"])  # type: ignore
+
+        # Load pca_df
+        pca_df_group = group["pca_df"]  # type: ignore
+        pca_df_data = {}
+        for column in pca_df_group.keys():  # type: ignore
+            pca_df_data[column] = decode_if_bytes(
+                load_dataset(pca_df_group[column])  # type: ignore
+            )
+        pca_df = pd.DataFrame(pca_df_data)
+
+    log_memory_usage("end of load_subgraph_data")
+    return results, pca_df
+
+
+def plot_pca_2d(pca_df, max_feature_info, fs_splitting_nodes, pc_x="PC2", pc_y="PC3"):
+    # Extract max feature indices and whether they're in the graph
+    max_feature_indices = max_feature_info[:, 1].astype(int)
+    max_feature_in_graph = max_feature_info[:, 2].astype(bool)
+
+    # Create a color map for fs_splitting_nodes
+    unique_features = np.unique(fs_splitting_nodes)
+    n_unique = len(unique_features)
+
+    color_palette = generate_color_palette(n_unique)
+    color_map = dict(zip(unique_features, color_palette))
+
+    # Create figure with points grouped by feature for legend
+    fig = go.Figure()
+
+    # Add grey points for features not in graph
+    grey_points = ~max_feature_in_graph
+    if any(grey_points):
+        fig.add_trace(
+            go.Scatter(
+                x=pca_df.loc[grey_points, pc_x],
+                y=pca_df.loc[grey_points, pc_y],
+                mode="markers",
+                marker=dict(color="grey"),
+                name="Not in graph",
+                hovertemplate=(
+                    "Token: %{customdata[0]}<br>"
+                    "Context: %{customdata[1]}<br>"
+                    "Feature: %{customdata[2]}<br>"
+                    "<extra></extra>"
+                ),
+                customdata=np.column_stack(
+                    (
+                        pca_df.loc[grey_points, "tokens"],
+                        pca_df.loc[grey_points, "context"],
+                        max_feature_indices[grey_points],
+                    )
+                ),
+            )
+        )
+
+    # Add points for each feature in fs_splitting_nodes
+    for feature in unique_features:
+        feature_points = (max_feature_indices == feature) & max_feature_in_graph
+        if any(feature_points):
+            fig.add_trace(
+                go.Scatter(
+                    x=pca_df.loc[feature_points, pc_x],
+                    y=pca_df.loc[feature_points, pc_y],
+                    mode="markers",
+                    marker=dict(color=color_map[feature]),
+                    name=f"Feature {feature}",
+                    hovertemplate=(
+                        "Token: %{customdata[0]}<br>"
+                        "Context: %{customdata[1]}<br>"
+                        "Feature: %{customdata[2]}<br>"
+                        "<extra></extra>"
+                    ),
+                    customdata=np.column_stack(
+                        (
+                            pca_df.loc[feature_points, "tokens"],
+                            pca_df.loc[feature_points, "context"],
+                            max_feature_indices[feature_points],
+                        )
+                    ),
+                )
+            )
+
+    fig.update_layout(
+        xaxis_title=pc_x,
+        yaxis_title=pc_y,
+        hovermode="closest",
+        hoverdistance=5,
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="right",
+            x=0.99,
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            bordercolor="rgba(0,0,0,0.2)",
+            borderwidth=1,
+            font=dict(size=10),
+        ),
+        margin=dict(l=40, r=40, t=40, b=60),
+        autosize=True,
+    )
+
+    return fig, color_map
+
+
+def plot_feature_activations(
+    all_graph_feature_acts, point_index, fs_splitting_nodes, context=None
+):
+    if point_index is None:
+        fig = go.Figure()
+        fig.update_layout(
+            autosize=True,
+            # height=600,
+            # width=800,
+            title="Instructions",
+            annotations=[
+                dict(
+                    text="Click on a point in the PCA plot to see its feature activations",
+                    xref="paper",
+                    yref="paper",
+                    x=0.5,
+                    y=0.5,
+                    showarrow=False,
+                )
+            ],
+        )
+        return fig
+
+    activations = all_graph_feature_acts[point_index]
+    trace = go.Bar(
+        x=[f"Feature {i}" for i in fs_splitting_nodes],
+        y=activations,
+        marker_color="blue",
+    )
+
+    fig = go.Figure(data=[trace])
+    fig.update_layout(
+        height=600,
+        width=800,
+        title=f'Context: "{context}"' if context else "Feature Activations",
+        xaxis_title="Feature",
+        yaxis_title="Activation",
+        hovermode=False,
+    )
+    return fig

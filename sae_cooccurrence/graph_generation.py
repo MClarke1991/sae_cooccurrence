@@ -12,11 +12,13 @@ import numpy as np
 import pandas as pd
 import torch
 from pyvis.network import Network
+from sae_lens import SAE
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial.distance import euclidean
 from torch import topk as torch_topk
-from tqdm.autonotebook import tqdm
+from tqdm.auto import tqdm
+from transformer_lens import HookedTransformer
 
 from sae_cooccurrence.utils.mc_neuronpedia import (
     get_neuronpedia_feature_dashboard_no_open,
@@ -24,19 +26,59 @@ from sae_cooccurrence.utils.mc_neuronpedia import (
 )
 
 
-def calculate_token_factors_inds(model, sae):
-    # Make labels
+def calculate_token_factors_inds(model: HookedTransformer, sae: SAE) -> np.ndarray:
+    """
+    Calculate the top 10 token indices most associated with each SAE feature.
+
+    This function computes the dot product between the model's token embeddings and
+    the SAE decoder weights to find which tokens most strongly activate each feature.
+    The computation is done on CPU to prevent underflow errors.
+
+    Args:
+        model: The transformer model containing token embeddings (W_E)
+        sae: The sparse autoencoder model containing decoder weights (W_dec)
+
+    Returns:
+        np.ndarray: Array of shape (n_features, 10) containing the indices of the
+                   top 10 tokens most associated with each feature
+
+    Note:
+        The computation is explicitly moved to CPU to prevent underflow errors that can
+        occur on some GPU architectures (particularly macOS MPS) due to float32 precision
+        limitations. See Issue #7 for more details.
+    """
+    # Compute dot product between token embeddings and decoder weights
     token_factors = model.W_E @ sae.W_dec.T
     print(token_factors.shape)
-    # Needs to be on CPU to prevent underflow errors, see Issue #7
+
+    # Get top 10 token indices for each feature
     vals, inds = torch_topk(token_factors.T.cpu(), k=10)
     print(inds.shape)
+
+    # Convert to numpy array
     token_factors_inds = inds.cpu().numpy()
+
+    # Check for potential numerical issues
     detect_zero_token_factors_inds(token_factors_inds)
+
     return token_factors_inds
 
 
-def calculate_token_factors_inds_efficient(model, sae, batch_size=1000, k=10):
+def calculate_token_factors_inds_efficient(
+    model: HookedTransformer, sae: SAE, batch_size: int = 1000, k: int = 10
+) -> np.ndarray:
+    """
+    Calculate the top k token indices most associated with each SAE feature efficiently by batching.
+
+    Args:
+        model: The transformer model containing token embeddings (W_E)
+        sae: The sparse autoencoder model containing decoder weights (W_dec)
+        batch_size: The number of features to process in each batch
+        k: The number of top tokens to return for each feature
+
+    Returns:
+        np.ndarray: Array of shape (n_features, k) containing the indices of the top k tokens most associated with each feature
+    """
     vocab_size, d_model = model.W_E.shape
     d_sae = sae.W_dec.shape[0]
 
@@ -65,7 +107,10 @@ def calculate_token_factors_inds_efficient(model, sae, batch_size=1000, k=10):
     return token_factors_inds
 
 
-def detect_zero_token_factors_inds_efficient(token_factors_inds):
+def detect_zero_token_factors_inds_efficient(token_factors_inds: np.ndarray) -> None:
+    """
+    Detects if there are any zero token factor indices in the given array.
+    """
     if np.all(token_factors_inds == 0):
         print(
             "Warning: All token factor indices are zero. May need to increase precision."
@@ -128,26 +173,43 @@ def remove_low_weight_edges(matrix: np.ndarray, edge_threshold: float) -> np.nda
     matrix_copy = np.copy(matrix)
 
     # Set edges below the threshold to 0
-    matrix_copy[matrix_copy < edge_threshold] = 0
+    matrix_copy[matrix_copy < edge_threshold] = 0  # type: ignore
 
     return matrix_copy
 
 
-def largest_component_size(sparse_matrix, threshold):
+def largest_component_size(sparse_matrix: csr_matrix, threshold: float) -> int:
+    """
+    Calculate the size of the largest connected component in a sparse matrix.
+    """
     binary_matrix = sparse_matrix >= threshold
     n_components, labels = connected_components(
         binary_matrix, directed=False, connection="weak"
     )
     print(f"n_components: {n_components}, labels: {np.max(np.bincount(labels))}")
-    return np.max(np.bincount(labels))
+    return int(np.max(np.bincount(labels)))
 
 
-def find_threshold(matrix, min_size=150, max_size=200, tolerance=1e-3):
+def find_threshold(
+    matrix: np.ndarray,
+    min_size: int = 150,
+    max_size: int = 200,
+    tolerance: float = 1e-3,
+) -> tuple[float, int]:
+    """
+    Find the threshold that results in the largest connected component being of a given
+    size by conducting a binary search, or at least below max_size (below min_size is tolerated).
+    """
     sparse_matrix = csr_matrix(matrix)
-
     low, high = 0, 1
     best_threshold = None
     best_size = None
+
+    # # Check initial size at lowest threshold
+    # initial_size = largest_component_size(sparse_matrix, low)
+    # if initial_size > max_size:
+    #     warnings.warn(f"Largest component size ({initial_size}) is above max_size ({max_size}).")
+    #     return low, initial_size
 
     while high - low > tolerance:
         print(f"low: {low}, high: {high}")
@@ -155,6 +217,7 @@ def find_threshold(matrix, min_size=150, max_size=200, tolerance=1e-3):
         size = largest_component_size(sparse_matrix, mid)
 
         if min_size <= size <= max_size:
+            print(f"Found threshold: {mid}, size: {size}")
             return mid, size  # Early return if size is within desired range
 
         if size < min_size:
@@ -169,11 +232,30 @@ def find_threshold(matrix, min_size=150, max_size=200, tolerance=1e-3):
             best_threshold = mid
             best_size = size
 
+    if best_threshold is None or best_size is None:
+        raise ValueError("No threshold found within the specified range.")
+
+    if best_size > max_size:
+        warnings.warn(
+            f"Largest component size ({best_size}) is above max_size ({max_size}).",
+            category=UserWarning,
+        )
+
     # If we didn't find an exact match, return the best approximation
+    print(f"best_threshold: {best_threshold}, best_size: {best_size}")
     return best_threshold, best_size
 
 
-def plot_subgraph_size_density(subgraphs, hist_path, filename, min_size, max_size):
+def plot_subgraph_size_density(
+    subgraphs: list[nx.Graph],
+    hist_path: str,
+    filename: str,
+    min_size: int,
+    max_size: int,
+) -> None:
+    """
+    Plot the density of subgraph sizes after finding a threshold.
+    """
     # Extract subgraph sizes from the dictionary
     subgraph_sizes = [len(subgraph) for subgraph in subgraphs]
 
@@ -199,68 +281,53 @@ def plot_subgraph_size_density(subgraphs, hist_path, filename, min_size, max_siz
     plt.close()
 
 
-def create_graph_from_matrix(matrix):
-    # Create a graph from the matrix
+def create_graph_from_matrix(matrix: np.ndarray) -> nx.Graph:
+    """
+    Create an nx graph from a numpy array, this includes all subgraphs.
+    """
     graph = nx.from_numpy_array(matrix)
     return graph
 
 
-def get_subgraphs(graph):
+def get_subgraphs(graph: nx.Graph) -> list[nx.Graph]:
+    """
+    Get all subgraphs from an nx graph.
+    """
     # Find connected components (subgraphs)
     subgraphs = [graph.subgraph(c) for c in nx.connected_components(graph)]
     return subgraphs
 
 
-# def create_node_info_dataframe(subgraphs,
-#                                activity_threshold: float,
-#                                feature_activations,
-#                                token_factors_inds,
-#                                tokenizer,
-#                                sae_id,
-#                                model_name,
-#                                sae_release_short):
-#     # Create a DataFrame with node information
+def create_decode_tokens_function(model: HookedTransformer) -> np.vectorize:
+    """
+    Create a vectorized function to decode token indices to tokens.
+    """
 
-#     sae_layer = re.search(r'blocks\.(\d+)', sae_id).group(1) # type: ignore
-#     node_info_data = []
-#     for i, subgraph in tqdm(enumerate(subgraphs)):
-#         for node in subgraph.nodes():
-#             # Get feature activations for the node
-#             node_activations = feature_activations[node]
+    def decode_tokens(idx: int) -> str:
+        return "None" if idx is None else model.tokenizer.decode([idx])  # type: ignore
 
-#             # Get top 10 token indices for the node
-#             top_10_token_indices = token_factors_inds[node][:10]
-
-#             # Decode token indices to actual tokens
-#             top_10_tokens = [tokenizer.decode([idx]) for idx in top_10_token_indices]
-
-#             if sae_release_short == "res-jb-feature-splitting":
-#                 sae_release_short_quicklist = "res-jb-fs"
-#             else:
-#                 sae_release_short_quicklist = sae_release_short
-
-#             node_info_data.append({
-#                 'node_id': node,
-#                 'activity_threshold': activity_threshold,
-#                 'subgraph_id': i,
-#                 'subgraph_size': len(subgraph),
-#                 'feature_activations': node_activations,
-#                 'top_10_tokens': top_10_tokens,
-#                 'neuronpedia_link': mc_neuronpedia_link(node, int(sae_layer), model_name, sae_release_short_quicklist)
-#             })
-#     node_info_df = pd.DataFrame(node_info_data)
-#     return node_info_df
+    return np.vectorize(decode_tokens)
 
 
 def create_node_info_dataframe(
-    subgraphs,
+    subgraphs: list[nx.Graph],
     activity_threshold: float,
-    feature_activations,
-    token_factors_inds,
-    decode_tokens,
-    SAE,
+    feature_activations: np.ndarray,
+    token_factors_inds: np.ndarray,
+    decode_tokens: np.vectorize,
+    SAE: SAE,
     include_metrics: bool = False,
-):
+) -> pd.DataFrame:
+    """
+    Create a dataframe of node information for each subgraph.
+    subgraphs: list of nx.Graphs after thresholding
+    activity_threshold: float, threshold for feature activations
+    feature_activations: np.ndarray, activations of each feature
+    token_factors_inds: np.ndarray, indices of top 10 tokens for each feature
+    decode_tokens: np.vectorize, function to decode token indices to tokens, created by create_decode_tokens_function
+    SAE: SAE, SAE object
+    include_metrics: bool, whether to include graph metrics
+    """
     # sae_layer = get_layer_from_id(sae_id)
 
     # Vectorize token decoding
@@ -276,7 +343,9 @@ def create_node_info_dataframe(
     node_info_data = []
     subgraph_nodes = {}
 
-    for i, subgraph in enumerate(tqdm(subgraphs)):
+    for i, subgraph in enumerate(
+        tqdm(subgraphs, desc="Generating node info", leave=False)
+    ):
         nodes = list(subgraph.nodes())
         subgraph_nodes[i] = nodes
         subgraph_size = len(subgraph)
@@ -391,7 +460,7 @@ def create_subgraph_plot(subgraph, node_info_df, edge_threshold):
     min_weight = min(edge_weights)
     max_weight = max(edge_weights)
     normalized_edge_weights = [
-        (weight - min_weight) / (max_weight - min_weight + 1e6)
+        (weight - float(min_weight)) / (float(max_weight) - float(min_weight) + 1e6)
         for weight in edge_weights
     ]
 
@@ -543,7 +612,7 @@ def plot_subgraph_static(
         min_activation = min(subgraph_activations)
         max_activation = max(subgraph_activations)
 
-    activation_range = max_activation - min_activation
+    activation_range = float(max_activation) - float(min_activation)
 
     # Prepare node labels and colors
     labels = {}

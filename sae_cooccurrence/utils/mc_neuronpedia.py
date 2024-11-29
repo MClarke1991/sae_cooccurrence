@@ -15,6 +15,7 @@ def get_neuronpedia_feature_dashboard_no_open(sae: SAE, index: int, open: bool =
         print(
             "SAE does not have a Neuronpedia ID. Either dashboards for this SAE do not exist (yet) on Neuronpedia, or the SAE was not loaded via the from_pretrained method"
         )
+        return ""
     else:
         url = f"{NEURONPEDIA_DOMAIN}/{sae_id}/{index}"
         if open:
@@ -33,7 +34,7 @@ def get_neuronpedia_quick_list_no_open(
         print(
             "SAE does not have a Neuronpedia ID. Either dashboards for this SAE do not exist (yet) on Neuronpedia, or the SAE was not loaded via the from_pretrained method"
         )
-    assert sae_id is not None
+        return ""
 
     url = NEURONPEDIA_DOMAIN + "/quick-list/"
     name = urllib.parse.quote(name)

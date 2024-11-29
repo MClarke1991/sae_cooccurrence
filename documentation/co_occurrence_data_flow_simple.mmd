@@ -1,0 +1,27 @@
+---
+config:
+  layout: fixed
+---
+flowchart TD
+    A["1_generate_normalised_features_loop.py"] -- Generates --> B1["Feature Co-occurrence Matrices"] & B2["Jaccard Normalised Feature Co-occurrence Matrices"] & B3["Feature Observation Matrices"]
+    B1 --> C["2_generate_graphs_loop.py"]
+    B2 --> C
+    B3 --> C
+    C -- Generates --> D1["Graphs"] & D2["Subgraphs"] & E["Node Info DataFrames"] & F1["Subgraph Visualizations"] & F2["Subgraph Size Density Plots"]
+    D1 --> G["3_analyse_subspaces.ipynb"]
+    D2 --> G
+    E --> G
+    G -- Performs --> H1["PCA Analysis"]
+    G -- Generates --> I1["PCA Plots"] & I2["Feature Activation Plots"] & I3["Subgraph Static Plots"]
+    G --> J["5_pca_for_streamlit.py"]
+    J -- Generates --> K1["Results Data"] & K2["PCA Data"]
+    J -- Saves as --> K3["HDF5 Files"]
+    K3 --> L["general_streamlit.py"]
+    L -- Loads --> M1["Subgraph Data"]
+    L -- Visualizes --> M2["Interactive PCA Plots"] & M3["Feature Activation Plots"]
+    L -- Provides --> M4["Subgraph Selection"]
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style C fill:#f9f,stroke:#333,stroke-width:2px
+    style G fill:#ccf,stroke:#333,stroke-width:2px
+    style J fill:#f9f,stroke:#333,stroke-width:2px
+    style L fill:#9f9,stroke:#333,stroke-width:2px
