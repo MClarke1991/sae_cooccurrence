@@ -94,3 +94,8 @@ Common Poetry commands:
 - Update lockfile: `poetry lock`
 - Run command in virtual environment: `poetry run <command>`
 - Run Python file as module: `poetry run python -m sae_coocurrence.path.to.file`
+
+# Figure Reproduction
+
+## SAE latent co-occurrence per token: 
+See `src/size_effects/features_active_per_token.py`
