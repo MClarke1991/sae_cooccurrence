@@ -3,9 +3,10 @@ import io
 import logging
 import os
 import pickle
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from os.path import join as pj
-from typing import Any
+from typing import Any, Literal
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -18,6 +19,8 @@ import plotly.graph_objects as go
 import torch
 from PIL import Image
 from plotly.subplots import make_subplots
+from pyvis.network import Network
+from scipy import sparse
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.spatial.distance import pdist
 from sklearn.decomposition import PCA
@@ -25,6 +28,9 @@ from sklearn.preprocessing import MinMaxScaler
 from tqdm.auto import tqdm
 
 from sae_cooccurrence.graph_generation import load_subgraph, plot_subgraph_static
+from sae_cooccurrence.normalised_cooc_functions import (
+    get_special_tokens,
+)
 
 
 def assign_category(row, fs_splitting_cluster, order_other_subgraphs=False):
@@ -158,6 +164,8 @@ class ProcessedExamples:
         - all_max_feature_info (torch.Tensor): Tensor containing maximum feature information
             (i.e. whether the graph features were the maximally active).
         - all_examples_found (int): Total number of examples found.
+        - top_3_tokens (list[tuple[str, int]]): List of the top 3 tokens and their indices.
+        - example_context (str): The context of the example.
     """
 
     all_token_dfs: pd.DataFrame
@@ -167,10 +175,110 @@ class ProcessedExamples:
     all_feature_acts: torch.Tensor
     all_max_feature_info: torch.Tensor
     all_examples_found: int
+    top_3_tokens: list[tuple[str, int]] = field(default_factory=list)
+    example_context: str = ""
+
+
+def run_model_with_cache(model, tokens, sae):
+    """
+    Run the model with caching and return the cached activations for the SAE hook.
+
+    Args:
+        model: The transformer model to run.
+        tokens: The input tokens to process.
+        sae: The Sparse Autoencoder (SAE) object containing configuration.
+
+    Returns:
+        torch.Tensor: The cached activations at the SAE hook layer.
+
+    This function runs the model with caching enabled, stopping at the layer
+    after the SAE hook layer and filtering for only the SAE hook name. It then
+    returns the cached activations for the SAE hook.
+    """
+    _, cache = model.run_with_cache(
+        tokens,
+        stop_at_layer=sae.cfg.hook_layer + 1,
+        names_filter=[sae.cfg.hook_name],
+    )
+    return cache[sae.cfg.hook_name]
+
+
+def get_max_feature_info(feature_acts, fired_mask, feature_list_tensor, device="cpu"):
+    """
+    Calculate maximum feature information for fired tokens.
+
+    Args:
+        feature_acts (torch.Tensor): Feature activations for all tokens.
+        fired_mask (torch.Tensor): Boolean mask indicating which tokens fired.
+        feature_list_tensor (torch.Tensor): Tensor of feature indices in the graph.
+
+    Returns:
+        torch.Tensor: A tensor containing maximum feature information for each fired token.
+            The tensor has shape (num_fired_tokens, 3) where each row contains:
+            - max_feature_value: The maximum activation value
+            - max_feature_index: The index of the maximally activated feature
+            - max_feature_in_graph: Binary indicator (1.0 if max feature is in the graph, 0.0 otherwise)
+
+    This function computes the maximum feature activation for each fired token,
+    determines if the maximally activated feature is in the graph, and stacks
+    this information into a single tensor.
+    """
+    max_feature_values, max_feature_indices = feature_acts[fired_mask].max(dim=1)
+    max_feature_in_graph = torch.tensor(
+        [float(idx in feature_list_tensor) for idx in max_feature_indices],
+        dtype=torch.float32,
+        device=device,
+    )
+    max_feature_info = torch.stack(
+        [max_feature_values, max_feature_indices.float(), max_feature_in_graph],
+        dim=1,
+    )
+    return max_feature_info
+
+
+# Add new analysis for top tokens
+def get_top_tokens_and_context(all_fired_tokens, all_token_dfs):
+    """Get the top 3 most common tokens and an example context for the most common token.
+
+    Args:
+        all_fired_tokens (list): List of all fired tokens
+        all_token_dfs (pd.DataFrame): DataFrame containing token information and contexts
+
+    Returns:
+        tuple: (list of top 3 token tuples, example context string)
+
+    Raises:
+        IndexError: If a token in all_fired_tokens is not found in all_token_dfs
+    """
+    # Validate all tokens exist in DataFrame
+    token_set = set(all_token_dfs["str_tokens"])
+    for token in all_fired_tokens:
+        if token not in token_set:
+            raise IndexError(f"Token '{token}' not found in DataFrame")
+
+    token_counts = Counter(all_fired_tokens)
+    if token_counts:
+        top_3_tokens = token_counts.most_common(3)
+        most_common_token = top_3_tokens[0][0]
+        example_context = all_token_dfs.loc[
+            all_token_dfs["str_tokens"] == most_common_token
+        ]["context"].iloc[0]
+    else:
+        top_3_tokens = []
+        example_context = ""
+    return top_3_tokens, example_context
 
 
 def process_examples(
-    activation_store, model, sae, feature_list, n_batches_reconstruction
+    activation_store,
+    model,
+    sae,
+    feature_list,
+    n_batches_reconstruction,
+    remove_special_tokens=False,
+    device="cpu",
+    max_examples=5_000_000,  # Add max_examples parameter
+    trim_excess=False,
 ):
     """
     Process examples from the activation store using the given model and SAE, extract the tokens that the
@@ -183,6 +291,8 @@ def process_examples(
     - sae: The SAE model instance.
     - feature_list: List of features to be considered i.e. those within a cluster/subgraph.
     - n_batches_reconstruction: Number of batches to process for reconstruction from the activation store.
+    - remove_special_tokens: Whether to remove special tokens from the processed examples e.g. BOS, EOS, PAD.
+    - max_examples (int, optional): Maximum number of examples to process. If None, process all examples.
 
     Returns:
     - ProcessedExamples: A data class containing processed examples and related information.
@@ -199,49 +309,95 @@ def process_examples(
 
     pbar = tqdm(range(n_batches_reconstruction), leave=False)
     for _ in pbar:
+        # Get a batch of tokens from the activation store
         tokens = activation_store.get_batch_tokens()
+
+        # Create a DataFrame containing token information
         tokens_df = make_token_df(tokens, model)
+
+        # Flatten the tokens tensor for easier processing
         flat_tokens = tokens.flatten()
 
-        _, cache = model.run_with_cache(
-            tokens,
-            stop_at_layer=sae.cfg.hook_layer + 1,
-            names_filter=[sae.cfg.hook_name],
-        )
-        sae_in = cache[sae.cfg.hook_name]
+        # Run the model and get activations
+        sae_in = run_model_with_cache(model, tokens, sae)
+        # Encode the activations using the SAE
         feature_acts = sae.encode(sae_in).squeeze()
-        feature_acts = feature_acts.flatten(0, 1)
+        # Flatten the feature activations to 2D
+        feature_acts = feature_acts.flatten(0, 1).to(device)
 
+        # Create a mask for tokens where any feature in the feature_list is activated
         fired_mask = (feature_acts[:, feature_list]).sum(dim=-1) > 0
+        fired_mask = fired_mask.to(device)
+
+        if remove_special_tokens:
+            special_tokens = get_special_tokens(model)
+            # Create a mask for non-special tokens
+            # non_special_mask = ~torch.tensor(
+            #     [token in special_tokens for token in flat_tokens],
+            #     device=fired_mask.device,
+            # )
+            non_special_mask = ~torch.isin(
+                flat_tokens,
+                torch.tensor(list(special_tokens), device=device),
+            )
+            # Combine the fired_mask with the non_special_mask
+            fired_mask = fired_mask & non_special_mask
+
+        # Convert the fired tokens to string representations
         fired_tokens = model.to_str_tokens(flat_tokens[fired_mask])
+
+        # Reconstruct the activations for the fired tokens using only the features in the feature_list
         reconstruction = (
             feature_acts[fired_mask][:, feature_list] @ sae.W_dec[feature_list]
         )
 
         # Get max feature info
-        max_feature_values, max_feature_indices = feature_acts[fired_mask].max(dim=1)
-        max_feature_in_graph = torch.zeros_like(
-            max_feature_indices, dtype=torch.float32
-        )
-        for i, idx in enumerate(max_feature_indices):
-            max_feature_in_graph[i] = float(idx in feature_list_tensor)
-        max_feature_info = torch.stack(
-            [max_feature_values, max_feature_indices.float(), max_feature_in_graph],
-            dim=1,
+        max_feature_info = get_max_feature_info(
+            feature_acts, fired_mask, feature_list_tensor, device=device
         )
 
+        # Append the rows of tokens_df where fired_mask is True
+        # Convert fired_mask to CPU, get non-zero indices, flatten, and convert to numpy
+        # Use these indices to select rows from tokens_df
         all_token_dfs.append(
             tokens_df.iloc[fired_mask.cpu().nonzero().flatten().numpy()]
         )
+        # Append feature activations for fired tokens, filtered by feature_list
         all_graph_feature_acts.append(feature_acts[fired_mask][:, feature_list])
+
+        # Append all feature activations for fired tokens
         all_feature_acts.append(feature_acts[fired_mask])
+
+        # Append maximum feature information for fired tokens
         all_max_feature_info.append(max_feature_info)
+
+        # Append the string representations of fired tokens
         all_fired_tokens.append(fired_tokens)
+
+        # Append reconstructions for fired tokens using selected features
         all_reconstructions.append(reconstruction)
 
         examples_found += len(fired_tokens)
         pbar.set_description(f"Examples found: {examples_found}")
 
+        # Add early termination check
+        if max_examples is not None and examples_found >= max_examples:
+            if trim_excess:
+                # Trim excess examples if we went over the limit
+                excess = examples_found - max_examples
+                if excess > 0:
+                    all_fired_tokens[-1] = all_fired_tokens[-1][:-excess]
+                    all_token_dfs[-1] = all_token_dfs[-1][:-excess]
+                    all_graph_feature_acts[-1] = all_graph_feature_acts[-1][:-excess]
+                    all_feature_acts[-1] = all_feature_acts[-1][:-excess]
+                    all_max_feature_info[-1] = all_max_feature_info[-1][:-excess]
+                    all_reconstructions[-1] = all_reconstructions[-1][:-excess]
+                    examples_found = max_examples
+                break
+            else:
+                break
+
+    print(f"Total examples found: {examples_found}")
     # Flatten the list of lists
     all_token_dfs = pd.concat(all_token_dfs)
     all_fired_tokens = list_flatten(all_fired_tokens)
@@ -249,6 +405,10 @@ def process_examples(
     all_graph_feature_acts = torch.cat(all_graph_feature_acts)
     all_feature_acts = torch.cat(all_feature_acts)
     all_max_feature_info = torch.cat(all_max_feature_info)
+
+    top_3_tokens, example_context = get_top_tokens_and_context(
+        all_fired_tokens, all_token_dfs
+    )
 
     return ProcessedExamples(
         all_token_dfs=all_token_dfs,
@@ -258,22 +418,316 @@ def process_examples(
         all_examples_found=examples_found,
         all_max_feature_info=all_max_feature_info,
         all_feature_acts=all_feature_acts,
+        top_3_tokens=top_3_tokens,
+        example_context=example_context,
     )
 
 
-def perform_pca_on_results(results: ProcessedExamples, n_components: int = 3):
+def process_custom_prompts(
+    prompts: list[str],
+    model,
+    sae,
+    feature_list,
+    remove_special_tokens=False,
+    device="cpu",
+    batch_size=10,
+):
+    """
+    Process custom prompts using the given model and SAE, extract the tokens that the
+    features of the cluster/subgraph fire on, with context.
+
+    Args:
+    - prompts: List of strings to process
+    - model: The model used for processing
+    - sae: The SAE model instance
+    - feature_list: List of features to be considered i.e. those within a cluster/subgraph
+    - remove_special_tokens: Whether to remove special tokens from the processed examples e.g. BOS, EOS, PAD
+    - device: Device to run computations on
+    - batch_size: Number of prompts to process at once (default: 10)
+
+    Returns:
+    - ProcessedExamples: A data class containing processed examples and related information
+    """
+    feature_list_tensor = torch.tensor(feature_list, device=sae.W_dec.device)
+
+    # Initialize lists to store results
+    all_filtered_tokens_df = []
+    all_fired_tokens = []
+    all_reconstructions = []
+    all_graph_feature_acts = []
+    all_feature_acts = []
+    all_max_feature_info = []
+
+    # Process prompts in batches
+    for i in tqdm(range(0, len(prompts), batch_size), desc="Processing prompts"):
+        batch_prompts = prompts[i : i + batch_size]
+
+        # Convert prompts to tokens
+        tokens = model.to_tokens(batch_prompts, prepend_bos=True)
+
+        # Create a DataFrame containing token information
+        tokens_df = make_token_df(tokens, model)
+
+        # Flatten the tokens tensor for easier processing
+        flat_tokens = tokens.flatten()
+
+        # Run the model and get activations
+        sae_in = run_model_with_cache(model, tokens, sae)
+        # Encode the activations using the SAE
+        feature_acts = sae.encode(sae_in).squeeze()
+        # Flatten the feature activations to 2D
+        feature_acts = feature_acts.flatten(0, 1).to(device)
+
+        # Create a mask for tokens where any feature in the feature_list is activated
+        fired_mask = (feature_acts[:, feature_list]).sum(dim=-1) > 0
+        fired_mask = fired_mask.to(device)
+
+        if remove_special_tokens:
+            special_tokens = get_special_tokens(model)
+            non_special_mask = ~torch.isin(
+                flat_tokens,
+                torch.tensor(list(special_tokens), device=device),
+            )
+            # Combine the fired_mask with the non_special_mask
+            fired_mask = fired_mask & non_special_mask
+
+        # Skip batch if no tokens fired
+        if not fired_mask.any():
+            continue
+
+        # Convert the fired tokens to string representations
+        fired_tokens = model.to_str_tokens(flat_tokens[fired_mask])
+
+        # Reconstruct the activations for the fired tokens
+        reconstruction = (
+            feature_acts[fired_mask][:, feature_list] @ sae.W_dec[feature_list]
+        )
+
+        # Get max feature info
+        max_feature_info = get_max_feature_info(
+            feature_acts, fired_mask, feature_list_tensor, device=device
+        )
+
+        # Get the rows of tokens_df where fired_mask is True
+        filtered_tokens_df = tokens_df.iloc[
+            fired_mask.cpu().nonzero().flatten().numpy()
+        ]
+
+        # Append batch results
+        all_filtered_tokens_df.append(filtered_tokens_df)
+        all_fired_tokens.extend(fired_tokens)
+        all_reconstructions.append(reconstruction)
+        all_graph_feature_acts.append(feature_acts[fired_mask][:, feature_list])
+        all_feature_acts.append(feature_acts[fired_mask])
+        all_max_feature_info.append(max_feature_info)
+
+    # Combine results from all batches
+    if not all_filtered_tokens_df:
+        print("No tokens fired for any prompts")
+        return None
+
+    combined_tokens_df = pd.concat(all_filtered_tokens_df, ignore_index=True)
+    combined_reconstructions = torch.cat(all_reconstructions, dim=0)
+    combined_graph_feature_acts = torch.cat(all_graph_feature_acts, dim=0)
+    combined_feature_acts = torch.cat(all_feature_acts, dim=0)
+    combined_max_feature_info = torch.cat(all_max_feature_info, dim=0)
+
+    examples_found = len(all_fired_tokens)
+    print(f"Total examples found: {examples_found}")
+
+    top_3_tokens, example_context = get_top_tokens_and_context(
+        all_fired_tokens, combined_tokens_df
+    )
+
+    return ProcessedExamples(
+        all_token_dfs=combined_tokens_df,
+        all_fired_tokens=all_fired_tokens,
+        all_reconstructions=combined_reconstructions,
+        all_graph_feature_acts=combined_graph_feature_acts,
+        all_examples_found=examples_found,
+        all_max_feature_info=combined_max_feature_info,
+        all_feature_acts=combined_feature_acts,
+        top_3_tokens=top_3_tokens,
+        example_context=example_context,
+    )
+
+
+def process_batch(batch_data):
+    """Helper function to process a single batch of data"""
+    tokens, model, sae, feature_list, remove_special_tokens, device = batch_data
+
+    # Create a DataFrame containing token information
+    tokens_df = make_token_df(tokens, model)
+
+    # Flatten the tokens tensor for easier processing
+    flat_tokens = tokens.flatten()
+
+    # Run the model and get activations
+    sae_in = run_model_with_cache(model, tokens, sae)
+    # Encode the activations using the SAE
+    feature_acts = sae.encode(sae_in).squeeze()
+    # Flatten the feature activations to 2D
+    feature_acts = feature_acts.flatten(0, 1).to(device)
+
+    # Create a mask for tokens where any feature in the feature_list is activated
+    fired_mask = (feature_acts[:, feature_list]).sum(dim=-1) > 0
+    fired_mask = fired_mask.to(device)
+
+    if remove_special_tokens:
+        special_tokens = get_special_tokens(model)
+        non_special_mask = ~torch.isin(
+            flat_tokens,
+            torch.tensor(list(special_tokens), device=device),
+        )
+        fired_mask = fired_mask & non_special_mask
+
+    # Convert the fired tokens to string representations
+    fired_tokens = model.to_str_tokens(flat_tokens[fired_mask])
+
+    # Reconstruct the activations
+    reconstruction = feature_acts[fired_mask][:, feature_list] @ sae.W_dec[feature_list]
+
+    # Get max feature info
+    feature_list_tensor = torch.tensor(feature_list, device=sae.W_dec.device)
+    max_feature_info = get_max_feature_info(
+        feature_acts, fired_mask, feature_list_tensor, device=device
+    )
+
+    return {
+        "tokens_df": tokens_df.iloc[fired_mask.cpu().nonzero().flatten().numpy()],
+        "fired_tokens": fired_tokens,
+        "reconstruction": reconstruction,
+        "graph_feature_acts": feature_acts[fired_mask][:, feature_list],
+        "feature_acts": feature_acts[fired_mask],
+        "max_feature_info": max_feature_info,
+        "n_examples": len(fired_tokens),
+    }
+
+
+def process_examples_parallel(
+    activation_store,
+    model,
+    sae,
+    feature_list,
+    n_batches_reconstruction,
+    remove_special_tokens=False,
+    device="cpu",
+    max_examples=5_000_000,
+    trim_excess=False,
+    num_workers=4,  # Number of parallel workers
+):
+    """Parallelized version of process_examples"""
+    from torch.multiprocessing import Pool, set_start_method
+
+    try:
+        set_start_method("spawn")
+    except RuntimeError:
+        pass
+
+    examples_found = 0
+    all_results = []
+
+    # Create a pool of workers
+    with Pool(num_workers) as pool:
+        # Prepare batch data
+        batch_data = [
+            (
+                activation_store.get_batch_tokens(),
+                model,
+                sae,
+                feature_list,
+                remove_special_tokens,
+                device,
+            )
+            for _ in range(n_batches_reconstruction)
+        ]
+
+        # Process batches in parallel
+        for result in tqdm(
+            pool.imap(process_batch, batch_data),
+            total=n_batches_reconstruction,
+            desc="Processing batches",
+        ):
+            all_results.append(result)
+            examples_found += result["n_examples"]
+
+            if max_examples is not None and examples_found >= max_examples:
+                if trim_excess:
+                    # Trim excess examples from the last batch
+                    excess = examples_found - max_examples
+                    if excess > 0:
+                        last_result = all_results[-1]
+                        for key in [
+                            "tokens_df",
+                            "fired_tokens",
+                            "reconstruction",
+                            "graph_feature_acts",
+                            "feature_acts",
+                            "max_feature_info",
+                        ]:
+                            if isinstance(last_result[key], (list, torch.Tensor)):
+                                last_result[key] = last_result[key][:-excess]
+                        last_result["n_examples"] -= excess
+                        examples_found = max_examples
+                break
+
+    # Combine results
+    all_token_dfs = pd.concat([r["tokens_df"] for r in all_results])
+    all_fired_tokens = list_flatten([r["fired_tokens"] for r in all_results])
+    all_reconstructions = torch.cat([r["reconstruction"] for r in all_results])
+    all_graph_feature_acts = torch.cat([r["graph_feature_acts"] for r in all_results])
+    all_feature_acts = torch.cat([r["feature_acts"] for r in all_results])
+    all_max_feature_info = torch.cat([r["max_feature_info"] for r in all_results])
+
+    top_3_tokens, example_context = get_top_tokens_and_context(
+        all_fired_tokens, all_token_dfs
+    )
+
+    return ProcessedExamples(
+        all_token_dfs=all_token_dfs,
+        all_fired_tokens=all_fired_tokens,
+        all_reconstructions=all_reconstructions,
+        all_graph_feature_acts=all_graph_feature_acts,
+        all_examples_found=examples_found,
+        all_max_feature_info=all_max_feature_info,
+        all_feature_acts=all_feature_acts,
+        top_3_tokens=top_3_tokens,
+        example_context=example_context,
+    )
+
+
+def perform_pca_on_results(
+    results: ProcessedExamples,
+    n_components: int = 3,
+    method: Literal["auto", "full", "arpack", "randomized"] = "full",
+):
     """
     Perform PCA on the reconstructions from ProcessedExamples and return a DataFrame with the results.
 
     Args:
     results (ProcessedExamples): The results from process_examples function
     n_components (int): Number of PCA components to compute (default: 3)
-
+    method (Literal["auto", "full", "arpack", "randomized"]): The method to use for PCA (default: "full")
     Returns:
-    pd.DataFrame: DataFrame containing PCA results and associated metadata
+    Tuple[Optional[pd.DataFrame], Optional[PCA]]: DataFrame containing PCA results and PCA object,
+                                                 or (None, None) if PCA cannot be performed
     """
+    # Get dimensions of the data
+    n_samples, n_features = results.all_reconstructions.cpu().numpy().shape
+    max_components = min(n_samples, n_features)
+
+    if n_components > max_components:
+        import warnings
+
+        warnings.warn(
+            f"Cannot perform PCA: requested n_components ({n_components}) is greater than "
+            f"max possible components ({max_components}). Returning None.",
+            UserWarning,
+        )
+        return None, None
+
     # Perform PCA
-    pca = PCA(n_components=n_components, svd_solver="full")
+    pca = PCA(n_components=n_components, svd_solver=method)
     pca_embedding = pca.fit_transform(results.all_reconstructions.cpu().numpy())
 
     # Create DataFrame with PCA results
@@ -296,10 +750,35 @@ def generate_data(
     fs_splitting_nodes,
     n_batches_reconstruction,
     decoder=False,
+    remove_special_tokens=False,
+    device="cpu",
+    max_examples=5_000_000,
+    trim_excess=False,
+    custom_prompts=None,
 ):
-    results = process_examples(
-        activation_store, model, sae, fs_splitting_nodes, n_batches_reconstruction
-    )
+    if custom_prompts is None:
+        results = process_examples(
+            activation_store,
+            model,
+            sae,
+            fs_splitting_nodes,
+            n_batches_reconstruction,
+            remove_special_tokens,
+            device=device,
+            max_examples=max_examples,
+            trim_excess=trim_excess,
+        )
+    else:
+        results = process_custom_prompts(
+            custom_prompts,
+            model,
+            sae,
+            fs_splitting_nodes,
+            remove_special_tokens,
+            device=device,
+        )
+    if results is None:
+        raise ValueError("No results found")
     pca_df, pca = perform_pca_on_results(results, n_components=3)
     if decoder:
         pca_decoder, pca_decoder_df = calculate_pca_decoder(sae, fs_splitting_nodes)
@@ -426,6 +905,7 @@ def plot_pca_feature_strength(
     activation_threshold=0.1,
     save=False,
 ):
+    """Plot PCA colored by activation strength for all features."""
     # Create subplots
     n_features = len(fs_splitting_nodes)
     n_cols = 3  # You can adjust this for layout
@@ -530,6 +1010,75 @@ def plot_pca_feature_strength(
     else:
         fig.show()
     return None
+
+
+def plot_pca_feature_strength_streamlit(
+    pca_df: pd.DataFrame,
+    feature_activations: np.ndarray,
+    feature_idx: int,
+    pc_x: str = "PC1",
+    pc_y: str = "PC2",
+    activation_threshold: float = 0.1,
+) -> go.Figure:
+    """Plot PCA colored by activation strength for a single selected feature.
+
+    Args:
+        pca_df: DataFrame with PCA coordinates and metadata
+        feature_activations: Array of activation values for the selected feature
+        feature_idx: Index of the selected feature
+        pc_x: X-axis principal component (default "PC1")
+        pc_y: Y-axis principal component (default "PC2")
+    """
+    # Create custom colormap that uses white for low values
+    cmap = plt.cm.get_cmap("viridis")
+    colormap_RGB = cmap(np.arange(cmap.N))
+    colormap_RGB[0] = (1, 1, 1, 1)  # Set first color to white
+
+    # Convert colormap to Plotly format
+    n_colors = 256
+    colorscale = [
+        [i / (n_colors - 1), mcolors.rgb2hex(colormap_RGB[i])] for i in range(n_colors)
+    ]
+
+    fig = go.Figure()
+
+    # Add scatter trace
+    fig.add_trace(
+        go.Scatter(
+            x=pca_df[pc_x],
+            y=pca_df[pc_y],
+            mode="markers",
+            marker=dict(
+                size=5,
+                color=feature_activations,
+                colorscale=colorscale,
+                colorbar=dict(title="Activation"),
+                line=dict(width=1, color="DarkSlateGrey"),
+                cmin=activation_threshold,
+                cmax=np.max(feature_activations),
+            ),
+            hovertemplate=(
+                "Token: %{customdata[0]}<br>"
+                "Context: %{customdata[1]}<br>"
+                "Activation: %{customdata[2]:.3f}<br>"
+                "<extra></extra>"
+            ),
+            customdata=np.column_stack(
+                (pca_df["tokens"], pca_df["context"], feature_activations)
+            ),
+        )
+    )
+
+    # Update layout
+    fig.update_layout(
+        title=f"SAE Latent {feature_idx} Activation Strength",
+        xaxis_title=pc_x,
+        yaxis_title=pc_y,
+        hovermode="closest",
+        height=600,
+    )
+
+    return fig
 
 
 def plot_pca_single_feature_strength(
@@ -2292,9 +2841,9 @@ def create_subgraph_traces(subgraph, node_df, activation_array, pos):
 
     # Normalize activation values for color scaling
     node_activations = [activation_array[node] for node in subgraph.nodes()]
-    normalized_activations = (node_activations - np.min(node_activations)) / (
-        np.max(node_activations) - np.min(node_activations)
-    )
+    normalized_activations = (
+        np.array(node_activations) - np.min(node_activations)  # type: ignore
+    ) / (np.max(node_activations) - np.min(node_activations))  # type: ignore
 
     # Prepare the color map
     cmap = plt.cm.get_cmap("viridis")
@@ -2354,3 +2903,370 @@ def create_subgraph_traces(subgraph, node_df, activation_array, pos):
     node_trace.hovertext = node_hover_text
 
     return edge_trace, node_trace
+
+
+#### Plotting from thresholded matrices
+
+
+def generate_subgraph_plot_data(
+    thresholded_matrix: np.ndarray,
+    node_df: pd.DataFrame,
+    subgraph_id: int,
+) -> tuple[nx.Graph, pd.DataFrame]:
+    """
+    Generate subgraph plot data from a thresholded matrix.
+    thresholded_matrix: numpy array, thresholded adjacency matrix
+    node_df: pandas DataFrame, node information
+    subgraph_id: int, subgraph ID
+    """
+
+    if not isinstance(node_df, pd.DataFrame):
+        raise TypeError("node_df must be a pandas DataFrame")
+
+    if thresholded_matrix is None or node_df is None:
+        raise TypeError("thresholded_matrix and node_df cannot be None")
+
+    # raise error if thresholded_matrix or node_df are empty
+    if thresholded_matrix.size == 0 or node_df.size == 0:
+        raise ValueError("thresholded_matrix and node_df cannot be empty")
+
+    subgraph_df = node_df[node_df["subgraph_id"] == subgraph_id]
+    subgraph_df = subgraph_df[["node_id", "feature_activations"]]
+
+    # ensure subgraph_df is dataframe
+    if not isinstance(subgraph_df, pd.DataFrame):
+        raise TypeError("subgraph_df must be a pandas DataFrame")
+
+    subgraph_matrix = thresholded_matrix[subgraph_df["node_id"].tolist(), :][
+        :, subgraph_df["node_id"].tolist()
+    ]
+    subgraph = nx.from_numpy_array(subgraph_matrix)
+    return subgraph, subgraph_df
+
+
+def generate_subgraph_plot_data_sparse(
+    sparse_thresholded_matrix: sparse.csr_matrix,
+    node_df: pd.DataFrame,
+    subgraph_id: int,
+):
+    if not isinstance(node_df, pd.DataFrame):
+        raise TypeError("node_df must be a pandas DataFrame")
+
+    if sparse_thresholded_matrix is None or node_df is None:
+        raise TypeError("sparse_thresholded_matrix and node_df cannot be None")
+
+    # raise error if sparse_thresholded_matrix or node_df are empty
+    if sparse_thresholded_matrix.size == 0 or node_df.size == 0:
+        raise ValueError("sparse_thresholded_matrix and node_df cannot be empty")
+
+    # Get nodes for this subgraph
+    subgraph_df = node_df[node_df["subgraph_id"] == subgraph_id]
+    subgraph_df = subgraph_df[["node_id", "feature_activations"]]
+    node_indices = subgraph_df["node_id"].tolist()
+
+    # ensure subgraph_df is dataframe
+    if not isinstance(subgraph_df, pd.DataFrame):
+        raise TypeError("subgraph_df must be a pandas DataFrame")
+
+    # Extract submatrix using sparse indexing
+    subgraph_matrix = sparse_thresholded_matrix[node_indices, :][:, node_indices]  # type: ignore
+
+    # Convert to networkx graph while keeping sparsity
+    subgraph = nx.from_scipy_sparse_array(subgraph_matrix)  # type: ignore[attr-defined]
+    # pyright reports access error but this function is in nx for the version we are using
+
+    return subgraph, subgraph_df
+
+
+def plot_subgraph_static_from_nx(
+    subgraph: nx.Graph,
+    subgraph_df: pd.DataFrame,
+    node_info_df: pd.DataFrame | None = None,
+    output_path: str | None = None,
+    activation_array: np.ndarray | None = None,
+    save_figs: bool = False,
+    normalize_globally: bool = True,
+    base_node_size: int = 1000,
+    colour_when_inactive: bool = True,
+    plot_token_factors: bool = False,
+    show_plot: bool = True,
+) -> None:
+    """
+    Plot a static subgraph from a networkx graph, as provided by generate_subgraph_plot_data.
+    subgraph: networkx graph
+    subgraph_df: pandas DataFrame, node information
+    node_info_df: pandas DataFrame | None, node information
+    output_path: str | None, output path
+    activation_array: numpy array | None, activation array
+    save_figs: bool, save figures
+    normalize_globally: bool, normalize globally
+    """
+
+    if not isinstance(subgraph, nx.Graph):
+        raise TypeError("subgraph must be a networkx graph")
+
+    if not isinstance(subgraph_df, pd.DataFrame):
+        raise TypeError("subgraph_df must be a pandas DataFrame")
+
+    if not {"node_id", "feature_activations"}.issubset(subgraph_df.columns):
+        raise ValueError(
+            "subgraph_df must contain the columns 'node_id' and 'feature_activations'"
+        )
+
+    # Create a new figure
+    plt.figure(figsize=(7, 7))
+
+    # Create a layout for our nodes
+    pos = nx.spring_layout(subgraph, k=0.5, iterations=50, seed=1234)
+
+    # Use provided activation_array if available, otherwise use subgraph_df
+    if activation_array is None:
+        if colour_when_inactive:
+            activation_array = np.array(subgraph_df["feature_activations"].values)
+        else:
+            activation_array = np.zeros(len(list(subgraph.nodes())))
+
+    # Extract activations for nodes in this subgraph
+    subgraph_activations = [
+        activation_array[i] for i in range(len(list(subgraph.nodes())))
+    ]
+
+    # Calculate node sizes based on feature activations
+    feature_acts = np.array(subgraph_df["feature_activations"].values)
+    min_act = feature_acts.min()
+    max_act = feature_acts.max()
+    act_range = max_act - min_act
+    if act_range != 0:
+        normalized_sizes = (feature_acts - min_act) / act_range
+        node_sizes = base_node_size + (normalized_sizes * base_node_size)
+    else:
+        node_sizes = [base_node_size] * len(feature_acts)
+
+    # Determine normalization range for colors
+    if normalize_globally:
+        min_activation = min(activation_array)
+        max_activation = max(activation_array)
+    else:
+        min_activation = min(subgraph_activations)
+        max_activation = max(subgraph_activations)
+
+    activation_range = max_activation - min_activation
+
+    # Prepare node labels and colors
+    labels = {}
+    node_colors = []
+
+    for i, node in enumerate(subgraph.nodes()):
+        node_id = subgraph_df["node_id"].iloc[i]
+
+        # If node_info_df is provided, use top tokens, otherwise just use node_id
+        if node_info_df is not None:
+            node_info = node_info_df[node_info_df["node_id"] == node_id].iloc[0]
+            if plot_token_factors:
+                top_tokens = ast.literal_eval(node_info["top_10_tokens"])
+                top_token = top_tokens[0]
+                labels[node] = f"ID: {node_id}\n{top_token}"
+            else:
+                labels[node] = f"ID: {node_id}"
+        else:
+            labels[node] = f"ID: {node_id}"
+
+        # Set fill to white if activation is 0, otherwise use the color map
+        if subgraph_activations[i] == 0:
+            node_colors.append("white")
+        else:
+            if activation_range != 0:
+                normalized_activation = (
+                    subgraph_activations[i] - min_activation
+                ) / activation_range
+            else:
+                normalized_activation = 0.5
+            node_colors.append(plt.cm.get_cmap("Blues")(normalized_activation))
+
+    # Get edge weights
+    edge_weights = [subgraph[u][v]["weight"] for u, v in subgraph.edges()]
+
+    # Normalize edge weights for thickness
+    if edge_weights:  # Only if there are edges
+        max_weight = max(edge_weights)  # type: ignore
+        min_weight = min(edge_weights)  # type: ignore
+        normalized_weights = [
+            (w - min_weight) / (max_weight - min_weight) for w in edge_weights
+        ]
+        edge_thickness = [0.5 + 4.5 * w for w in normalized_weights]
+    else:
+        edge_thickness = []
+
+    # Draw the graph
+    nx.draw(
+        subgraph,
+        pos,
+        with_labels=False,
+        node_size=node_sizes,  # Use calculated node sizes
+        node_color=node_colors,
+        edgecolors="black",
+        linewidths=3,
+        edge_color=(0.5, 0.5, 0.5, 0.75),
+        width=edge_thickness,
+        arrows=True,
+    )
+
+    # Add node labels outside the nodes
+    # Adjust label positions based on node sizes
+    label_pos = {k: (v[0], v[1] - 0.15) for k, v in pos.items()}
+    nx.draw_networkx_labels(subgraph, label_pos, labels, font_size=8)
+
+    plt.axis("off")
+    plt.tight_layout()
+
+    if save_figs:
+        plt.savefig(f"{output_path}.png", format="png", dpi=300, bbox_inches="tight")
+        plt.savefig(f"{output_path}.pdf", format="pdf", dpi=300, bbox_inches="tight")
+        plt.savefig(f"{output_path}.svg", format="svg", dpi=300, bbox_inches="tight")
+        plt.close()
+    elif show_plot:
+        plt.show()
+
+
+def plot_subgraph_interactive_from_nx(
+    subgraph: nx.Graph,
+    subgraph_df: pd.DataFrame,
+    node_info_df: pd.DataFrame | None = None,
+    activation_array: np.ndarray | None = None,
+    colour_when_inactive: bool = True,
+    plot_token_factors: bool = False,
+    height: str = "700px",
+) -> tuple[Network, str]:
+    """
+    Plot a static subgraph from a networkx graph, as provided by generate_subgraph_plot_data.
+    subgraph: networkx graph
+    subgraph_df: pandas DataFrame, node information
+    node_info_df: pandas DataFrame | None, node information
+    activation_array: numpy array | None, activation array
+    colour_when_inactive: bool, plot with colour representing feature density if there is no activation
+    plot_token_factors: bool, plot token factors
+    height: str, height
+    width: str, width
+    """
+
+    if not isinstance(subgraph, nx.Graph):
+        raise TypeError("subgraph must be a networkx graph")
+
+    if not isinstance(subgraph_df, pd.DataFrame):
+        raise TypeError("subgraph_df must be a pandas DataFrame")
+
+    if not {"node_id", "feature_activations"}.issubset(subgraph_df.columns):
+        raise ValueError(
+            "subgraph_df must contain the columns 'node_id' and 'feature_activations'"
+        )
+
+    if subgraph.number_of_nodes() != len(subgraph_df):
+        raise IndexError("subgraph and subgraph_df must have the same number of nodes")
+
+    if subgraph.number_of_nodes() == 0:
+        raise ValueError("subgraph must contain nodes")
+
+    # Calculate fixed positions using networkx layout
+    fixed_pos = nx.spring_layout(subgraph, seed=42, k=0.5)  # Fixed seed for consistency
+
+    # Initialize pyvis network with notebook=True
+    net = Network(
+        height=height,
+        width="100%",
+        bgcolor="#ffffff",
+        font_color=False,
+        notebook=True,
+    )
+
+    # Get edge weights for scaling
+    edge_weights = [subgraph[u][v]["weight"] for u, v in subgraph.edges()]
+
+    # Rest of your existing configuration
+    net.toggle_physics(False)
+
+    # Use provided activation_array if available
+    if activation_array is None:
+        hover_info = False
+        if colour_when_inactive:
+            activation_array = np.array(subgraph_df["feature_activations"].values)
+        else:
+            activation_array = np.zeros(len(list(subgraph.nodes())))
+
+    else:
+        hover_info = True
+    # Calculate node sizes
+    feature_acts = np.array(subgraph_df["feature_activations"].values)
+    min_act = feature_acts.min()
+    max_act = feature_acts.max()
+    act_range = max_act - min_act
+    base_size = 25
+
+    if act_range != 0:
+        normalized_sizes = (feature_acts - min_act) / act_range
+        node_sizes = base_size + (normalized_sizes * base_size)
+    else:
+        node_sizes = [base_size] * len(feature_acts)
+
+    # Color normalization
+    min_activation = min(activation_array)
+    max_activation = max(activation_array)
+    activation_range = max_activation - min_activation
+
+    # Add nodes with fixed positions
+    for i, node in enumerate(subgraph.nodes()):
+        node_id = subgraph_df["node_id"].iloc[i]
+
+        # Prepare label
+        if node_info_df is not None:
+            node_info = node_info_df[node_info_df["node_id"] == node_id].iloc[0]
+            if plot_token_factors:
+                top_tokens = ast.literal_eval(node_info["top_10_tokens"])
+                label = f"ID: {node_id}\n{top_tokens[0]}"
+            else:
+                label = f"ID: {node_id}"
+        else:
+            label = f"ID: {node_id}"
+
+        # Calculate color
+        if activation_array[i] == 0:
+            color = "#ffffff"
+        else:
+            if activation_range != 0:
+                normalized_activation = (
+                    activation_array[i] - min_activation
+                ) / activation_range
+                rgba = plt.cm.get_cmap("Blues")(normalized_activation)
+                color = f"#{int(rgba[0]*255):02x}{int(rgba[1]*255):02x}{int(rgba[2]*255):02x}"
+            else:
+                color = "#084594"
+
+        # Get fixed position for this node
+        pos = fixed_pos[node]
+        x, y = pos[0] * 500, pos[1] * 500  # Scale positions for better visibility
+
+        # Add node
+        net.add_node(
+            node,
+            label=label,
+            color=color,
+            size=node_sizes[i],
+            borderWidth=2,
+            font=dict(size=20),
+            title=f"Activation: {activation_array[i]:.2f}" if hover_info else None,
+            x=float(x),  # Set fixed x position
+            y=float(y),  # Set fixed y position
+            physics=False,  # Disable physics for this node
+        )
+
+    # Add edges
+    for u, v in subgraph.edges():
+        weight = subgraph[u][v]["weight"]
+        width = 1
+        if edge_weights:
+            width = 1 + 4 * (weight - min(edge_weights)) / (  # type: ignore
+                max(edge_weights) - min(edge_weights)  # type: ignore
+            )
+        net.add_edge(u, v, width=width, color={"color": "rgba(128, 128, 128, 0.75)"})
+
+    html = net.generate_html(notebook=False)
+    return net, html

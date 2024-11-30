@@ -1,26 +1,27 @@
 ['generation']
-n_batches = 50
+n_batches = 100
 model_name = "gemma-2-2b"
 sae_release = "gemma-scope-2b-pt-res-canonical"
 sae_release_short = "gemma-scope-2b-pt-res-canonical"
 sae_ids = [
-    #"layer_0/width_16k/canonical",
+    "layer_0/width_16k/canonical",
     # "layer_8/width_16k/canonical",
     # "layer_12/width_16k/canonical",
-    "layer_18/width_16k/canonical",
+    # "layer_18/width_16k/canonical",
     #"layer_21/width_16k/canonical",
     # "layer_25/width_16k/canonical"
 ]
-activation_thresholds = [10]
+activation_thresholds = [5]
 n_batches_in_buffer = 4
+remove_special_tokens = true
 
 ['analysis']
 random_seed = 1234
 min_subgraph_size = 150
 max_subgraph_size = 200
 min_subgraph_size_to_plot = 4
-skip_subgraph_plots = false
-skip_subgraph_pickles = false
+skip_subgraph_plots = true
+skip_subgraph_pickles = true
 include_metrics = true
 
 ['pca']

@@ -10,14 +10,15 @@ from pstats import SortKey
 
 import networkx as nx
 import numpy as np
+import scipy.sparse as sparse
 import toml
 import torch
 from sae_lens import SAE
 from tqdm.auto import tqdm
-from transformer_lens import HookedTransformer
 
 from sae_cooccurrence.graph_generation import (
     calculate_token_factors_inds_efficient,
+    create_decode_tokens_function,
     create_graph_from_matrix,
     create_node_info_dataframe,
     create_subgraph_plot,
@@ -28,6 +29,7 @@ from sae_cooccurrence.graph_generation import (
     remove_self_loops_inplace,
 )
 from sae_cooccurrence.normalised_cooc_functions import (
+    create_results_dir,
     get_sae_release,
     neat_sae_id,
     setup_logging,
@@ -48,7 +50,8 @@ def process_sae_for_graph(sae_id: str, config: dict, device: str) -> None:
 
     This first: finds a threshold of edge weight such that we decompose the graph into connected components,
     that are below a threshold in size.
-    Then: generates graphs from the normalised feature co-occurrence matrices and outputs dataframes of their nodes' information, as well as visualisations of their subgraphs, and pickle files of the subgraph objects for later revisualisation.
+    Then: generates graphs from the normalised feature co-occurrence matrices and outputs dataframes of their nodes' information,
+    as well as visualisations of their subgraphs, and pickle files of the subgraph objects for later revisualisation.
 
     Parameters:
     sae_id (str): The unique identifier for the SAE.
@@ -59,8 +62,11 @@ def process_sae_for_graph(sae_id: str, config: dict, device: str) -> None:
     sae_release = get_sae_release(
         config["generation"]["model_name"], config["generation"]["sae_release_short"]
     )
-    results_dir = (
-        f"results/{config['generation']['model_name']}/{sae_release}/{sae_id_neat}"
+    results_dir = create_results_dir(
+        config["generation"]["model_name"],
+        config["generation"]["sae_release_short"],
+        sae_id_neat,
+        config["generation"]["n_batches"],
     )
     results_path = pj(get_git_root(), results_dir)
 
@@ -119,13 +125,6 @@ def create_directories(results_path: str) -> None:
     os.makedirs(pj(results_path, "dataframes"), exist_ok=True)
 
 
-def create_decode_tokens_function(model: HookedTransformer) -> np.vectorize:
-    def decode_tokens(idx: int) -> str:
-        return "None" if idx is None else model.tokenizer.decode([idx])  # type: ignore
-
-    return np.vectorize(decode_tokens)
-
-
 def load_data(results_path: str) -> tuple:
     return (
         load_npz_files(results_path, "feature_acts_cooc_activations"),
@@ -135,19 +134,23 @@ def load_data(results_path: str) -> tuple:
 
 def save_thresholded_matrices(thresholded_matrices: dict, results_path: str) -> None:
     """
-    Save thresholded matrices to compressed npz files in a subdirectory.
+    Save thresholded matrices to compressed npz files and sparse matrices in a subdirectory.
 
     Args:
         thresholded_matrices (dict): A dictionary of thresholded matrices.
         results_path (str): The path where the matrices will be saved.
     """
     thresholded_matrices_dir = os.path.join(results_path, "thresholded_matrices")
+    # sparse_matrices_dir = os.path.join(results_path, "sparse_matrices")
     os.makedirs(thresholded_matrices_dir, exist_ok=True)
+    # os.makedirs(sparse_matrices_dir, exist_ok=True)
 
     for threshold, matrix in tqdm(
-        thresholded_matrices.items(), leave=False, desc="Saving thresholded matrices"
+        thresholded_matrices.items(), leave=False, desc="Saving matrices"
     ):
         filepath_safe_threshold = str(threshold).replace(".", "_")
+
+        # Save dense matrix
         np.savez_compressed(
             os.path.join(
                 thresholded_matrices_dir,
@@ -155,7 +158,20 @@ def save_thresholded_matrices(thresholded_matrices: dict, results_path: str) -> 
             ),
             matrix,
         )
-    logging.info("Thresholded matrices saved in 'thresholded_matrices' subdirectory.")
+
+        # Convert to sparse and save
+        sparse_matrix = sparse.csr_matrix(matrix)
+        sparse.save_npz(
+            os.path.join(
+                thresholded_matrices_dir,
+                f"sparse_thresholded_matrix_{filepath_safe_threshold}.npz",
+            ),
+            sparse_matrix,
+        )
+
+    logging.info(
+        "Matrices saved in 'thresholded_matrices' and 'sparse_matrices' subdirectories."
+    )
 
 
 def process_matrices(
@@ -272,7 +288,9 @@ def process_subgraphs(
 ):
     graphs, subgraph_lists, node_info_dfs = {}, {}, {}
 
-    for key, matrix in tqdm(thresholded_matrices.items(), leave=False):
+    for key, matrix in tqdm(
+        thresholded_matrices.items(), leave=False, desc="Processing subgraphs"
+    ):
         graph = create_graph_from_matrix(matrix)
         graphs[key] = graph
         subgraphs = get_subgraphs(graph)
