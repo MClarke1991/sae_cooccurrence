@@ -242,6 +242,91 @@ def plot_histogram(
     plt.close()
 
 
+def plot_normalized_histogram(
+    histogram_data: dict[str, dict[str, np.ndarray]],
+    stats: dict[str, Any],
+    output_dir: str,
+    sae_release_short: str,
+) -> None:
+    """Create and save normalized histogram plots for observed and expected co-occurrences."""
+
+    axis_label = get_axis_label(sae_release_short)
+
+    # Log-transformed normalized histogram
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Normalize by total tokens
+    total_tokens = stats["total_tokens"]
+    observed_log_density = histogram_data["observed"]["log_density"] / total_tokens
+    expected_log_density = histogram_data["expected"]["log_density"] / total_tokens
+
+    ax.plot(
+        histogram_data["observed"]["log_bin_edges"],
+        observed_log_density,
+        label="Observed (Normalized)",
+        color="blue",
+    )
+    ax.plot(
+        histogram_data["expected"]["log_bin_edges"],
+        expected_log_density,
+        label="Expected (Normalized)",
+        color="red",
+    )
+
+    ax.set_xlabel("Log10 Co-occurrence (per token)")
+    ax.set_ylabel("Normalized Density")
+    ax.set_title(
+        f'Log-transformed Normalized Co-occurrence Density Plot\n'
+        f'(SAE {axis_label}: {stats["sae_size"]}, Activation threshold: {stats["activation_threshold"]})'
+    )
+    ax.legend()
+
+    plt.tight_layout()
+    plt.savefig(
+        pj(
+            output_dir,
+            f'normalized_histogram_log_observed_expected_{stats["sae_size"]}.png',
+        )
+    )
+    plt.close()
+
+    # Unlogged normalized histogram
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    observed_density = histogram_data["observed"]["density"] / total_tokens
+    expected_density = histogram_data["expected"]["density"] / total_tokens
+
+    ax.plot(
+        histogram_data["observed"]["bin_edges"],
+        observed_density,
+        label="Observed (Normalized)",
+        color="blue",
+    )
+    ax.plot(
+        histogram_data["expected"]["bin_edges"],
+        expected_density,
+        label="Expected (Normalized)",
+        color="red",
+    )
+
+    ax.set_xlabel("Co-occurrence (per token)")
+    ax.set_ylabel("Normalized Density")
+    ax.set_title(
+        f'Unlogged Normalized Co-occurrence Density Plot\n'
+        f'(SAE {axis_label}: {stats["sae_size"]}, Activation threshold: {stats["activation_threshold"]})'
+    )
+    ax.legend()
+
+    plt.tight_layout()
+    plt.savefig(
+        pj(
+            output_dir,
+            f'normalized_histogram_unlogged_observed_expected_{stats["sae_size"]}.png',
+        )
+    )
+    plt.close()
+
+
 def plot_combined_boxplots(
     all_stats: list[dict[str, Any]],
     output_dir: str,
@@ -474,6 +559,9 @@ def main():
                     f"Plotting histogram for SAE size {sae_size} and threshold {threshold}"
                 )
                 plot_histogram(histogram_data, stats, output_dir, sae_release_short)
+                plot_normalized_histogram(
+                    histogram_data, stats, output_dir, sae_release_short
+                )  # New function call
                 print(
                     f"Plotted histogram for SAE size {sae_size} and threshold {threshold}"
                 )
