@@ -97,5 +97,14 @@ Common Poetry commands:
 
 # Figure Reproduction
 
-## SAE latent co-occurrence per token: 
+## SAE latent co-occurrence heatmaps (Figure 3A)
+See `src/size_effects/gpt2_768_heatmap_and_cluster_stats.ipynb`
+
+## SAE latent co-occurrence Jaccard normalisation histogram (Figure 4A): 
+See `src/size_effects/gpt2_768_heatmap_and_cluster_stats.ipynb`
+
+## Effect of Jaccard normalisation on subgraph size and degree (Figure 5):
+See `src/size_effects/gpt2_768_heatmap_and_cluster_stats.ipynb`
+
+## SAE latent occurrence per token with width and L0 (Figure 3B and Appendix Figure \app_fig_gemma_features_vs_lo): 
 See `src/size_effects/features_active_per_token.py`
