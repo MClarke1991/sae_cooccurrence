@@ -197,8 +197,8 @@ def plot_histogram(
         color="red",
     )
 
-    ax.set_xlabel("Log10 Co-occurrence (per token)")
-    ax.set_ylabel("Density")
+    ax.set_xlabel("Log10 Co-occurrence")
+    ax.set_ylabel("Density (per token)")
     ax.set_title(
         f'Log-transformed Co-occurrence Density Plot\n'
         f'(SAE {axis_label}: {stats["sae_size"]}, Activation threshold: {stats["activation_threshold"]})'
@@ -227,8 +227,8 @@ def plot_histogram(
         color="red",
     )
 
-    ax.set_xlabel("Co-occurrence (per token)")
-    ax.set_ylabel("Density")
+    ax.set_xlabel("Co-occurrence")
+    ax.set_ylabel("Density (per token)")
     ax.set_title(
         f'Unlogged Co-occurrence Density Plot\n'
         f'(SAE {axis_label}: {stats["sae_size"]}, Activation threshold: {stats["activation_threshold"]})'
@@ -260,21 +260,28 @@ def plot_normalized_histogram(
     observed_log_density = histogram_data["observed"]["log_density"] / total_tokens
     expected_log_density = histogram_data["expected"]["log_density"] / total_tokens
 
-    ax.plot(
+    # Modify expected log density to set values below 1 to 0
+    # expected_log_density = np.where(
+    #     expected_log_density < 0,
+    #     0,
+    #     expected_log_density,
+    # )
+
+    ax.step(
         histogram_data["observed"]["log_bin_edges"],
         observed_log_density,
         label="Observed (Normalized)",
         color="blue",
     )
-    ax.plot(
+    ax.step(
         histogram_data["expected"]["log_bin_edges"],
         expected_log_density,
         label="Expected (Normalized)",
         color="red",
     )
 
-    ax.set_xlabel("Log10 Co-occurrence (per token)")
-    ax.set_ylabel("Normalized Density")
+    ax.set_xlabel("Log10 Co-occurrence")
+    ax.set_ylabel("Normalized Density (per token)")
     ax.set_title(
         f'Log-transformed Normalized Co-occurrence Density Plot\n'
         f'(SAE {axis_label}: {stats["sae_size"]}, Activation threshold: {stats["activation_threshold"]})'
@@ -286,6 +293,41 @@ def plot_normalized_histogram(
         pj(
             output_dir,
             f'normalized_histogram_log_observed_expected_{stats["sae_size"]}.png',
+        )
+    )
+    plt.close()
+
+    axis_label = get_axis_label(sae_release_short)
+
+    # Log-transformed normalized histogram
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.step(
+        histogram_data["observed"]["log_bin_edges"],
+        observed_log_density,
+        label="Observed (Normalized)",
+        color="blue",
+    )
+    ax.step(
+        histogram_data["expected"]["log_bin_edges"],
+        expected_log_density,
+        label="Expected (Normalized)",
+        color="red",
+    )
+
+    ax.set_xlabel("Log10 Co-occurrence")
+    ax.set_ylabel("Normalized Density (per token)")
+    ax.set_title(
+        f'Log-transformed Normalized Co-occurrence Density Plot\n'
+        f'(SAE {axis_label}: {stats["sae_size"]}, Activation threshold: {stats["activation_threshold"]})'
+    )
+    ax.set_xlim(0, None)
+    ax.legend()
+
+    plt.tight_layout()
+    plt.savefig(
+        pj(
+            output_dir,
+            f'normalized_histogram_log_observed_expected_{stats["sae_size"]}_x_zero.png',
         )
     )
     plt.close()
@@ -493,6 +535,9 @@ def main():
     sae_release_short = "res-jb-feature-splitting"
     sae_sizes = [768, 1536, 3072, 6144, 12288, 24576, 49152, 98304]
 
+    skip_boxplots = True
+    skip_histograms = False
+
     # model_name = "gemma-2-2b"
     # sae_release_short = "gemma-scope-2b-pt-res"
     # sae_sizes = [176, 22, 41, 445, 82]
@@ -540,14 +585,17 @@ def main():
             print(
                 f"Plotting boxplots for SAE size {sae_size} and threshold {threshold}"
             )
-            plot_boxplots(stats, output_dir, sae_release_short, show_fliers=False)
-            print(
-                f"Plotted boxplots without outliers for SAE size {sae_size} and threshold {threshold}"
-            )
-            plot_boxplots(stats, output_dir, sae_release_short)
-            print(f"Plotted boxplots for SAE size {sae_size} and threshold {threshold}")
+            if not skip_boxplots:
+                plot_boxplots(stats, output_dir, sae_release_short, show_fliers=False)
+                print(
+                    f"Plotted boxplots without outliers for SAE size {sae_size} and threshold {threshold}"
+                )
+                plot_boxplots(stats, output_dir, sae_release_short)
+                print(
+                    f"Plotted boxplots for SAE size {sae_size} and threshold {threshold}"
+                )
 
-            if os.path.exists(histogram_file):
+            if os.path.exists(histogram_file) and not skip_histograms:
                 print(
                     f"Loading histogram data for SAE size {sae_size} and threshold {threshold}"
                 )
@@ -563,7 +611,7 @@ def main():
                     histogram_data, stats, output_dir, sae_release_short
                 )  # New function call
                 print(
-                    f"Plotted histogram for SAE size {sae_size} and threshold {threshold}"
+                    f"Plotted normalised histogram for SAE size {sae_size} and threshold {threshold}"
                 )
             else:
                 print(f"Histogram data file not found: {histogram_file}")
@@ -573,7 +621,7 @@ def main():
             all_stats.append(stats)
 
     # Plot combined boxplots for all SAE sizes
-    if len(all_stats) > 1:
+    if not skip_boxplots and len(all_stats) > 1:
         print("Plotting combined boxplots for all SAE sizes")
         plot_combined_boxplots(all_stats, output_dir, sae_release_short)
         print("Plotted combined boxplots for all SAE sizes")
