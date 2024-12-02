@@ -64,11 +64,14 @@ def calculate_firing_stats(sae, activation_store, n_batches, threshold):
     }
 
 
-def save_results(results, summary_stats, output_dir):
+def save_results(results, summary_stats, output_dir, sae_release_short):
     os.makedirs(output_dir, exist_ok=True)
 
+    # Determine prefix based on sae_release_short
+    prefix = "width" if "width" in sae_release_short else "l0"
+
     full_results = {"detailed_results": results, "summary_stats": summary_stats}
-    pickle_path = pj(output_dir, "sae_firing_stats_full.pkl")
+    pickle_path = pj(output_dir, f"{prefix}_sae_firing_stats_full.pkl")
     with open(pickle_path, "wb") as f:
         pickle.dump(full_results, f)
     print(f"Full results saved as pickle: {pickle_path}")
@@ -113,11 +116,11 @@ def save_results(results, summary_stats, output_dir):
             ]
         ),
     }
-    np_path = pj(output_dir, "sae_firing_stats.npy")
+    np_path = pj(output_dir, f"{prefix}_sae_firing_stats.npy")
     np.save(np_path, np_results)  # type: ignore
     print(f"Numpy arrays saved as: {np_path}")
 
-    txt_path = pj(output_dir, "sae_firing_stats_results.txt")
+    txt_path = pj(output_dir, f"{prefix}_sae_firing_stats_results.txt")
     with open(txt_path, "w") as f:
         f.write("Results:\n")
         f.write(
@@ -190,7 +193,7 @@ def plot_results(
     ax1.set_xscale("log")
     ax1.set_yscale("log")
     ax1.xaxis.set_major_formatter(ff(lambda x, _: f"{int(x):,}"))
-    ax1.set_xticks(sae_sizes) 
+    ax1.set_xticks(sae_sizes)
     ax1.tick_params(axis="x", rotation=45)
     ax1.set_xlabel("SAE Size")
     ax1.set_ylabel("Fraction of Features Fired")
@@ -209,7 +212,7 @@ def plot_results(
     ax2.grid(True)
 
     plt.tight_layout()
-    plot_path = pj(output_dir, "sae_firing_stats_plot.png")
+    plot_path = pj(output_dir, "width_sae_firing_stats_plot.png")
     plt.savefig(plot_path, dpi=300)
     print(f"Plot saved as: {plot_path}")
     plt.close()
@@ -246,7 +249,7 @@ def plot_results(
     ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
 
     plt.tight_layout()
-    combined_plot_path = pj(output_dir, "sae_firing_stats_combined_plot.png")
+    combined_plot_path = pj(output_dir, "width_sae_firing_stats_combined_plot.png")
     plt.savefig(combined_plot_path, dpi=300)
     print(f"Combined plot saved as: {combined_plot_path}")
     plt.close()
@@ -430,7 +433,7 @@ def process_model_sae_stats(
         summary_stats[threshold] = calculate_summary_statistics(results, threshold)
 
     # Save and plot results
-    save_results(results, summary_stats, output_dir)
+    save_results(results, summary_stats, output_dir, sae_release_short)
     plot_results(
         results,
         output_dir,
