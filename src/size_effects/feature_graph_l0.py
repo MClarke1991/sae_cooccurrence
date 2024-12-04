@@ -11,6 +11,7 @@ from sae_lens import SAE, ActivationsStore
 from tqdm.autonotebook import tqdm
 from transformer_lens import HookedTransformer
 
+from sae_cooccurrence.normalised_cooc_functions import get_sae_release
 from sae_cooccurrence.utils.saving_loading import set_device
 from sae_cooccurrence.utils.set_paths import get_git_root
 
@@ -111,11 +112,11 @@ def analyze_sae(
 ) -> dict:
     results_dir = f"results/{model_name}/{sae_release_short}/{sae_id.replace('.', '_')}"
 
+    sae_release = get_sae_release(model_name, sae_release_short)
+
     # Load model and SAE
     model = HookedTransformer.from_pretrained(model_name, device=device)
-    sae, cfg_dict, sparsity = SAE.from_pretrained(
-        release=f"{model_name}-{sae_release_short}", sae_id=sae_id, device=device
-    )
+    sae, _, _ = SAE.from_pretrained(release=sae_release, sae_id=sae_id, device=device)
 
     # Set up the activations store
     activation_store = ActivationsStore.from_sae(
@@ -376,68 +377,104 @@ def main():
     device = set_device()
     git_root = get_git_root()
 
-    # Configuration
-    model_name = "gpt2-small"
-    sae_release_short = "res-jb-feature-splitting"
-    sae_ids = [
-        "blocks.8.hook_resid_pre_768",
-        "blocks.8.hook_resid_pre_1536",
-        "blocks.8.hook_resid_pre_3072",
-        "blocks.8.hook_resid_pre_6144",
-        "blocks.8.hook_resid_pre_12288",
-        "blocks.8.hook_resid_pre_24576",
+    # Configuration for multiple models
+    model_configs = [
+        {
+            "model_name": "gpt2-small",
+            "sae_release_short": "res-jb-feature-splitting",
+            "sae_ids": [
+                "blocks.8.hook_resid_pre_768",
+                "blocks.8.hook_resid_pre_1536",
+                "blocks.8.hook_resid_pre_3072",
+                "blocks.8.hook_resid_pre_6144",
+                "blocks.8.hook_resid_pre_12288",
+                "blocks.8.hook_resid_pre_24576",
+                "blocks.8.hook_resid_pre_49152",
+                "blocks.8.hook_resid_pre_98304",
+            ],
+            "n_batches_generation": 500,
+        },
+        {
+            "model_name": "gemma-2-2b",
+            "sae_release_short": "gemma-scope-2b-pt-res-canonical",
+            "sae_ids": [
+                "layer_12/width_16k/canonical",
+                "layer_12/width_32k/canonical",
+                "layer_12/width_65k/canonical",
+            ],
+            "n_batches_generation": 100,
+        },
+        {
+            "model_name": "gemma-2-2b",
+            "sae_release_short": "gemma-scope-2b-pt-res",
+            "sae_ids": [
+                "layer_12/width_16k/average_l0_22",
+                "layer_12/width_16k/average_l0_41",
+                "layer_12/width_16k/average_l0_82",
+                "layer_12/width_16k/average_l0_176",
+                "layer_12/width_16k/average_l0_445",
+            ],
+            "n_batches_generation": 100,
+        },
+        # Add more model configurations as needed
     ]
-    n_batches_generation = 500
+
     n_batches_profiling = 10
     activation_threshold = 1.5  # You can adjust this threshold
     activation_threshold_safe = str(activation_threshold).replace(".", "_")
 
-    # Create output directory
-    output_dir = pj(
-        git_root,
-        "results",
-        "size_effects",
-        model_name,
-        sae_release_short,
-        f"l0_of_feature_and_graph_comparison_{activation_threshold_safe}",
-    )
-    os.makedirs(output_dir, exist_ok=True)
+    for config in model_configs:
+        model_name = config["model_name"]
+        sae_release_short = config["sae_release_short"]
+        sae_ids = config["sae_ids"]
+        n_batches_generation = config["n_batches_generation"]
 
-    # Check if data already exists
-    existing_data = [f for f in os.listdir(output_dir) if f.endswith(".json")]
-
-    if existing_data:
-        print("Existing data found.")
-        regenerate = (
-            input("Do you want to regenerate the data? (y/n): ").lower().strip()
+        # Create output directory
+        output_dir = pj(
+            git_root,
+            "results",
+            "size_effects",
+            model_name,
+            sae_release_short,
+            f"l0_of_feature_and_graph_comparison_{activation_threshold_safe}",
         )
-        if regenerate == "y":
-            print("Regenerating data...")
-            for file in existing_data:
-                os.remove(pj(output_dir, file))
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Check if data already exists
+        existing_data = [f for f in os.listdir(output_dir) if f.endswith(".json")]
+
+        if existing_data:
+            print(f"Existing data found for {model_name}.")
+            regenerate = (
+                input("Do you want to regenerate the data? (y/n): ").lower().strip()
+            )
+            if regenerate == "y":
+                print("Regenerating data...")
+                for file in existing_data:
+                    os.remove(pj(output_dir, file))
+            else:
+                print("Using existing data...")
         else:
-            print("Using existing data...")
-    else:
-        print("No existing data found. Generating new data...")
+            print(f"No existing data found for {model_name}. Generating new data...")
 
-    results = load_or_generate_data(
-        model_name,
-        sae_release_short,
-        sae_ids,
-        n_batches_profiling,
-        n_batches_generation,
-        device,
-        git_root,
-        output_dir,
-        activation_threshold,
-    )
+        results = load_or_generate_data(
+            model_name,
+            sae_release_short,
+            sae_ids,
+            n_batches_profiling,
+            n_batches_generation,
+            device,
+            git_root,
+            output_dir,
+            activation_threshold,
+        )
 
-    results.sort(key=lambda x: x["sae_size"])  # Sort by SAE size
-    plot_l0_comparison(results, output_dir)
+        results.sort(key=lambda x: x["sae_size"])  # Sort by SAE size
+        plot_l0_comparison(results, output_dir)
 
-    print(
-        f"Analysis complete. Results plotted in {output_dir}/l0_comparison_by_sae_size.html and .png"
-    )
+        print(
+            f"Analysis complete for {model_name}. Results plotted in {output_dir}/l0_comparison_by_sae_size.html and .png"
+        )
 
 
 if __name__ == "__main__":
