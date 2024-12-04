@@ -111,7 +111,7 @@ def analyze_sae(
     activation_threshold: float,
 ) -> dict:
     sae_release_short_safe = sae_release_short.replace("/", "_")
-    results_dir = f"results/{model_name}/{sae_release_short_safe}/{sae_id.replace('.', '_')}"
+    results_dir = f"results/{model_name}/{sae_release_short_safe}/{sae_id.replace('.', '_').replace('/', '_')}"
 
     sae_release = get_sae_release(model_name, sae_release_short)
 
