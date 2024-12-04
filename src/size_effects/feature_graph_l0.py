@@ -99,6 +99,25 @@ def calculate_l0_sparsity(
     )
 
 
+def extract_sae_size(sae_id: str) -> int:
+    """Extract SAE size from different SAE ID formats."""
+    # For format like "width_16k/canonical"
+    if "/canonical" in sae_id:
+        width_part = sae_id.split("/")[0]
+        size_str = width_part.split("_")[-1]
+        return int(size_str.replace("k", "000"))
+    # For format like "blocks.8.hook_resid_pre_768"
+    elif "hook_resid_pre_" in sae_id:
+        return int(sae_id.split("_")[-1])
+    # For format like "width_16k/average_l0_22"
+    elif "/average_l0_" in sae_id:
+        width_part = sae_id.split("/")[0]
+        size_str = width_part.split("_")[-1]
+        return int(size_str.replace("k", "000"))
+    else:
+        raise ValueError(f"Unrecognized SAE ID format: {sae_id}")
+
+
 def analyze_sae(
     model_name: str,
     sae_release_short: str,
@@ -126,7 +145,7 @@ def analyze_sae(
         streaming=True,
         store_batch_size_prompts=8,
         train_batch_size_tokens=4096,
-        n_batches_in_buffer=32,
+        n_batches_in_buffer=4,
         device=device,
     )
 
@@ -156,7 +175,7 @@ def analyze_sae(
         )
     )
 
-    sae_size = int(sae_id.split("_")[-1])
+    sae_size = extract_sae_size(sae_id)
     num_subgraphs = len(subgraph_dict)
 
     # Extract average_l0 from sae_id if present
