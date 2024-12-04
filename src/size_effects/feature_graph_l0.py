@@ -15,11 +15,11 @@ from sae_cooccurrence.utils.saving_loading import set_device
 from sae_cooccurrence.utils.set_paths import get_git_root
 
 
-def load_subgraph_data(csv_path):
+def load_subgraph_data(csv_path: str) -> pd.DataFrame:
     return pd.read_csv(csv_path)
 
 
-def create_subgraph_dict(node_df):
+def create_subgraph_dict(node_df: pd.DataFrame) -> dict:
     subgraph_dict = {}
     for _, row in node_df.iterrows():
         subgraph_id = row["subgraph_id"]
@@ -30,19 +30,23 @@ def create_subgraph_dict(node_df):
     return subgraph_dict
 
 
-def subgraph_activation_50percent(feature_acts, subgraph_nodes, activation_threshold):
+def subgraph_activation_50percent(
+    feature_acts: torch.Tensor, subgraph_nodes: list[int], activation_threshold: float
+) -> torch.Tensor:
     return (feature_acts[:, subgraph_nodes] > activation_threshold).float().mean(
         dim=1
     ) >= 0.5
 
 
-def subgraph_activation_any(feature_acts, subgraph_nodes, activation_threshold):
+def subgraph_activation_any(
+    feature_acts: torch.Tensor, subgraph_nodes: list[int], activation_threshold: float
+) -> torch.Tensor:
     return (feature_acts[:, subgraph_nodes] > activation_threshold).any(dim=1)
 
 
 def calculate_l0_sparsity(
     sae, activation_store, subgraph_dict, n_batches, device, activation_threshold
-):
+) -> tuple[float, float, float, int]:
     total_tokens = 0
     feature_l0_sum = 0
     subgraph_l0_50percent_sum = 0
@@ -95,18 +99,17 @@ def calculate_l0_sparsity(
 
 
 def analyze_sae(
-    model_name,
-    sae_release_short,
-    sae_id,
-    n_batches,
-    device,
-    git_root,
-    output_dir,
-    activation_threshold,
-):
-    results_dir = (
-        f"results/cooc/{model_name}/{sae_release_short}/{sae_id.replace('.', '_')}"
-    )
+    model_name: str,
+    sae_release_short: str,
+    sae_id: str,
+    n_batches: int,
+    n_batches_generation: int,
+    device: str,
+    git_root: str,
+    output_dir: str,
+    activation_threshold: float,
+) -> dict:
+    results_dir = f"results/{model_name}/{sae_release_short}/{sae_id.replace('.', '_')}"
 
     # Load model and SAE
     model = HookedTransformer.from_pretrained(model_name, device=device)
@@ -129,7 +132,13 @@ def analyze_sae(
 
     # Load subgraph data
     node_df = load_subgraph_data(
-        pj(git_root, results_dir, "dataframes", f"node_info_df_{threshold_safe}.csv")
+        pj(
+            git_root,
+            results_dir,
+            f"n_batches_{n_batches_generation}",
+            "dataframes",
+            f"node_info_df_{threshold_safe}.csv",
+        )
     )
     subgraph_dict = create_subgraph_dict(node_df)
 
@@ -165,7 +174,7 @@ def analyze_sae(
     return result
 
 
-def plot_l0_comparison(results, output_dir):
+def plot_l0_comparison(results: list[dict], output_dir: str):
     # Create separate figures for normalized and raw plots
     fig_norm = go.Figure()
     fig_raw = go.Figure()
@@ -319,15 +328,16 @@ def plot_l0_comparison(results, output_dir):
 
 
 def load_or_generate_data(
-    model_name,
+    model_name: str,
     sae_release_short,
-    sae_ids,
-    n_batches,
-    device,
-    git_root,
-    output_dir,
-    activation_threshold,
-):
+    sae_ids: list[str],
+    n_batches: int,
+    n_batches_generation: int,
+    device: str,
+    git_root: str,
+    output_dir: str,
+    activation_threshold: float,
+) -> list[dict]:
     results = []
     for sae_id in tqdm(sae_ids, desc="Processing SAEs"):
         result_file = pj(
@@ -343,6 +353,7 @@ def load_or_generate_data(
                 sae_release_short,
                 sae_id,
                 n_batches,
+                n_batches_generation,
                 device,
                 git_root,
                 output_dir,
@@ -376,7 +387,8 @@ def main():
         "blocks.8.hook_resid_pre_12288",
         "blocks.8.hook_resid_pre_24576",
     ]
-    n_batches = 10
+    n_batches_generation = 500
+    n_batches_profiling = 10
     activation_threshold = 1.5  # You can adjust this threshold
     activation_threshold_safe = str(activation_threshold).replace(".", "_")
 
@@ -384,11 +396,10 @@ def main():
     output_dir = pj(
         git_root,
         "results",
-        "cooc",
         "size_effects",
         model_name,
         sae_release_short,
-        f"l0_comparison_{activation_threshold_safe}",
+        f"l0_of_feature_and_graph_comparison_{activation_threshold_safe}",
     )
     os.makedirs(output_dir, exist_ok=True)
 
@@ -413,7 +424,8 @@ def main():
         model_name,
         sae_release_short,
         sae_ids,
-        n_batches,
+        n_batches_profiling,
+        n_batches_generation,
         device,
         git_root,
         output_dir,
