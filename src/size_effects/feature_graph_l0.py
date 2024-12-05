@@ -50,55 +50,50 @@ def calculate_l0_sparsity(
 ) -> tuple[float, float, float, int]:
     total_tokens = 0
     feature_l0_sum = 0
-    subgraph_l0_50percent_sum = 0
+    # subgraph_l0_50percent_sum = 0
     subgraph_l0_any_sum = 0
-
-    # Pre-create indices tensor for each subgraph
-    max_subgraph_size = max(len(nodes) for nodes in subgraph_dict.values())
-    subgraph_indices = torch.ones((len(subgraph_dict), max_subgraph_size), dtype=torch.long, device=device) * -1
-    subgraph_sizes = torch.zeros(len(subgraph_dict), dtype=torch.long, device=device)
-    
-    # Fill the indices tensor
-    for i, (_, nodes) in enumerate(subgraph_dict.items()):
-        subgraph_indices[i, :len(nodes)] = torch.tensor(nodes, device=device)
-        subgraph_sizes[i] = len(nodes)
 
     for _ in tqdm(range(n_batches), desc="Processing batches"):
         activations_batch = activation_store.next_batch()
         feature_acts = sae.encode(activations_batch).squeeze()
-        batch_size = feature_acts.shape[0]
 
         # Count active features per token
         feature_activations = (feature_acts > activation_threshold).float()
         feature_l0_per_token = feature_activations.sum(dim=1)
+
         feature_l0_sum += feature_l0_per_token.sum().item()
 
-        # Efficient subgraph activation calculation
-        # Shape: [batch_size, n_subgraphs, max_subgraph_size]
-        subgraph_acts = feature_acts[:, subgraph_indices]
-        mask = torch.arange(max_subgraph_size, device=device)[None, None, :] < subgraph_sizes[None, :, None]
-        
-        # Apply mask and threshold
-        active = (subgraph_acts > activation_threshold) & mask
-        
-        # Calculate proportions for 50% criterion
-        proportions = active.sum(dim=2) / subgraph_sizes[None, :]
-        subgraph_active_50percent = (proportions >= 0.5).float()
-        subgraph_active_any = (active.sum(dim=2) > 0).float()
+        # Count active subgraphs per token (≥50% definition)
+        # subgraph_l0_50percent_per_token = torch.zeros(
+        #     feature_acts.shape[0], device=device
+        # )
+        # Count active subgraphs per token (any active definition)
+        subgraph_l0_any_per_token = torch.zeros(feature_acts.shape[0], device=device)
 
-        subgraph_l0_50percent_sum += subgraph_active_50percent.sum().item()
-        subgraph_l0_any_sum += subgraph_active_any.sum().item()
-        
-        total_tokens += batch_size
+        for _, nodes in subgraph_dict.items():
+            # sg_activation_50percent = subgraph_activation_50percent(
+            #     feature_acts, nodes, activation_threshold
+            # )
+            sg_activation_any = subgraph_activation_any(
+                feature_acts, nodes, activation_threshold
+            )
 
-    # Calculate means
+            # subgraph_l0_50percent_per_token += sg_activation_50percent.float()
+            subgraph_l0_any_per_token += sg_activation_any.float()
+
+        # subgraph_l0_50percent_sum += subgraph_l0_50percent_per_token.sum().item()
+        subgraph_l0_any_sum += subgraph_l0_any_per_token.sum().item()
+
+        total_tokens += feature_acts.shape[0]
+
+    # Calculate means (average number of active features/subgraphs per token)
     feature_l0_mean = feature_l0_sum / total_tokens
-    subgraph_l0_50percent_mean = subgraph_l0_50percent_sum / total_tokens
+    # subgraph_l0_50percent_mean = subgraph_l0_50percent_sum / total_tokens
     subgraph_l0_any_mean = subgraph_l0_any_sum / total_tokens
 
     return (
         feature_l0_mean,
-        subgraph_l0_50percent_mean,
+        0.0,
         subgraph_l0_any_mean,
         total_tokens,
     )
@@ -106,17 +101,17 @@ def calculate_l0_sparsity(
 
 def extract_sae_size(sae_id: str) -> int:
     """Extract SAE size from different SAE ID formats."""
-    # For format like "width_16k/canonical"
+    # For format like "layer_12/width_16k/canonical"
     if "/canonical" in sae_id:
-        width_part = sae_id.split("/")[0]
+        width_part = sae_id.split("/")[1]
         size_str = width_part.split("_")[-1]
         return int(size_str.replace("k", "000"))
     # For format like "blocks.8.hook_resid_pre_768"
     elif "hook_resid_pre_" in sae_id:
         return int(sae_id.split("_")[-1])
-    # For format like "width_16k/average_l0_22"
+    # For format like "layer_12/width_16k/average_l0_22"
     elif "/average_l0_" in sae_id:
-        width_part = sae_id.split("/")[0]
+        width_part = sae_id.split("/")[1]
         size_str = width_part.split("_")[-1]
         return int(size_str.replace("k", "000"))
     else:
@@ -201,8 +196,12 @@ def analyze_sae(
         "num_subgraphs": num_subgraphs,
     }
 
-    with open(pj(output_dir, f"l0_comparison_sae_size_{sae_size}.json"), "w") as f:
-        json.dump(result, f)
+    if average_l0 is not None:
+        with open(pj(output_dir, f"l0_comparison_sae_l0_{average_l0}.json"), "w") as f:
+            json.dump(result, f)
+    else:
+        with open(pj(output_dir, f"l0_comparison_sae_size_{sae_size}.json"), "w") as f:
+            json.dump(result, f)
 
     return result
 
@@ -376,9 +375,13 @@ def load_or_generate_data(
 ) -> list[dict]:
     results = []
     for sae_id in tqdm(sae_ids, desc="Processing SAEs"):
-        result_file = pj(
-            output_dir, f"l0_comparison_sae_size_{sae_id.split('_')[-1]}.json"
-        )
+        # Determine file name based on presence of average_l0
+        if "average_l0_" in sae_id:
+            average_l0 = sae_id.split("average_l0_")[-1]
+            result_file = pj(output_dir, f"l0_comparison_sae_l0_{average_l0}.json")
+        else:
+            sae_size = sae_id.split("_")[-1]
+            result_file = pj(output_dir, f"l0_comparison_sae_size_{sae_size}.json")
 
         if os.path.exists(result_file):
             with open(result_file) as f:
