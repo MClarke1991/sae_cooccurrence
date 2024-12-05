@@ -178,7 +178,7 @@ def analyze_sae(
 
     # Extract average_l0 from sae_id if present
     if "average_l0_" in sae_id:
-        average_l0 = float(sae_id.split("average_l0_")[-1])
+        average_l0 = int(sae_id.split("average_l0_")[-1])
     else:
         average_l0 = None
 
@@ -227,14 +227,14 @@ def plot_l0_comparison_matplotlib(
 
     # Define colors and line styles
     color_map = {
-        "gpt2-small": "blue",
-        "gemma-2-2b-canonical": "red",
-        "gemma-2-2b-pt-res": "green",
+        "res-jb-feature-splitting": "blue",
+        "gemma-scope-2b-pt-res-canonical": "red",
+        "gemma-scope-2b-pt-res": "green",
     }
 
-    # Determine color based on model name
-    model_name = results[0].get("model_name", "default")
-    color = color_map.get(model_name, "black")
+    # Determine color based on sae_release
+    sae_release = results[0].get("sae_release", "default")
+    color = color_map.get(sae_release, "blue")
 
     # Plot normalized values
     plt.figure(figsize=(8, 6))
@@ -303,18 +303,19 @@ def load_or_generate_data(
     git_root: str,
     output_dir: str,
     activation_threshold: float,
+    regenerate: bool = False,
 ) -> list[dict]:
     results = []
     for sae_id in tqdm(sae_ids, desc="Processing SAEs"):
         # Determine file name based on presence of average_l0
         if "average_l0_" in sae_id:
-            average_l0 = sae_id.split("average_l0_")[-1]
+            average_l0 = int(sae_id.split("average_l0_")[-1])
             result_file = pj(output_dir, f"l0_comparison_sae_l0_{average_l0}.json")
         else:
-            sae_size = sae_id.split("_")[-1]
+            sae_size = extract_sae_size(sae_id)
             result_file = pj(output_dir, f"l0_comparison_sae_size_{sae_size}.json")
 
-        if os.path.exists(result_file):
+        if os.path.exists(result_file) and not regenerate:
             with open(result_file) as f:
                 result = json.load(f)
         else:
@@ -411,13 +412,15 @@ def main():
 
         # Check if data already exists
         existing_data = [f for f in os.listdir(output_dir) if f.endswith(".json")]
+        regenerate = False
 
         if existing_data:
             print(f"Existing data found for {model_name}.")
-            regenerate = (
+            regenerate_input = (
                 input("Do you want to regenerate the data? (y/n): ").lower().strip()
             )
-            if regenerate == "y":
+            regenerate = regenerate_input == "y"
+            if regenerate:
                 print("Regenerating data...")
                 for file in existing_data:
                     os.remove(pj(output_dir, file))
@@ -425,6 +428,7 @@ def main():
                 print("Using existing data...")
         else:
             print(f"No existing data found for {model_name}. Generating new data...")
+            regenerate = True
 
         # Determine x-axis based on release
         x_axis_key = (
@@ -441,6 +445,7 @@ def main():
             git_root,
             output_dir,
             activation_threshold,
+            regenerate,
         )
         for result in results:
             result["model_name"] = model_name
