@@ -53,40 +53,45 @@ def calculate_l0_sparsity(
     subgraph_l0_50percent_sum = 0
     subgraph_l0_any_sum = 0
 
+    # Pre-create indices tensor for each subgraph
+    max_subgraph_size = max(len(nodes) for nodes in subgraph_dict.values())
+    subgraph_indices = torch.ones((len(subgraph_dict), max_subgraph_size), dtype=torch.long, device=device) * -1
+    subgraph_sizes = torch.zeros(len(subgraph_dict), dtype=torch.long, device=device)
+    
+    # Fill the indices tensor
+    for i, (_, nodes) in enumerate(subgraph_dict.items()):
+        subgraph_indices[i, :len(nodes)] = torch.tensor(nodes, device=device)
+        subgraph_sizes[i] = len(nodes)
+
     for _ in tqdm(range(n_batches), desc="Processing batches"):
         activations_batch = activation_store.next_batch()
         feature_acts = sae.encode(activations_batch).squeeze()
+        batch_size = feature_acts.shape[0]
 
         # Count active features per token
         feature_activations = (feature_acts > activation_threshold).float()
         feature_l0_per_token = feature_activations.sum(dim=1)
-
         feature_l0_sum += feature_l0_per_token.sum().item()
 
-        # Count active subgraphs per token (≥50% definition)
-        subgraph_l0_50percent_per_token = torch.zeros(
-            feature_acts.shape[0], device=device
-        )
-        # Count active subgraphs per token (any active definition)
-        subgraph_l0_any_per_token = torch.zeros(feature_acts.shape[0], device=device)
+        # Efficient subgraph activation calculation
+        # Shape: [batch_size, n_subgraphs, max_subgraph_size]
+        subgraph_acts = feature_acts[:, subgraph_indices]
+        mask = torch.arange(max_subgraph_size, device=device)[None, None, :] < subgraph_sizes[None, :, None]
+        
+        # Apply mask and threshold
+        active = (subgraph_acts > activation_threshold) & mask
+        
+        # Calculate proportions for 50% criterion
+        proportions = active.sum(dim=2) / subgraph_sizes[None, :]
+        subgraph_active_50percent = (proportions >= 0.5).float()
+        subgraph_active_any = (active.sum(dim=2) > 0).float()
 
-        for _, nodes in subgraph_dict.items():
-            sg_activation_50percent = subgraph_activation_50percent(
-                feature_acts, nodes, activation_threshold
-            )
-            sg_activation_any = subgraph_activation_any(
-                feature_acts, nodes, activation_threshold
-            )
+        subgraph_l0_50percent_sum += subgraph_active_50percent.sum().item()
+        subgraph_l0_any_sum += subgraph_active_any.sum().item()
+        
+        total_tokens += batch_size
 
-            subgraph_l0_50percent_per_token += sg_activation_50percent.float()
-            subgraph_l0_any_per_token += sg_activation_any.float()
-
-        subgraph_l0_50percent_sum += subgraph_l0_50percent_per_token.sum().item()
-        subgraph_l0_any_sum += subgraph_l0_any_per_token.sum().item()
-
-        total_tokens += feature_acts.shape[0]
-
-    # Calculate means (average number of active features/subgraphs per token)
+    # Calculate means
     feature_l0_mean = feature_l0_sum / total_tokens
     subgraph_l0_50percent_mean = subgraph_l0_50percent_sum / total_tokens
     subgraph_l0_any_mean = subgraph_l0_any_sum / total_tokens
