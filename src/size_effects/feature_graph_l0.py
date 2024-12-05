@@ -202,7 +202,7 @@ def analyze_sae(
     return result
 
 
-def plot_l0_comparison(results: list[dict], output_dir: str, x_axis_key: str = "sae_size"):
+def plot_l0_comparison(results: list[dict], output_dir: str, x_axis_key: str = "sae_size", activation_threshold_safe: str = "1_5"):
     # Create separate figures for normalized and raw plots
     fig_norm = go.Figure()
     fig_raw = go.Figure()
@@ -304,10 +304,10 @@ def plot_l0_comparison(results: list[dict], output_dir: str, x_axis_key: str = "
     fig_raw.update_yaxes(range=[np.log10(y_min_raw) - 0.1, np.log10(y_max_raw) + 0.1]) # type: ignore 
 
     # Save separate plots
-    fig_norm.write_html(pj(output_dir, "l0_comparison_normalized.html"))
-    fig_norm.write_image(pj(output_dir, "l0_comparison_normalized.png"), scale=3.0)
-    fig_raw.write_html(pj(output_dir, "l0_comparison_raw.html"))
-    fig_raw.write_image(pj(output_dir, "l0_comparison_raw.png"), scale=3.0)
+    fig_norm.write_html(pj(output_dir, f"l0_comparison_normalized_{activation_threshold_safe}.html"))
+    fig_norm.write_image(pj(output_dir, f"l0_comparison_normalized_{activation_threshold_safe}.png"), scale=3.0)
+    fig_raw.write_html(pj(output_dir, f"l0_comparison_raw_{activation_threshold_safe}.html"))
+    fig_raw.write_image(pj(output_dir, f"l0_comparison_raw_{activation_threshold_safe}.png"), scale=3.0)
 
     # Create combined plot
     fig_combined = make_subplots(
@@ -354,8 +354,8 @@ def plot_l0_comparison(results: list[dict], output_dir: str, x_axis_key: str = "
     )
 
     # Save combined plot
-    fig_combined.write_html(pj(output_dir, "l0_comparison_combined.html"))
-    fig_combined.write_image(pj(output_dir, "l0_comparison_combined.png"), scale=3.0)
+    fig_combined.write_html(pj(output_dir, f"l0_comparison_combined_{activation_threshold_safe}.html"))
+    fig_combined.write_image(pj(output_dir, f"l0_comparison_combined_{activation_threshold_safe}.png"), scale=3.0)
 
 
 def load_or_generate_data(
@@ -504,7 +504,7 @@ def main():
 
         # Sort by appropriate key
         results.sort(key=lambda x: x[x_axis_key])
-        plot_l0_comparison(results, output_dir, x_axis_key)
+        plot_l0_comparison(results, output_dir, x_axis_key, activation_threshold_safe)
 
         print(
             f"Analysis complete for {model_name}. Results plotted in {output_dir}/l0_comparison_by_sae_size.html and .png"
