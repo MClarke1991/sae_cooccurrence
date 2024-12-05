@@ -1,1 +1,1 @@
-{"sae_size": 768, "feature_l0": 20.488525390625, "subgraph_l0_50percent": 11.12216796875, "subgraph_l0_any": 13.7256591796875, "total_tokens": 40960, "num_features": 768, "num_subgraphs": 461}
+{"sae_size": 768, "average_l0": null, "feature_l0": 20.464013671875, "subgraph_l0_50percent": 11.1088623046875, "subgraph_l0_any": 13.71376953125, "total_tokens": 40960, "num_features": 768, "num_subgraphs": 461}

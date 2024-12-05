@@ -99,6 +99,25 @@ def calculate_l0_sparsity(
     )
 
 
+def extract_sae_size(sae_id: str) -> int:
+    """Extract SAE size from different SAE ID formats."""
+    # For format like "width_16k/canonical"
+    if "/canonical" in sae_id:
+        width_part = sae_id.split("/")[0]
+        size_str = width_part.split("_")[-1]
+        return int(size_str.replace("k", "000"))
+    # For format like "blocks.8.hook_resid_pre_768"
+    elif "hook_resid_pre_" in sae_id:
+        return int(sae_id.split("_")[-1])
+    # For format like "width_16k/average_l0_22"
+    elif "/average_l0_" in sae_id:
+        width_part = sae_id.split("/")[0]
+        size_str = width_part.split("_")[-1]
+        return int(size_str.replace("k", "000"))
+    else:
+        raise ValueError(f"Unrecognized SAE ID format: {sae_id}")
+
+
 def analyze_sae(
     model_name: str,
     sae_release_short: str,
@@ -110,7 +129,8 @@ def analyze_sae(
     output_dir: str,
     activation_threshold: float,
 ) -> dict:
-    results_dir = f"results/{model_name}/{sae_release_short}/{sae_id.replace('.', '_')}"
+    sae_release_short_safe = sae_release_short.replace("/", "_")
+    results_dir = f"results/{model_name}/{sae_release_short_safe}/{sae_id.replace('.', '_').replace('/', '_')}"
 
     sae_release = get_sae_release(model_name, sae_release_short)
 
@@ -125,7 +145,7 @@ def analyze_sae(
         streaming=True,
         store_batch_size_prompts=8,
         train_batch_size_tokens=4096,
-        n_batches_in_buffer=32,
+        n_batches_in_buffer=4,
         device=device,
     )
 
@@ -155,12 +175,19 @@ def analyze_sae(
         )
     )
 
-    sae_size = int(sae_id.split("_")[-1])
+    sae_size = extract_sae_size(sae_id)
     num_subgraphs = len(subgraph_dict)
 
+    # Extract average_l0 from sae_id if present
+    if "average_l0_" in sae_id:
+        average_l0 = float(sae_id.split("average_l0_")[-1])
+    else:
+        average_l0 = None
+    
     # Save results
     result = {
         "sae_size": sae_size,
+        "average_l0": average_l0,
         "feature_l0": feature_l0,
         "subgraph_l0_50percent": subgraph_l0_50percent,
         "subgraph_l0_any": subgraph_l0_any,
@@ -175,12 +202,15 @@ def analyze_sae(
     return result
 
 
-def plot_l0_comparison(results: list[dict], output_dir: str):
+def plot_l0_comparison(results: list[dict], output_dir: str, x_axis_key: str = "sae_size"):
     # Create separate figures for normalized and raw plots
     fig_norm = go.Figure()
     fig_raw = go.Figure()
 
-    sae_sizes = [r["sae_size"] for r in results]
+    # Use either sae_size or average_l0 for x-axis
+    x_values = [r[x_axis_key] for r in results]
+    x_axis_label = "SAE Size" if x_axis_key == "sae_size" else "Target Average L0"
+    
     feature_l0s = [r["feature_l0"] for r in results]
     # subgraph_l0s_50percent = [r['subgraph_l0_50percent'] for r in results]
     subgraph_l0s_any = [r["subgraph_l0_any"] for r in results]
@@ -196,7 +226,7 @@ def plot_l0_comparison(results: list[dict], output_dir: str):
     # Normalized plot
     fig_norm.add_trace(
         go.Scatter(
-            x=sae_sizes,
+            x=x_values,
             y=feature_l0s_norm,
             mode="markers+lines",
             name="Feature-based L0",
@@ -205,7 +235,7 @@ def plot_l0_comparison(results: list[dict], output_dir: str):
     )
     fig_norm.add_trace(
         go.Scatter(
-            x=sae_sizes,
+            x=x_values,
             y=subgraph_l0s_any_norm,
             mode="markers+lines",
             name="Subgraph-based L0 (any active)",
@@ -216,7 +246,7 @@ def plot_l0_comparison(results: list[dict], output_dir: str):
     # Raw plot
     fig_raw.add_trace(
         go.Scatter(
-            x=sae_sizes,
+            x=x_values,
             y=feature_l0s,
             mode="markers+lines",
             name="Feature-based L0",
@@ -225,7 +255,7 @@ def plot_l0_comparison(results: list[dict], output_dir: str):
     )
     fig_raw.add_trace(
         go.Scatter(
-            x=sae_sizes,
+            x=x_values,
             y=subgraph_l0s_any,
             mode="markers+lines",
             name="Subgraph-based L0 (any active)",
@@ -235,8 +265,8 @@ def plot_l0_comparison(results: list[dict], output_dir: str):
 
     # Update layout for normalized plot
     fig_norm.update_layout(
-        title_text="Normalized L0 Sparsity vs SAE Size",
-        xaxis_title="SAE Size",
+        title_text=f"Normalized L0 Sparsity vs {x_axis_label}",
+        xaxis_title=x_axis_label,
         yaxis_title="Proportion of Features/Subgraphs Active",
         xaxis_type="log",
         yaxis_type="log",
@@ -247,8 +277,8 @@ def plot_l0_comparison(results: list[dict], output_dir: str):
 
     # Update layout for raw plot
     fig_raw.update_layout(
-        title_text="Raw L0 Sparsity vs SAE Size",
-        xaxis_title="SAE Size",
+        title_text=f"Raw L0 Sparsity vs {x_axis_label}",
+        xaxis_title=x_axis_label,
         yaxis_title="Average Active Features/Subgraphs per Token",
         xaxis_type="log",
         yaxis_type="log",
@@ -269,9 +299,9 @@ def plot_l0_comparison(results: list[dict], output_dir: str):
     )
 
     fig_norm.update_yaxes(
-        range=[np.log10(y_min_norm) - 0.1, np.log10(y_max_norm) + 0.1]
+        range=[np.log10(y_min_norm) - 0.1, np.log10(y_max_norm) + 0.1] # type: ignore 
     )
-    fig_raw.update_yaxes(range=[np.log10(y_min_raw) - 0.1, np.log10(y_max_raw) + 0.1])
+    fig_raw.update_yaxes(range=[np.log10(y_min_raw) - 0.1, np.log10(y_max_raw) + 0.1]) # type: ignore 
 
     # Save separate plots
     fig_norm.write_html(pj(output_dir, "l0_comparison_normalized.html"))
@@ -317,10 +347,10 @@ def plot_l0_comparison(results: list[dict], output_dir: str):
 
     # Set y-axis ranges for combined plot
     fig_combined.update_yaxes(
-        range=[np.log10(y_min_norm) - 0.1, np.log10(y_max_norm) + 0.1], row=1, col=1
+        range=[np.log10(y_min_norm) - 0.1, np.log10(y_max_norm) + 0.1], row=1, col=1 # type: ignore 
     )
     fig_combined.update_yaxes(
-        range=[np.log10(y_min_raw) - 0.1, np.log10(y_max_raw) + 0.1], row=1, col=2
+        range=[np.log10(y_min_raw) - 0.1, np.log10(y_max_raw) + 0.1], row=1, col=2 # type: ignore 
     )
 
     # Save combined plot
@@ -457,6 +487,9 @@ def main():
         else:
             print(f"No existing data found for {model_name}. Generating new data...")
 
+        # Determine x-axis based on release
+        x_axis_key = "average_l0" if sae_release_short == "gemma-scope-2b-pt-res" else "sae_size"
+        
         results = load_or_generate_data(
             model_name,
             sae_release_short,
@@ -469,8 +502,9 @@ def main():
             activation_threshold,
         )
 
-        results.sort(key=lambda x: x["sae_size"])  # Sort by SAE size
-        plot_l0_comparison(results, output_dir)
+        # Sort by appropriate key
+        results.sort(key=lambda x: x[x_axis_key])
+        plot_l0_comparison(results, output_dir, x_axis_key)
 
         print(
             f"Analysis complete for {model_name}. Results plotted in {output_dir}/l0_comparison_by_sae_size.html and .png"
