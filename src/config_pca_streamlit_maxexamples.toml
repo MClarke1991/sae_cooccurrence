@@ -110,3 +110,14 @@ gemma-2-2b = 5000
 [streamlit.dev]
 show_max_examples = true
 show_batch_size = true
+
+[recommended_views]
+
+[recommended_views.test]
+name = "Test"
+description = "Test"
+model = "gpt2-small"
+sae_release = "res-jb"
+sae_id = "blocks_7_hook_resid_pre"
+size = 8
+subgraph = 3240

@@ -178,6 +178,24 @@ def simplify_token_display(tokens: list, remove_counts: bool = True) -> list:
     return list(cleaned)
 
 
+def load_recommended_views(config):
+    """Load recommended views from config"""
+    return config.get("recommended_views", {})
+
+
+def apply_recommended_view(view_config):
+    """Update URL parameters for a recommended view and trigger rerun"""
+    new_params = {
+        "model": view_config["model"],
+        "sae_release": view_config["sae_release"],
+        "sae_id": view_config["sae_id"],
+        "size": str(view_config["size"]),
+        "subgraph": str(view_config["subgraph"]),
+    }
+    st.query_params.update(new_params)
+    st.rerun()
+
+
 def main():
     logging.basicConfig(level=logging.INFO)
     log_memory_usage("start of main")
@@ -262,6 +280,8 @@ def main():
     show_max_examples = config["streamlit"]["dev"]["show_max_examples"]
     show_batch_size = config["streamlit"]["dev"]["show_batch_size"]
     model_to_max_examples = config["models"]["max_examples"]
+
+    recommended_views = load_recommended_views(config)
 
     with st.sidebar:
         st.markdown(
@@ -724,6 +744,13 @@ def main():
             st.sidebar.info(f"Max number of examples: {model_to_max_examples[model]}")
         elif show_batch_size:
             st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
+
+        st.markdown("### Quick Views")
+        st.markdown("Jump to interesting examples:")
+
+        for view_name, view_config in recommended_views.items():
+            if st.button(f"📍 {view_name}"):
+                apply_recommended_view(view_config)
 
     log_memory_usage("end of main")
 
