@@ -212,11 +212,9 @@ def plot_l0_comparison_matplotlib(
 ):
     # Use either sae_size or average_l0 for x-axis
     x_values = [r[x_axis_key] for r in results]
-    x_axis_label = (
-        "SAE Size (number of features)"
-        if x_axis_key == "sae_size"
-        else "Target Average L0"
-    )
+    width_x_axis_label = "SAE Size (number of features)"
+    l0_x_axis_label = "Target Average L0"
+    x_axis_label = width_x_axis_label if x_axis_key == "sae_size" else l0_x_axis_label
 
     feature_l0s = [r["feature_l0"] for r in results]
     subgraph_l0s_any = [r["subgraph_l0_any"] for r in results]
@@ -251,7 +249,9 @@ def plot_l0_comparison_matplotlib(
     plt.yscale("log")
     plt.xlabel(x_axis_label)
     plt.ylabel("Proportion of Features/Subgraphs Active")
-    plt.xticks(x_values, x_values)  # Set specific x-tick locations and labels
+    # Use default ticks for gemma models
+    if "gemma" not in results[0]["model_name"]:
+        plt.xticks(x_values, x_values)  # Set specific x-tick locations and labels
     plt.title(
         f"Normalized L0 Sparsity (Activation Threshold = {activation_threshold_safe.replace('_', '.')})"
     )
@@ -279,7 +279,9 @@ def plot_l0_comparison_matplotlib(
     plt.yscale("log")
     plt.xlabel(x_axis_label)
     plt.ylabel("Average Active Features/Subgraphs per Token")
-    plt.xticks(x_values, x_values)  # Set specific x-tick locations and labels
+    # Use default ticks for gemma models
+    if "gemma" not in results[0]["model_name"]:
+        plt.xticks(x_values, x_values)  # Set specific x-tick locations and labels
     plt.title(
         f"Raw L0 Sparsity (Activation Threshold = {activation_threshold_safe.replace('_', '.')})"
     )
