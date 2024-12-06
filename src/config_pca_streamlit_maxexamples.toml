@@ -111,13 +111,20 @@ gemma-2-2b = 5000
 show_max_examples = true
 show_batch_size = true
 
-[recommended_views]
-
-[recommended_views.test]
-name = "Test"
-description = "Test"
+[recommended_views.gpt2_day]
+display_name = "GPT2-Small: Day of the week"
+description = "Example of latents sharing properties of days of the week"
 model = "gpt2-small"
 sae_release = "res-jb"
-sae_id = "blocks_7_hook_resid_pre"
+sae_id = "blocks_8_hook_resid_pre"
 size = 8
 subgraph = 3240
+
+[recommended_views.gpt2_month]
+display_name = "GPT2-Small: Month of the year"
+description = "Example of latents sharing properties of months of the year"
+model = "gpt2-small"
+sae_release = "res-jb"
+sae_id = "blocks_8_hook_resid_pre"
+size = 12
+subgraph = 2644

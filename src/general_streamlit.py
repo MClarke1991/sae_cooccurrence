@@ -749,7 +749,7 @@ def main():
         st.markdown("Jump to interesting examples:")
 
         for view_name, view_config in recommended_views.items():
-            if st.button(f"📍 {view_name}"):
+            if st.button(f"{view_config['display_name']}"):
                 apply_recommended_view(view_config)
 
     log_memory_usage("end of main")
