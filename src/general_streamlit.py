@@ -749,6 +749,9 @@ def main():
         st.markdown("Jump to interesting examples:")
 
         for view_name, view_config in recommended_views.items():
+            # Add description if it exists in the config
+            if "description" in view_config:
+                st.markdown(f"*{view_config['description']}*")
             if st.button(f"{view_config['display_name']}"):
                 apply_recommended_view(view_config)
 
