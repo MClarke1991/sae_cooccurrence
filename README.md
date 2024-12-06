@@ -112,4 +112,8 @@ See `src/size_effects/features_active_per_token.py`
 ## SAE latent co-occurrence boxplots and density plots (Figure 7 and Appendix Figure \gemma-2-2b-boxplots-density-vs-width and \gemma-2-2b-boxplots-density-vs-l0):
 See `src/size_effects/feature_distribution_data.py` and `src/size_effects/feature_distribution_plots.py`
 
-## SAE latent cluster size with width
+## SAE latent cluster size with width and L0 (Figure 9):
+See `src/size_effects/subgraph_size_vs_width.ipynb`
+
+## SAE latent and subgraph sparsity with width and L0 (Figure 9):
+See `src/size_effects/feature_graph_l0.py`
