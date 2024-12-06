@@ -284,128 +284,134 @@ def main():
     recommended_views = load_recommended_views(config)
 
     with st.sidebar:
-        st.markdown("### Quick Views")
-        st.markdown("Jump to interesting examples:")
+        with st.expander("**Example Cases**", expanded=True):
+            st.markdown("Jump to interesting examples:")
 
-        for view_name, view_config in recommended_views.items():
-            # Add description if it exists in the config
-            if "description" in view_config:
-                st.markdown(f"*{view_config['description']}*")
-            if st.button(f"{view_config['display_name']}"):
-                apply_recommended_view(view_config)
-        st.markdown("### Search Examples")
-        default_model_idx = 0
-        if "model" in query_params:
-            try:
-                model_param = query_params["model"]
-                # Handle both list and string cases
-                model_value = (
-                    model_param[0] if isinstance(model_param, list) else model_param
-                )
-                default_model_idx = list(models.values()).index(model_value)
-            except (ValueError, IndexError):
-                default_model_idx = 0
+            for view_name, view_config in recommended_views.items():
+                # Add description if it exists in the config
+                if "description" in view_config:
+                    st.markdown(f"*{view_config['description']}*")
+                if st.button(f"{view_config['display_name']}"):
+                    apply_recommended_view(view_config)
+        with st.expander("**Explore Clusters**", expanded=False):
+            default_model_idx = 0
+            if "model" in query_params:
+                try:
+                    model_param = query_params["model"]
+                    # Handle both list and string cases
+                    model_value = (
+                        model_param[0] if isinstance(model_param, list) else model_param
+                    )
+                    default_model_idx = list(models.values()).index(model_value)
+                except (ValueError, IndexError):
+                    default_model_idx = 0
 
-        model = st.selectbox(
-            "Model",
-            list(models.values()),
-            index=default_model_idx,
-            key="model_selector",
-            on_change=lambda: update_url_params(
-                "model", st.session_state.model_selector
-            ),
-        )
+            model = st.selectbox(
+                "Model",
+                list(models.values()),
+                index=default_model_idx,
+                key="model_selector",
+                on_change=lambda: update_url_params(
+                    "model", st.session_state.model_selector
+                ),
+            )
 
-        # Load model configurations from config
-        model_to_releases = config["models"]["releases"]
-        # st.write(model_to_releases)
-        sae_release_to_ids = config["models"]["sae_ids"]
+            # Load model configurations from config
+            model_to_releases = config["models"]["releases"]
+            # st.write(model_to_releases)
+            sae_release_to_ids = config["models"]["sae_ids"]
 
-        available_sae_releases = model_to_releases[model]
+            available_sae_releases = model_to_releases[model]
 
-        n_batches_reconstruction = model_to_batch_size[model]
+            n_batches_reconstruction = model_to_batch_size[model]
 
-        if use_max_examples:
-            max_examples = str(model_to_max_examples[model]) + "cap_"
-        else:
-            max_examples = ""
+            if use_max_examples:
+                max_examples = str(model_to_max_examples[model]) + "cap_"
+            else:
+                max_examples = ""
 
-        default_release_idx = 0
-        if "sae_release" in query_params:
-            try:
-                release_param = query_params["sae_release"]
-                release_value = (
-                    release_param[0]
-                    if isinstance(release_param, list)
-                    else release_param
-                )
-                default_release_idx = available_sae_releases.index(release_value)
-            except (ValueError, IndexError):
-                default_release_idx = 0
+            default_release_idx = 0
+            if "sae_release" in query_params:
+                try:
+                    release_param = query_params["sae_release"]
+                    release_value = (
+                        release_param[0]
+                        if isinstance(release_param, list)
+                        else release_param
+                    )
+                    default_release_idx = available_sae_releases.index(release_value)
+                except (ValueError, IndexError):
+                    default_release_idx = 0
 
-        sae_release = st.selectbox(
-            "SAE Release",
-            available_sae_releases,
-            index=default_release_idx,
-            key="sae_release_selector",
-            on_change=lambda: update_url_params(
-                "sae_release", st.session_state.sae_release_selector
-            ),
-        )
+            sae_release = st.selectbox(
+                "SAE Release",
+                available_sae_releases,
+                index=default_release_idx,
+                key="sae_release_selector",
+                on_change=lambda: update_url_params(
+                    "sae_release", st.session_state.sae_release_selector
+                ),
+            )
 
-        available_sae_ids = sae_release_to_ids[sae_release]
+            available_sae_ids = sae_release_to_ids[sae_release]
 
-        default_sae_idx = 0
-        if "sae_id" in query_params:
-            try:
-                sae_param = query_params["sae_id"]
-                sae_value = sae_param[0] if isinstance(sae_param, list) else sae_param
-                neat_ids = [neat_sae_id(id) for id in available_sae_ids]
-                default_sae_idx = neat_ids.index(sae_value)
-            except (ValueError, IndexError):
-                default_sae_idx = 0
+            default_sae_idx = 0
+            if "sae_id" in query_params:
+                try:
+                    sae_param = query_params["sae_id"]
+                    sae_value = (
+                        sae_param[0] if isinstance(sae_param, list) else sae_param
+                    )
+                    neat_ids = [neat_sae_id(id) for id in available_sae_ids]
+                    default_sae_idx = neat_ids.index(sae_value)
+                except (ValueError, IndexError):
+                    default_sae_idx = 0
 
-        sae_id = st.selectbox(
-            "SAE ID",
-            [neat_sae_id(id) for id in available_sae_ids],
-            index=default_sae_idx,
-            key="sae_id_selector",
-            on_change=lambda: update_url_params(
-                "sae_id", st.session_state.sae_id_selector
-            ),
-        )
+            sae_id = st.selectbox(
+                "SAE ID",
+                [neat_sae_id(id) for id in available_sae_ids],
+                index=default_sae_idx,
+                key="sae_id_selector",
+                on_change=lambda: update_url_params(
+                    "sae_id", st.session_state.sae_id_selector
+                ),
+            )
 
-        release_to_generation_batch_size = config["releases"]["generation_batch_sizes"]
-        n_batches_generation = release_to_generation_batch_size[sae_release]
+            release_to_generation_batch_size = config["releases"][
+                "generation_batch_sizes"
+            ]
+            n_batches_generation = release_to_generation_batch_size[sae_release]
 
-        results_root = create_results_dir(
-            model, sae_release, sae_id, n_batches_generation
-        )
+            results_root = create_results_dir(
+                model, sae_release, sae_id, n_batches_generation
+            )
 
-        # st.markdown('<p class="section-text">Size Settings</p>', unsafe_allow_html=True)
-        available_sizes = get_available_sizes(
-            results_root, sae_id, n_batches_reconstruction, max_examples
-        )
+            # st.markdown('<p class="section-text">Size Settings</p>', unsafe_allow_html=True)
+            available_sizes = get_available_sizes(
+                results_root, sae_id, n_batches_reconstruction, max_examples
+            )
 
-        default_size_idx = 0
-        if "size" in query_params:
-            try:
-                size_param = query_params["size"]
-                size_value = (
-                    size_param[0] if isinstance(size_param, list) else size_param
-                )
-                default_size_idx = available_sizes.index(int(size_value))
-            except (ValueError, IndexError):
-                default_size_idx = 0
+            default_size_idx = 0
+            if "size" in query_params:
+                try:
+                    size_param = query_params["size"]
+                    size_value = (
+                        size_param[0] if isinstance(size_param, list) else size_param
+                    )
+                    default_size_idx = available_sizes.index(int(size_value))
+                except (ValueError, IndexError):
+                    default_size_idx = 0
 
-        selected_size = st.selectbox(
-            "Cluster Size",
-            options=available_sizes,
-            index=default_size_idx,
-            format_func=lambda x: f"Size {x}",
-            key="size_selector",
-            on_change=lambda: update_url_params("size", st.session_state.size_selector),
-        )
+            selected_size = st.selectbox(
+                "Cluster Size",
+                options=available_sizes,
+                index=default_size_idx,
+                format_func=lambda x: f"Size {x}",
+                key="size_selector",
+                on_change=lambda: update_url_params(
+                    "size", st.session_state.size_selector
+                ),
+            )
 
     # Update pca_results_path
     pca_results_path = pj(
@@ -746,11 +752,19 @@ def main():
             "Copy this link to share current view:", shareable_link, key="share_link"
         )
 
-        st.sidebar.markdown("#### Dev Info")
-        if use_max_examples and show_max_examples:
-            st.sidebar.info(f"Max number of examples: {model_to_max_examples[model]}")
-        elif show_batch_size:
-            st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
+        # Add contact section
+        with st.expander("Contact", expanded=False):
+            st.markdown("""
+            - [GitHub Issues](https://github.com/mclarke1991/sae_cooccurrence/issues)
+            - [Contact](https://mclarke1991.github.io/#contact)
+            - [LinkedIn](https://www.linkedin.com/in/matthew-alan-clarke/)
+        """)
+
+        with st.expander("Dev Info", expanded=False):
+            if use_max_examples and show_max_examples:
+                st.write(f"Max number of examples: {model_to_max_examples[model]}")
+            elif show_batch_size:
+                st.write(f"Batch size {model_to_batch_size[model]}")
 
     log_memory_usage("end of main")
 
