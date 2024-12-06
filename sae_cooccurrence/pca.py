@@ -3352,8 +3352,11 @@ def plot_subgraph_interactive_from_nx(
         weight = subgraph[u][v]["weight"]
         width = 1
         if edge_weights:
-            width = 1 + 4 * (weight - min(edge_weights)) / (  # type: ignore
-                max(edge_weights) - min(edge_weights)  # type: ignore
+            weight_range = max(edge_weights) - min(edge_weights)  # type: ignore
+            width = 1 + (
+                4 * (weight - min(edge_weights)) / weight_range  # type: ignore
+                if weight_range > 0
+                else 1
             )
         net.add_edge(u, v, width=width, color={"color": "rgba(128, 128, 128, 0.75)"})
 
