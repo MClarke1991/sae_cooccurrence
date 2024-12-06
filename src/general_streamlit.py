@@ -284,9 +284,16 @@ def main():
     recommended_views = load_recommended_views(config)
 
     with st.sidebar:
-        st.markdown(
-            '<p class="subtitle-text">Configuration</p>', unsafe_allow_html=True
-        )
+        st.markdown("### Quick Views")
+        st.markdown("Jump to interesting examples:")
+
+        for view_name, view_config in recommended_views.items():
+            # Add description if it exists in the config
+            if "description" in view_config:
+                st.markdown(f"*{view_config['description']}*")
+            if st.button(f"{view_config['display_name']}"):
+                apply_recommended_view(view_config)
+        st.markdown("### Search Examples")
         default_model_idx = 0
         if "model" in query_params:
             try:
@@ -744,16 +751,6 @@ def main():
             st.sidebar.info(f"Max number of examples: {model_to_max_examples[model]}")
         elif show_batch_size:
             st.sidebar.info(f"Batch size {model_to_batch_size[model]}")
-
-        st.markdown("### Quick Views")
-        st.markdown("Jump to interesting examples:")
-
-        for view_name, view_config in recommended_views.items():
-            # Add description if it exists in the config
-            if "description" in view_config:
-                st.markdown(f"*{view_config['description']}*")
-            if st.button(f"{view_config['display_name']}"):
-                apply_recommended_view(view_config)
 
     log_memory_usage("end of main")
 
