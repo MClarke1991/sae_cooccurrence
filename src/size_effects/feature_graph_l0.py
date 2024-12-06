@@ -250,7 +250,7 @@ def plot_l0_comparison_matplotlib(
     plt.xlabel(x_axis_label)
     plt.ylabel("Proportion of Features/Subgraphs Active")
     # Use default ticks for gemma models
-    if "gemma" not in results[0]["model_name"]:
+    if x_axis_label != width_x_axis_label or "gpt2" in results[0]["model_name"]:
         plt.xticks(x_values, x_values)  # Set specific x-tick locations and labels
     plt.title(
         f"Normalized L0 Sparsity (Activation Threshold = {activation_threshold_safe.replace('_', '.')})"
@@ -279,8 +279,8 @@ def plot_l0_comparison_matplotlib(
     plt.yscale("log")
     plt.xlabel(x_axis_label)
     plt.ylabel("Average Active Features/Subgraphs per Token")
-    # Use default ticks for gemma models
-    if "gemma" not in results[0]["model_name"]:
+    # Use default ticks for gemma models for width x-axis
+    if x_axis_label != width_x_axis_label or "gpt2" in results[0]["model_name"]:
         plt.xticks(x_values, x_values)  # Set specific x-tick locations and labels
     plt.title(
         f"Raw L0 Sparsity (Activation Threshold = {activation_threshold_safe.replace('_', '.')})"
