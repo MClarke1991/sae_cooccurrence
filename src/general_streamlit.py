@@ -1,17 +1,11 @@
-import glob
 import logging
-import re
 from html import escape
 from os.path import join as pj
 
-import h5py
-import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 import streamlit_plotly_events as spe
-from scipy import sparse
 
 from sae_cooccurrence.normalised_cooc_functions import (
     create_results_dir,
@@ -23,177 +17,22 @@ from sae_cooccurrence.pca import (
     plot_subgraph_interactive_from_nx,
 )
 from sae_cooccurrence.streamlit import (
-    decode_if_bytes,
-    load_dataset,
+    apply_recommended_view,
+    get_available_sizes,
+    get_neuronpedia_embed_url,
+    load_available_subgraphs,
+    load_data,
+    load_recommended_views,
+    load_sparse_thresholded_matrix,
     load_streamlit_config,
-    load_subgraph_data,
+    load_subgraph_metadata,
     log_memory_usage,
     plot_feature_activations,
     plot_pca_2d,
+    simplify_token_display,
+    update_url_params,
 )
 from sae_cooccurrence.utils.set_paths import get_git_root
-
-
-@st.cache_data
-def load_data(file_path, subgraph_id, config):
-    log_memory_usage("start of load_data")
-    results, pca_df = load_subgraph_data(file_path, subgraph_id, config)
-    log_memory_usage("end of load_data")
-    return results, pca_df
-
-
-def plot_legend(color_map):
-    fig = go.Figure()
-
-    for feature, color in color_map.items():
-        fig.add_trace(
-            go.Scatter(
-                x=[None],
-                y=[None],
-                mode="markers",
-                marker=dict(size=10, color=color),
-                name=f"Feature {feature}",
-                legendgroup=f"Feature {feature}",
-                showlegend=True,
-            )
-        )
-
-    fig.update_layout(
-        height=400,
-        width=300,
-        title="Legend",
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
-        margin=dict(l=0, r=0, t=40, b=0),
-        legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=0),
-    )
-
-    return fig
-
-
-@st.cache_data
-def load_available_subgraphs(file_path):
-    with h5py.File(file_path, "r") as f:
-        return sorted(
-            [int(key.split("_")[1]) for key in f.keys() if key.startswith("subgraph_")]
-        )
-
-
-@st.cache_data
-def load_thresholded_matrix(file_path: str) -> np.ndarray:
-    # Load and return the actual array data from the NPZ file
-    with np.load(file_path) as data:
-        # Assuming there's a single array in the NPZ file
-        # If there are multiple arrays, you'll need to specify the key
-        return data[data.files[0]]
-
-
-@st.cache_data
-def load_sparse_thresholded_matrix(file_path: str) -> sparse.csr_matrix:
-    return sparse.load_npz(file_path)
-
-
-@st.cache_data
-def load_subgraph_metadata(file_path, subgraph_id):
-    top_3_tokens = []
-    example_context = ""
-    with h5py.File(file_path, "r") as f:
-        group = f[f"subgraph_{subgraph_id}"]
-        top_3_tokens = decode_if_bytes(load_dataset(group["top_3_tokens"]))  # type: ignore
-        example_context = decode_if_bytes(load_dataset(group["example_context"]))  # type: ignore
-        example_context = "".join(example_context)  # type: ignore
-    return top_3_tokens, example_context
-
-
-@st.cache_data
-def get_available_sizes(
-    results_root, sae_id_neat, n_batches_reconstruction, max_examples
-):
-    """Get all available subgraph sizes from the directory"""
-    base_path = pj(results_root, f"{sae_id_neat}_pca_for_streamlit")
-    files = glob.glob(
-        pj(
-            base_path,
-            f"{max_examples}graph_analysis_results_size_*_nbatch_{n_batches_reconstruction}.h5",
-        )
-    )
-    sizes = [int(re.search(r"size_(\d+)_nbatch_", f).group(1)) for f in files]  # type: ignore
-    return sorted(sizes)
-
-
-def get_neuronpedia_embed_url(model, sae_release, feature_idx, sae_id):
-    """Generate the correct Neuronpedia embed URL based on model and SAE release"""
-    base_url = "https://neuronpedia.org"
-    path = None
-    if model == "gpt2-small":
-        if sae_release == "res-jb":
-            # Extract layer number from sae_id (e.g., "blocks_7_hook_resid_pre" -> 7)
-            layer = re.search(r"blocks_(\d+)_", sae_id).group(1)  # type: ignore
-            path = f"{model}/{layer}-res-jb/{feature_idx}"
-        elif sae_release == "res-jb-feature-splitting":
-            # Extract layer and width (e.g., "blocks_8_hook_resid_pre_24576" -> layer=8, width=24576)
-            layer = re.search(r"blocks_(\d+)_", sae_id).group(1)  # type: ignore
-            width = re.search(r"_(\d+)$", sae_id).group(1)  # type: ignore
-            path = f"{model}/{layer}-res_fs{width}-jb/{feature_idx}"
-    elif model == "gemma-2-2b":
-        # Extract layer and width (e.g., "layer_20/width_16k/canonical" -> layer=20, width=16k)
-        layer = re.search(r"layer_(\d+)", sae_id).group(1)  # type: ignore
-        width = re.search(r"width_(\d+k)", sae_id).group(1)  # type: ignore
-        path = f"{model}/{layer}-gemmascope-res-{width}/{feature_idx}"
-    else:
-        raise ValueError(f"Invalid model: {model}")
-    embed_params = "?embed=true&embedtest=true&embedexplanation=false&height=300"
-    return f"{base_url}/{path}{embed_params}"
-
-
-def update_url_params(key, value):
-    """Update URL parameters without triggering a reload"""
-    current_params = st.query_params.to_dict()
-    current_params[key] = value
-    st.query_params.update(current_params)
-
-
-def simplify_token_display(tokens: list, remove_counts: bool = True) -> list:
-    """Clean up token display by optionally removing count numbers and parentheses.
-
-    Args:
-        tokens: List of token strings
-        remove_counts: If True, removes count numbers from tokens
-
-    Returns:
-        List of cleaned token strings
-    """
-    if not remove_counts:
-        return tokens
-
-    cleaned = [str(token) for token in tokens]
-    # Remove count numbers and clean up formatting
-    cleaned = [re.sub(r'(?<=", )\d+(?=\))', "", token) for token in cleaned]
-    cleaned = [re.sub(r"(?<=', )\d+(?=\))", "", token) for token in cleaned]
-    cleaned = [re.sub(r"^\(", "", token) for token in cleaned]
-    cleaned = [re.sub(r"\)$", "", token) for token in cleaned]
-
-    return list(cleaned)
-
-
-def load_recommended_views(config):
-    """Load recommended views from config"""
-    return config.get("recommended_views", {})
-
-
-def apply_recommended_view(view_config):
-    """Update URL parameters for a recommended view and trigger rerun"""
-    new_params = {
-        "model": view_config["model"],
-        "sae_release": view_config["sae_release"],
-        "sae_id": view_config["sae_id"],
-        "size": str(view_config["size"]),
-        "subgraph": str(view_config["subgraph"]),
-    }
-    st.query_params.update(new_params)
-    st.rerun()
 
 
 def main():
