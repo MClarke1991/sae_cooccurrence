@@ -42,7 +42,22 @@ def decode_if_bytes(data):
 
 def load_subgraph_data(file_path, subgraph_id, load_options):
     log_memory_usage("start of load_subgraph_data")
-    with h5py.File(file_path, "r") as f:
+
+    base_path = os.path.splitext(file_path)[0]
+    chunk_pattern = f"{base_path}_chunk*.h5"
+    chunk_files = sorted(glob.glob(chunk_pattern))
+
+    # Find which file contains our subgraph
+    target_file = file_path
+    if chunk_files:
+        for chunk_file in chunk_files:
+            with h5py.File(chunk_file, "r") as f:
+                if f"subgraph_{subgraph_id}" in f:
+                    target_file = chunk_file
+                    break
+
+    # Load data from the correct file
+    with h5py.File(target_file, "r") as f:
         group = f[f"subgraph_{subgraph_id}"]
         results = {}
 
@@ -89,9 +104,23 @@ def load_subgraph_data(file_path, subgraph_id, load_options):
 
 @st.cache_data
 def load_subgraph_metadata(file_path, subgraph_id):
+    base_path = os.path.splitext(file_path)[0]
+    chunk_pattern = f"{base_path}_chunk*.h5"
+    chunk_files = sorted(glob.glob(chunk_pattern))
+
+    # Find which file contains our subgraph
+    target_file = file_path
+    if chunk_files:
+        for chunk_file in chunk_files:
+            with h5py.File(chunk_file, "r") as f:
+                if f"subgraph_{subgraph_id}" in f:
+                    target_file = chunk_file
+                    break
+
+    # Load data from the correct file
     top_3_tokens = []
     example_context = ""
-    with h5py.File(file_path, "r") as f:
+    with h5py.File(target_file, "r") as f:
         group = f[f"subgraph_{subgraph_id}"]
         top_3_tokens = decode_if_bytes(load_dataset(group["top_3_tokens"]))  # type: ignore
         example_context = decode_if_bytes(load_dataset(group["example_context"]))  # type: ignore
@@ -101,10 +130,32 @@ def load_subgraph_metadata(file_path, subgraph_id):
 
 @st.cache_data
 def load_available_subgraphs(file_path: str) -> list[int]:
-    with h5py.File(file_path, "r") as f:
-        return sorted(
-            [int(key.split("_")[1]) for key in f.keys() if key.startswith("subgraph_")]
-        )
+    base_path = os.path.splitext(file_path)[0]
+
+    # Check if chunked files exist
+    chunk_pattern = f"{base_path}_chunk*.h5"
+    chunk_files = sorted(glob.glob(chunk_pattern))
+
+    subgraphs = []
+    if chunk_files:
+        # Load subgraphs from all chunks
+        for chunk_file in chunk_files:
+            with h5py.File(chunk_file, "r") as f:
+                subgraphs.extend(
+                    int(key.split("_")[1])
+                    for key in f.keys()
+                    if key.startswith("subgraph_")
+                )
+    else:
+        # Load from single file
+        with h5py.File(file_path, "r") as f:
+            subgraphs = [
+                int(key.split("_")[1])
+                for key in f.keys()
+                if key.startswith("subgraph_")
+            ]
+
+    return sorted(subgraphs)
 
 
 @st.cache_data
