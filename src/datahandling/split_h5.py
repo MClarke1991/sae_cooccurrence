@@ -3,7 +3,10 @@ from os.path import join
 from sae_cooccurrence.streamlit import split_large_h5_files
 from sae_cooccurrence.utils.set_paths import get_git_root
 
-path = join(get_git_root(), "results/gpt2-small/res-jb-feature-splitting/blocks_8_hook_resid_pre_24576/n_batches_500/blocks_8_hook_resid_pre_24576_pca_for_streamlit_test")
+path = join(
+    get_git_root(),
+    "results/gpt2-small/res-jb-feature-splitting/blocks_8_hook_resid_pre_24576/n_batches_500/blocks_8_hook_resid_pre_24576_pca_for_streamlit_test",
+)
 
 split_large_h5_files(path)
 
@@ -17,7 +20,7 @@ split_large_h5_files(path)
 #                 mid = len(data) // 2
 #                 f1.create_dataset(key, data=data[:mid])
 #                 f2.create_dataset(key, data=data[mid:])
-                
+
 # def split_large_h5_files(directory: str):
 #     for filename in os.listdir(directory):
 #         if filename.endswith('.h5'):
