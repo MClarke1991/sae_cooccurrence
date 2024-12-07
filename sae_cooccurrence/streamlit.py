@@ -135,14 +135,23 @@ def get_available_sizes(
 ):
     """Get all available subgraph sizes from the directory"""
     base_path = pj(results_root, f"{sae_id_neat}_pca_for_streamlit")
-    files = glob.glob(
-        pj(
-            base_path,
-            f"{max_examples}graph_analysis_results_size_*_nbatch_{n_batches_reconstruction}.h5",
-        )
+
+    # Find both regular and chunked files
+    pattern = pj(
+        base_path,
+        f"{max_examples}graph_analysis_results_size_*_nbatch_{n_batches_reconstruction}*.h5",
     )
-    sizes = [int(re.search(r"size_(\d+)_nbatch_", f).group(1)) for f in files]  # type: ignore
-    return sorted(sizes)
+    files = glob.glob(pattern)
+
+    # Extract sizes, handling both regular and chunked files
+    sizes = set()
+    for f in files:
+        # Extract size from filename, ignoring potential _chunk suffix
+        match = re.search(r"size_(\d+)_nbatch_", f)
+        if match:
+            sizes.add(int(match.group(1)))
+
+    return sorted(list(sizes))
 
 
 #### Neuronpedia interface ####
