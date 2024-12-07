@@ -110,3 +110,59 @@ gemma-2-2b = 5000
 [streamlit.dev]
 show_max_examples = true
 show_batch_size = true
+
+[recommended_views.gemma_one_of]
+display_name = "Gemma-2-2B: N of"
+description = "Latents that compositionally encode number of items referenced"
+model = "gemma-2-2b"
+sae_release = "gemma-scope-2b-pt-res-canonical"
+sae_id = "layer_12_width_16k_canonical"
+size = 4
+subgraph = 4740
+
+[recommended_views.gpt2_day]
+display_name = "GPT2-Small: Day of the week"
+description = "Latents sharing properties of days of the week"
+model = "gpt2-small"
+sae_release = "res-jb"
+sae_id = "blocks_8_hook_resid_pre"
+size = 8
+subgraph = 3240
+
+# [recommended_views.gpt2_month]
+# display_name = "GPT2-Small: Month of the year"
+# description = "Latents sharing properties of months of the year"
+# model = "gpt2-small"
+# sae_release = "res-jb"
+# sae_id = "blocks_8_hook_resid_pre"
+# size = 12
+# subgraph = 2644
+
+[recommended_views.gpt2_twitter]
+display_name = "GPT2-Small: URL Subdirectory"
+description = "Latents that measure position of token within a URL subdirectory"
+model = "gpt2-small"
+sae_release = "res-jb-feature-splitting"
+sae_id = "blocks_8_hook_resid_pre_24576"
+size = 5
+subgraph = 125
+
+[recommended_views.gpt2_how]
+display_name = "GPT2-Small: Disambiguation of 'how'"
+description = "Latents disambiguate uses of the word 'how'"
+model = "gpt2-small"
+sae_release = "res-jb-feature-splitting"
+sae_id = "blocks_8_hook_resid_pre_24576"
+size = 5
+subgraph = 787
+
+[recommended_views.gemma_apostrophe]
+display_name = "Gemma-2-2B: Type of possessor"
+description = "Latents that disambiguate type of possessor indicated by an apostrophe"
+model = "gemma-2-2b"
+sae_release = "gemma-scope-2b-pt-res-canonical"
+sae_id = "layer_12_width_16k_canonical"
+size = 5
+subgraph = 4334
+
+
