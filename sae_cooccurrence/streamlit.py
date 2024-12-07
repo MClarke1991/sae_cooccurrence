@@ -19,13 +19,29 @@ from sae_cooccurrence.utils.set_paths import get_git_root
 #### Data loading ####
 
 
-def load_streamlit_config(filename):
+def load_streamlit_config(filename: str) -> dict:
+    """Load the streamlit config toml file
+
+    Args:
+        filename: Name of the toml file to load default: "src/config_pca_streamlit_maxexamples.toml"
+
+    Returns:
+        Dictionary containing the config
+    """
     config_path = pj(get_git_root(), "src", filename)
     with open(config_path) as f:
         return toml.load(f)
 
 
-def load_dataset(dataset):
+def load_dataset(dataset: h5py.Dataset) -> np.ndarray | bytes:
+    """Load a dataset from an h5py file
+
+    Args:
+        dataset: The dataset to load
+
+    Returns:
+        The loaded dataset
+    """
     if dataset.shape == ():  # Scalar dataset
         return dataset[()]
     else:  # Array dataset
@@ -33,6 +49,10 @@ def load_dataset(dataset):
 
 
 def decode_if_bytes(data):
+    """Decode bytes if necessary
+
+    E.g. if the token strings are stored as bytes in the h5py file, we decode them to strings.
+    """
     if isinstance(data, bytes):
         return data.decode("utf-8")
     elif isinstance(data, np.ndarray) and data.dtype.char == "S":
@@ -40,7 +60,19 @@ def decode_if_bytes(data):
     return data
 
 
-def load_subgraph_data(file_path, subgraph_id, load_options):
+def load_subgraph_data(
+    file_path: str, subgraph_id: int, load_options: dict
+) -> tuple[dict, pd.DataFrame]:
+    """Load the data for a given subgraph
+
+    Args:
+        file_path: Path to the h5 file containing the subgraph
+        subgraph_id: The ID of the subgraph to load
+        load_options: A dictionary of options for loading the subgraph data
+
+    Returns:
+        A tuple containing the subgraph data and the PCA dataframe
+    """
     log_memory_usage("start of load_subgraph_data")
 
     base_path = os.path.splitext(file_path)[0]
@@ -103,7 +135,16 @@ def load_subgraph_data(file_path, subgraph_id, load_options):
 
 
 @st.cache_data
-def load_subgraph_metadata(file_path, subgraph_id):
+def load_subgraph_metadata(file_path: str, subgraph_id: int):
+    """Load the metadata for a given subgraph
+
+    Args:
+        file_path: Path to the h5 file containing the subgraph
+        subgraph_id: The ID of the subgraph to load
+
+    Returns:
+        A tuple containing the top 3 tokens and the example context
+    """
     base_path = os.path.splitext(file_path)[0]
     chunk_pattern = f"{base_path}_chunk*.h5"
     chunk_files = sorted(glob.glob(chunk_pattern))
@@ -130,6 +171,14 @@ def load_subgraph_metadata(file_path, subgraph_id):
 
 @st.cache_data
 def load_available_subgraphs(file_path: str) -> list[int]:
+    """Load the available subgraphs for a given file
+
+    Args:
+        file_path: Path to the h5 file containing the subgraphs
+
+    Returns:
+        A list of subgraph IDs
+    """
     base_path = os.path.splitext(file_path)[0]
 
     # Check if chunked files exist
@@ -160,7 +209,14 @@ def load_available_subgraphs(file_path: str) -> list[int]:
 
 @st.cache_data
 def load_thresholded_matrix(file_path: str) -> np.ndarray:
-    # Load and return the actual array data from the NPZ file
+    """Load the thresholded matrix from an NPZ file (deprecated as these files are too large for use in Streamlit)
+
+    Args:
+        file_path: Path to the NPZ file containing the thresholded matrix
+
+    Returns:
+        The loaded thresholded matrix
+    """
     with np.load(file_path) as data:
         # Assuming there's a single array in the NPZ file
         # If there are multiple arrays, you'll need to specify the key
@@ -169,11 +225,32 @@ def load_thresholded_matrix(file_path: str) -> np.ndarray:
 
 @st.cache_data
 def load_sparse_thresholded_matrix(file_path: str) -> sparse.csr_matrix:
+    """Load the thresholded matrix from an NPZ file (deprecated as these files are too large for use in Streamlit)
+
+    Args:
+        file_path: Path to the NPZ file containing the thresholded matrix
+
+    Returns:
+        The loaded thresholded matrix
+    """
     return sparse.load_npz(file_path)
 
 
 @st.cache_data
-def load_data(file_path, subgraph_id, config):
+def load_data(
+    file_path: str, subgraph_id: int, config: dict
+) -> tuple[dict, pd.DataFrame]:
+    """Load the subgraph data and PCA dataframe for a specific subgraph
+    (wrapper around load_subgraph_data)
+
+    Args:
+        file_path: Path to the h5 file containing the subgraph
+        subgraph_id: The ID of the subgraph to load
+        config: The streamlit config
+
+    Returns:
+        A tuple containing the subgraph data and the PCA dataframe
+    """
     log_memory_usage("start of load_data")
     results, pca_df = load_subgraph_data(file_path, subgraph_id, config)
     log_memory_usage("end of load_data")
@@ -182,8 +259,11 @@ def load_data(file_path, subgraph_id, config):
 
 @st.cache_data
 def get_available_sizes(
-    results_root, sae_id_neat, n_batches_reconstruction, max_examples
-):
+    results_root: str,
+    sae_id_neat: str,
+    n_batches_reconstruction: int,
+    max_examples: str,
+) -> list[int]:
     """Get all available subgraph sizes from the directory"""
     base_path = pj(results_root, f"{sae_id_neat}_pca_for_streamlit")
 
@@ -208,7 +288,9 @@ def get_available_sizes(
 #### Neuronpedia interface ####
 
 
-def get_neuronpedia_embed_url(model, sae_release, feature_idx, sae_id):
+def get_neuronpedia_embed_url(
+    model: str, sae_release: str, feature_idx: int, sae_id: str
+) -> str:
     """Generate the correct Neuronpedia embed URL based on model and SAE release"""
     base_url = "https://neuronpedia.org"
     path = None
@@ -452,12 +534,12 @@ def plot_feature_activations(
 #### Streamlit controls ####
 
 
-def load_recommended_views(config):
+def load_recommended_views(config: dict) -> dict:
     """Load recommended views from config"""
     return config.get("recommended_views", {})
 
 
-def apply_recommended_view(view_config):
+def apply_recommended_view(view_config: dict) -> None:
     """Update URL parameters for a recommended view and trigger rerun"""
     new_params = {
         "model": view_config["model"],
