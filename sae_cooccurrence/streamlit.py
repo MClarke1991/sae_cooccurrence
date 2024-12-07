@@ -1,4 +1,5 @@
 import logging
+import os
 from os.path import join as pj
 
 import h5py
@@ -236,3 +237,48 @@ def plot_feature_activations(
         hovermode=False,
     )
     return fig
+
+
+def split_large_h5_files(directory: str, max_size_mb: int = 100) -> None:
+    """Split HDF5 files larger than max_size_mb into smaller chunks.
+
+    Args:
+        directory: Path to directory containing h5 files
+        max_size_mb: Maximum file size in MB (default: 100)
+    """
+    for filename in os.listdir(directory):
+        if not filename.endswith(".h5"):
+            continue
+
+        file_path = os.path.join(directory, filename)
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+
+        if file_size_mb <= max_size_mb:
+            continue
+
+        # Calculate number of chunks needed
+        n_chunks = int(np.ceil(file_size_mb / max_size_mb))
+
+        with h5py.File(file_path, "r") as source:
+            # Get all subgraph keys
+            subgraph_keys = [k for k in source.keys() if k.startswith("subgraph_")]
+            chunk_size = len(subgraph_keys) // n_chunks
+
+            # Split into chunks
+            for i in range(n_chunks):
+                start_idx = i * chunk_size
+                end_idx = (
+                    start_idx + chunk_size if i < n_chunks - 1 else len(subgraph_keys)
+                )
+                chunk_keys = subgraph_keys[start_idx:end_idx]
+
+                # Create new file for chunk
+                chunk_filename = f"{os.path.splitext(filename)[0]}_chunk{i+1}.h5"
+                chunk_path = os.path.join(directory, chunk_filename)
+
+                with h5py.File(chunk_path, "w") as target:
+                    # Copy selected subgraphs to new file
+                    for key in chunk_keys:
+                        source.copy(source[key], target, key)
+
+        logging.info(f"Split {filename} into {n_chunks} chunks")
