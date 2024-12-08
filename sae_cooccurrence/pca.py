@@ -3365,3 +3365,56 @@ def plot_subgraph_interactive_from_nx(
 
     html = net.generate_html(notebook=False)
     return net, html
+
+
+def plot_subgraph_from_sparse_matrix_path(
+    results_path: str,
+    pca_path: str,
+    fs_splitting_cluster: int,
+    node_df: pd.DataFrame,
+    save_figs: bool = True,
+    font_size: int = 15,
+    label_downshift: float = 40.0,
+    matrix_filename: str = "sparse_thresholded_matrix_1_5.npz",
+    show_plot: bool = True,
+) -> tuple[nx.Graph, pd.DataFrame]:
+    """Load and plot a subgraph from a sparse matrix.
+
+    Args:
+        results_path: Path to the results directory containing thresholded matrices
+        pca_path: Path to save the output plots
+        fs_splitting_cluster: ID of the feature splitting cluster to plot
+        node_df: DataFrame containing node information
+        matrix_filename: Name of the sparse matrix file to load
+        save_figs: Whether to save the generated figures
+        show_plot: Whether to display the plot
+        font_size: Font size for node labels
+
+    Returns:
+        tuple: (networkx Graph object, DataFrame with subgraph data)
+    """
+    # Load sparse matrix
+    sparse_thresholded_matrix = sparse.load_npz(
+        os.path.join(results_path, "thresholded_matrices", matrix_filename)
+    )
+
+    # Generate subgraph data
+    subgraph, subgraph_df = generate_subgraph_plot_data_sparse(
+        sparse_thresholded_matrix=sparse_thresholded_matrix,
+        node_df=node_df,
+        subgraph_id=fs_splitting_cluster,
+    )
+
+    # Plot the subgraph
+    plot_subgraph_static_from_nx(
+        subgraph=subgraph,
+        output_path=pj(pca_path, "subgraph_static"),
+        subgraph_df=subgraph_df,
+        node_info_df=node_df,
+        save_figs=save_figs,
+        show_plot=show_plot,
+        font_size=font_size,
+        label_downshift=label_downshift,
+    )
+
+    return subgraph, subgraph_df
