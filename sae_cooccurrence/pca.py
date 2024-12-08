@@ -3075,6 +3075,7 @@ def plot_subgraph_static_from_nx(
     colour_when_inactive: bool = True,
     plot_token_factors: bool = False,
     show_plot: bool = True,
+    font_size: int = 15,
 ) -> None:
     """
     Plot a static subgraph from a networkx graph, as provided by generate_subgraph_plot_data.
@@ -3085,6 +3086,7 @@ def plot_subgraph_static_from_nx(
     activation_array: numpy array | None, activation array
     save_figs: bool, save figures
     normalize_globally: bool, normalize globally
+    font_size: int, font size
     """
 
     if not isinstance(subgraph, nx.Graph):
@@ -3201,9 +3203,9 @@ def plot_subgraph_static_from_nx(
 
     # Adjust label positions with scaled coordinates
     label_pos = {
-        k: (v[0], v[1] - 75) for k, v in pos.items()
+        k: (v[0], v[1] - 40 * (font_size / 15)) for k, v in pos.items()
     }  # Adjusted offset for scale
-    nx.draw_networkx_labels(subgraph, label_pos, labels, font_size=8)
+    nx.draw_networkx_labels(subgraph, label_pos, labels, font_size=font_size)
 
     plt.axis("off")
     plt.tight_layout()
