@@ -3100,6 +3100,221 @@ def analyze_specific_points_from_thresholded(
             fig.show()
 
 
+def analyze_specific_points_from_sparse_matrix_path(
+    results: ProcessedExamples | ReprocessedResults,
+    results_path: str,
+    fs_splitting_nodes: list[int],
+    fs_splitting_cluster: int,
+    activation_threshold: float,
+    node_df: pd.DataFrame,
+    pca_df: pd.DataFrame,
+    point_ids: list[int],
+    matrix_filename: str = "sparse_thresholded_matrix_1_5.npz",
+    plot_only_fs_nodes: bool = False,
+    subdir: str | None = None,
+    save_figs: bool = False,
+    pca_path: str | None = None,
+    plot_without_other_subgraphs: bool = False,
+) -> None:
+    """
+    Analyze and visualize specific points from the PCA plot based on their IDs.
+    """
+    sparse_thresholded_matrix = sparse.load_npz(
+        os.path.join(results_path, "thresholded_matrices", matrix_filename)
+    )
+
+    # Color palette for plots
+    # This wraps around the colors if you have more than about 10 points
+    colors = [
+        px.colors.qualitative.Safe[i % len(px.colors.qualitative.Safe)]
+        for i in range(len(point_ids))
+    ]
+
+    for i, point_id in enumerate(point_ids):
+        print(f"\nAnalyzing point with ID {point_id}:")
+
+        # Extract data for this point
+        point_result = get_point_result(results, point_id)
+        point_pca_path = pj(pca_path, f"point_{point_id}") if pca_path else None
+
+        if point_pca_path is not None:
+            if not os.path.exists(point_pca_path):
+                os.makedirs(point_pca_path)
+
+        # Prepare data for plotting
+        df, context = prepare_data(point_result, fs_splitting_nodes, node_df)
+
+        # Create bar plot
+        bar_fig = create_bar_plot_specific(
+            df,
+            context,
+            fs_splitting_nodes,
+            fs_splitting_cluster,
+            colors[i],
+            height=800,
+            width=800,
+            plot_only_fs_nodes=plot_only_fs_nodes,
+        )
+
+        # Create pie charts
+        pie_fig = create_pie_charts(df, activation_threshold, context, color=colors[i])
+
+        # Get active subgraphs
+        if plot_without_other_subgraphs:
+            # If loading data from the generation for streamlit then all graph feature apps
+            # will not have been saved and therefore we cannot plot the feature
+            # activations of the other subgraphs
+            activation_array = (
+                point_result.all_graph_feature_acts.flatten().cpu().numpy()
+            )
+            active_subgraph_ids = [fs_splitting_cluster]
+        elif isinstance(point_result, ProcessedExamples):
+            activation_array = point_result.all_feature_acts.flatten().cpu().numpy()
+            # If all feature acts is not part of point result raise a error that we cannot plot other subgraphs from Streamlit data
+            active_subgraph_ids = get_active_subgraph_ids(df, activation_threshold)
+        else:
+            raise ValueError(
+                "Passed ReprocessedResults, but cannot plot other subgraphs from Streamlit data. "
+                "Please set plot_without_other_subgraphs=True when loading data from generation or pass ProcessedExamples."
+            )
+
+        if save_figs and pca_path:
+            if subdir is not None:
+                point_path = pj(pca_path, subdir, f"point_{point_id}")
+            else:
+                point_path = pj(pca_path, f"point_{point_id}")
+            if not os.path.exists(point_path):
+                os.makedirs(point_path)
+        else:
+            point_path = None
+
+        # Plot active subgraphs
+        subgraph_figs = []
+        for subgraph_id in active_subgraph_ids:
+            # subgraph_path = (
+            #     pj(pca_path, f"point_{point_id}", f"subgraph_{subgraph_id}")
+            #     if save_figs and pca_path
+            #     else None
+            # )
+            if save_figs and pca_path:
+                if point_path is None:
+                    raise ValueError("point_path is None")
+                if subdir is not None:
+                    subgraph_path = pj(point_path, f"subgraph_{subgraph_id}")
+                else:
+                    subgraph_path = pj(point_path, f"subgraph_{subgraph_id}")
+                subgraph, subgraph_df = generate_subgraph_plot_data(
+                    thresholded_matrix=sparse_thresholded_matrix,
+                    node_df=node_df,
+                    subgraph_id=subgraph_id,
+                )
+                # mask activation array to only be the nodes in the subgraph
+                activation_array_subgraph = activation_array[
+                    subgraph_df["node_id"].astype(int).values
+                ]  # type: ignore
+                subgraph_fig = plot_subgraph_static_from_nx(
+                    subgraph=subgraph,
+                    subgraph_df=subgraph_df,
+                    node_info_df=node_df,
+                    output_path=subgraph_path,
+                    activation_array=activation_array_subgraph,
+                    save_figs=save_figs,
+                    show_plot=False,
+                )
+                subgraph_figs.append(subgraph_fig)
+
+        # Save or show figures
+        if save_figs and pca_path:
+            # if subdir is not None:
+            #     point_path = pj(pca_path, subdir, f"point_{point_id}")
+            # else:
+            #     point_path = pj(pca_path, f"point_{point_id}")
+            if point_path is None:
+                raise ValueError("point_path is None")
+            os.makedirs(point_path, exist_ok=True)
+            bar_fig.write_image(
+                pj(point_path, f"bar_plot_point_{point_id}.png"), scale=4.0
+            )
+            bar_fig.write_html(pj(point_path, f"bar_plot_point_{point_id}.html"))
+            pie_fig.write_image(
+                pj(point_path, f"pie_charts_point_{point_id}.png"), scale=4.0
+            )
+            pie_fig.write_html(pj(point_path, f"pie_charts_point_{point_id}.html"))
+
+        bar_fig.show()
+        pie_fig.show()
+        for fig in subgraph_figs:
+            if fig is not None:
+                fig.show()
+            else:
+                print(
+                    "Subgraph figure is None. Likely no latents are within a subgraph."
+                )
+
+        # Print statistics for this point
+        # print_statistics(df, fs_splitting_nodes, activation_threshold)
+
+        # Create PCA plot (PC2 vs PC3) for this point
+        fig = go.Figure()
+
+        # Add all points in grey
+        fig.add_trace(
+            go.Scatter(
+                x=pca_df["PC2"],
+                y=pca_df["PC3"],
+                mode="markers",
+                marker=dict(
+                    color="lightgrey",
+                    size=10,
+                    line=dict(width=2, color="DarkSlateGrey"),
+                ),
+                name="Other points",
+                hoverinfo="none",
+            )
+        )
+
+        # Add the specific point in color
+        fig.add_trace(
+            go.Scatter(
+                x=[pca_df.loc[point_id, "PC2"]],
+                y=[pca_df.loc[point_id, "PC3"]],
+                mode="markers",
+                marker=dict(
+                    color=colors[i],
+                    size=15,
+                    symbol="star",
+                    line=dict(width=2, color="DarkSlateGrey"),
+                ),
+                name=f"Point {point_id}",
+                text=pca_df.loc[point_id, "context"],
+                hoverinfo="text",
+            )
+        )
+
+        fig.update_layout(
+            title=f"'{context}' - {point_id}",
+            xaxis_title="PC2",
+            yaxis_title="PC3",
+            width=800,
+            height=800,
+            showlegend=False,
+            # template = 'plotly_white'
+        )
+
+        fig.update_xaxes(constrain="domain")
+        fig.update_yaxes(scaleanchor="x")
+
+        if save_figs and pca_path:
+            if point_path is None:
+                raise ValueError("point_path is None")
+            fig.write_image(
+                pj(point_path, f"pca_pc2_vs_pc3_point_{point_id}.png"), scale=4.0
+            )
+            fig.write_html(pj(point_path, f"pca_pc2_vs_pc3_point_{point_id}.html"))
+        else:
+            fig.show()
+
+
 #### Plotting from thresholded matrices
 
 
