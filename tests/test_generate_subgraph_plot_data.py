@@ -1,9 +1,15 @@
+from unittest.mock import patch
+
 import networkx as nx
 import numpy as np
 import pandas as pd
 import pytest
 
 from sae_cooccurrence.pca import generate_subgraph_plot_data
+
+# Mock plotly.io.kaleido before importing the module
+with patch("plotly.io.kaleido.scope", create=True):
+    from sae_cooccurrence.pca import generate_subgraph_plot_data
 
 
 @pytest.fixture

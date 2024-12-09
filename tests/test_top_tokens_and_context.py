@@ -1,7 +1,13 @@
+from unittest.mock import patch
+
 import pandas as pd
 import pytest
 
 from sae_cooccurrence.pca import get_top_tokens_and_context
+
+# Mock plotly.io.kaleido before importing the module
+with patch("plotly.io.kaleido.scope", create=True):
+    from sae_cooccurrence.pca import get_top_tokens_and_context
 
 
 def test_get_top_tokens_and_context():
