@@ -953,7 +953,7 @@ def plot_pca_feature_strength(
     all_activations = results.all_graph_feature_acts.cpu().numpy()
 
     # Prepare the color map
-    cmap = plt.cm.get_cmap("viridis")
+    cmap = plt.get_cmap("viridis")
     n_colors = 256
 
     # Get the colormap in RGB
@@ -1060,7 +1060,7 @@ def plot_pca_feature_strength_streamlit(
         pc_y: Y-axis principal component (default "PC2")
     """
     # Create custom colormap that uses white for low values
-    cmap = plt.cm.get_cmap("viridis")
+    cmap = plt.get_cmap("viridis")
     colormap_RGB = cmap(np.arange(cmap.N))
     colormap_RGB[0] = (1, 1, 1, 1)  # Set first color to white
 
@@ -1131,7 +1131,7 @@ def plot_pca_single_feature_strength(
     feature_activations = all_activations[:, feature_index]
 
     # Prepare the color map
-    cmap = plt.cm.get_cmap("viridis")
+    cmap = plt.get_cmap("viridis")
     n_colors = 256
 
     # Get the colormap in RGB
@@ -3497,7 +3497,7 @@ def plot_subgraph_static_from_nx(
                 ) / activation_range
             else:
                 normalized_activation = 0.5
-            node_colors.append(plt.cm.get_cmap("Blues")(normalized_activation))
+            node_colors.append(plt.get_cmap("Blues")(normalized_activation))
 
     # Get edge weights
     edge_weights = [subgraph[u][v]["weight"] for u, v in subgraph.edges()]
@@ -3652,7 +3652,7 @@ def plot_subgraph_interactive_from_nx(
                 normalized_activation = (
                     activation_array[i] - min_activation
                 ) / activation_range
-                rgba = plt.cm.get_cmap("Blues")(normalized_activation)
+                rgba = plt.get_cmap("Blues")(normalized_activation)
                 color = f"#{int(rgba[0]*255):02x}{int(rgba[1]*255):02x}{int(rgba[2]*255):02x}"
             else:
                 color = "#084594"
