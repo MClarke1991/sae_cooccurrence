@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -5,6 +7,10 @@ import pytest
 from pyvis.network import Network
 
 from sae_cooccurrence.pca import plot_subgraph_interactive_from_nx
+
+# Mock plotly.io.kaleido before importing the module
+with patch("plotly.io.kaleido.scope", create=True):
+    from sae_cooccurrence.pca import plot_subgraph_interactive_from_nx
 
 
 @pytest.fixture

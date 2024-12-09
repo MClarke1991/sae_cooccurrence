@@ -1,5 +1,6 @@
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -8,6 +9,10 @@ import pandas as pd
 import pytest
 
 from sae_cooccurrence.pca import plot_subgraph_static_from_nx
+
+# Mock plotly.io.kaleido before importing the module
+with patch("plotly.io.kaleido.scope", create=True):
+    from sae_cooccurrence.pca import plot_subgraph_static_from_nx
 
 
 @pytest.fixture
