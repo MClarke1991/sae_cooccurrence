@@ -1,13 +1,19 @@
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 import torch
 import torch.nn as nn
 from sae_lens import SAE
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 from tqdm.autonotebook import tqdm
 from transformer_lens import HookedTransformer
 from transformers import AutoModel, AutoTokenizer
+
+from sae_cooccurrence.utils.set_paths import get_git_root
 
 
 def get_device():
@@ -273,8 +279,54 @@ class LinearProbe(nn.Module):
         return torch.sigmoid(self.linear(x))
 
 
+def evaluate_probe(probe, test_loader, device):
+    """Evaluate probe performance with multiple metrics"""
+    probe.eval()
+    all_preds = []
+    all_labels = []
+    
+    with torch.no_grad():
+        for batch_activations, batch_labels in test_loader:
+            outputs = probe(batch_activations)
+            predicted = (outputs >= 0.5).float()
+            all_preds.extend(predicted.cpu().numpy())
+            all_labels.extend(batch_labels.cpu().numpy())
+    
+    all_preds = np.array(all_preds)
+    all_labels = np.array(all_labels)
+    
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        all_labels, all_preds, average='binary'
+    )
+    accuracy = accuracy_score(all_labels, all_preds)
+    
+    return {
+        'precision': precision,
+        'recall': recall,
+        'f1': f1,
+        'accuracy': accuracy
+    }
+
+def plot_metrics(metrics_history, out_dir):
+    """Plot training metrics over epochs"""
+    plt.figure(figsize=(12, 8))
+    
+    # Create a line plot for each metric
+    for metric in metrics_history[0].keys():
+        values = [m[metric] for m in metrics_history]
+        plt.plot(range(1, len(values) + 1), values, label=metric, marker='o')
+    
+    plt.title('Probe Performance Metrics Over Training')
+    plt.xlabel('Epoch')
+    plt.ylabel('Score')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+    plt.savefig(os.path.join(out_dir, "metrics.png"))
+
 def train_probe(
-    model_name="gpt2",
+    model_name,
+    out_dir,
     layer_idx=0,
     n_samples=1000,
     batch_size=32,
@@ -332,6 +384,9 @@ def train_probe(
     criterion = nn.BCELoss()
     optimizer = torch.optim.Adam(probe.parameters(), lr=learning_rate)
 
+    # Add metrics history tracking
+    metrics_history = []
+
     # Training loop
     for epoch in tqdm(range(n_epochs), desc="Training"):
         probe.train()
@@ -346,22 +401,17 @@ def train_probe(
             total_loss += loss.item()
 
         # Evaluation
-        probe.eval()
-        correct = 0
-        total = 0
-
-        with torch.no_grad():
-            for batch_activations, batch_labels in test_loader:
-                outputs = probe(batch_activations)
-                predicted = (outputs >= 0.5).float()
-                total += batch_labels.size(0)
-                correct += (predicted == batch_labels).sum().item()
-
-        accuracy = correct / total
+        metrics = evaluate_probe(probe, test_loader, device)
+        metrics_history.append(metrics)
+        
         print(
             f"Epoch {epoch+1}/{n_epochs}, Loss: {total_loss/len(train_loader):.4f}, "
-            f"Accuracy: {accuracy:.4f}"
+            f"Accuracy: {metrics['accuracy']:.4f}, F1: {metrics['f1']:.4f}, "
+            f"Precision: {metrics['precision']:.4f}, Recall: {metrics['recall']:.4f}"
         )
+
+    # Plot metrics after training
+    plot_metrics(metrics_history, out_dir)
 
     return probe, model, tokenizer
 
@@ -422,14 +472,24 @@ def find_similar_sae_features(probe, sae, top_k=10):
 
 # Example usage
 if __name__ == "__main__":
+    
+    model_name = "gemma-2-2b"
+    sae_release = "gemma-scope-2b-pt-res-canonical"
+    sae_id = "layer_0/width_16k/canonical"
+    sae_id_safe = sae_id.replace("/", "_").replace(".", "_")
+    layer_idx = 0
+    
+    out_dir = os.path.join(get_git_root(), "results", "linear_probes", model_name, sae_release, sae_id_safe)
+    os.makedirs(out_dir, exist_ok=True)
+    
     # Train the probe
-    probe, model, tokenizer = train_probe(model_name="gemma-2-2b", layer_idx=0)
+    probe, model, tokenizer = train_probe(model_name=model_name, layer_idx=layer_idx, out_dir=out_dir)
     # probe, model, tokenizer = train_probe(model_name="gpt2-small", layer_idx=0)
 
     # Load SAE
     sae = load_sae(
-        sae_release="gemma-scope-2b-pt-res-canonical",
-        sae_id="layer_0/width_16k/canonical",
+        sae_release=sae_release,
+        sae_id=sae_id,
     )
     # sae = load_sae(sae_release="gpt2-small-res-jb", sae_id="blocks.0.hook_resid_pre")
 
