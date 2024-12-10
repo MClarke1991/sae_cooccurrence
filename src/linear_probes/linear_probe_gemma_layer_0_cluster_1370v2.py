@@ -596,7 +596,7 @@ if __name__ == "__main__":
     sae_id = "layer_0/width_16k/canonical"
     sae_id_safe = sae_id.replace("/", "_").replace(".", "_")
     layer_idx = 0
-    n_examples = 100
+    n_examples = 1000
     
     config = TextGenerationConfig(
         number_word_prob=0.5,
@@ -635,7 +635,7 @@ if __name__ == "__main__":
     top_neurons, top_weights = analyze_neurons(probe)
 
     # Find similar SAE features
-    top_features, similarities = find_similar_sae_features(probe, sae, out_dir)
+    top_features, similarities = find_similar_sae_features(probe, sae, out_dir, 50)
 
     # Print results
     print("\nTop neurons for 'one of' detection:")
