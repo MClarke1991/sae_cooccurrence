@@ -185,6 +185,7 @@ def plot_metrics(metrics_history: list[dict[str, float]], loss_history: list[flo
     ax2.set_title('Training Loss Over Epochs')
     ax2.set_xlabel('Epoch')
     ax2.set_ylabel('Loss')
+    ax2.set_ylim(bottom=0)
     ax2.legend()
     ax2.grid(True)
     
