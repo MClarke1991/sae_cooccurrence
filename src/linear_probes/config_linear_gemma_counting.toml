@@ -1,0 +1,14 @@
+# config.toml
+
+[model]
+model_name = "gemma-2-2b"
+
+[sae]
+sae_release = "gemma-scope-2b-pt-res-canonical"
+sae_id = "layer_0/width_16k/canonical"
+
+[layer]
+layer_idx = 0
+
+[examples]
+n_examples = 1000
