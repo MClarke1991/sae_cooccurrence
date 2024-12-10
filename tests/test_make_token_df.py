@@ -1,10 +1,14 @@
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pandas as pd
 import pytest
 import torch
 
 from sae_cooccurrence.pca import make_token_df
+
+# Mock plotly.io.kaleido before importing the module
+with patch("plotly.io.kaleido.scope", create=True):
+    from sae_cooccurrence.pca import make_token_df
 
 
 @pytest.fixture

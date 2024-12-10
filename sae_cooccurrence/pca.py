@@ -1,5 +1,4 @@
 import ast
-import io
 import logging
 import os
 import pickle
@@ -17,7 +16,6 @@ import plotly.colors
 import plotly.express as px
 import plotly.graph_objects as go
 import torch
-from PIL import Image
 from plotly.subplots import make_subplots
 from pyvis.network import Network
 from scipy import sparse
@@ -31,6 +29,12 @@ from sae_cooccurrence.graph_generation import load_subgraph, plot_subgraph_stati
 from sae_cooccurrence.normalised_cooc_functions import (
     get_special_tokens,
 )
+
+# Disable mathjax for plotly
+# This is required because the context for Gemma contains a lot of
+# LaTeX symbols and no matter how you try to escape the dollar signs they
+# WILL cause the formatting to mess up in plotly.
+plotly.io.kaleido.scope.mathjax = None
 
 
 def assign_category(row, fs_splitting_cluster, order_other_subgraphs=False):
@@ -177,6 +181,32 @@ class ProcessedExamples:
     all_examples_found: int
     top_3_tokens: list[tuple[str, int]] = field(default_factory=list)
     example_context: str = ""
+
+
+@dataclass
+class ReprocessedResults:
+    all_graph_feature_acts: torch.Tensor
+    all_max_feature_info: torch.Tensor
+
+
+def reprocess_results_to_processed_examples(existing_results):
+    """
+    Reprocess existing results to match the ProcessedExamples class format.
+
+    Args:
+        existing_results: The existing results to be reprocessed.
+
+    Returns:
+        ProcessedExamples: A new instance of ProcessedExamples with reprocessed data.
+    """
+    all_graph_feature_acts = existing_results["all_graph_feature_acts"]
+    all_max_feature_info = existing_results["all_max_feature_info"]
+
+    # Create a new ProcessedExamples object
+    return ReprocessedResults(
+        all_graph_feature_acts=all_graph_feature_acts,
+        all_max_feature_info=all_max_feature_info,
+    )
 
 
 def run_model_with_cache(model, tokens, sae):
@@ -923,7 +953,7 @@ def plot_pca_feature_strength(
     all_activations = results.all_graph_feature_acts.cpu().numpy()
 
     # Prepare the color map
-    cmap = plt.cm.get_cmap("viridis")
+    cmap = plt.get_cmap("viridis")
     n_colors = 256
 
     # Get the colormap in RGB
@@ -1030,7 +1060,7 @@ def plot_pca_feature_strength_streamlit(
         pc_y: Y-axis principal component (default "PC2")
     """
     # Create custom colormap that uses white for low values
-    cmap = plt.cm.get_cmap("viridis")
+    cmap = plt.get_cmap("viridis")
     colormap_RGB = cmap(np.arange(cmap.N))
     colormap_RGB[0] = (1, 1, 1, 1)  # Set first color to white
 
@@ -1101,7 +1131,7 @@ def plot_pca_single_feature_strength(
     feature_activations = all_activations[:, feature_index]
 
     # Prepare the color map
-    cmap = plt.cm.get_cmap("viridis")
+    cmap = plt.get_cmap("viridis")
     n_colors = 256
 
     # Get the colormap in RGB
@@ -1929,16 +1959,24 @@ def print_statistics(df, fs_splitting_nodes, activation_threshold):
     )
 
 
-def get_point_result(results, idx):
-    point_result = ProcessedExamples(
-        all_token_dfs=results.all_token_dfs.iloc[[idx]],
-        all_fired_tokens=[results.all_fired_tokens[idx]],
-        all_reconstructions=results.all_reconstructions[[idx]],
-        all_graph_feature_acts=results.all_graph_feature_acts[[idx]],
-        all_feature_acts=results.all_feature_acts[[idx]],
-        all_max_feature_info=results.all_max_feature_info[[idx]],
-        all_examples_found=1,
-    )
+def get_point_result(
+    results: ProcessedExamples | ReprocessedResults, idx: int
+) -> ProcessedExamples | ReprocessedResults:
+    if isinstance(results, ReprocessedResults):
+        point_result = ReprocessedResults(
+            all_graph_feature_acts=results.all_graph_feature_acts[[idx]],
+            all_max_feature_info=results.all_max_feature_info[[idx]],
+        )
+    else:
+        point_result = ProcessedExamples(
+            all_token_dfs=results.all_token_dfs.iloc[[idx]],
+            all_fired_tokens=[results.all_fired_tokens[idx]],
+            all_reconstructions=results.all_reconstructions[[idx]],
+            all_graph_feature_acts=results.all_graph_feature_acts[[idx]],
+            all_feature_acts=results.all_feature_acts[[idx]],
+            all_max_feature_info=results.all_max_feature_info[[idx]],
+            all_examples_found=1,
+        )
     return point_result
 
 
@@ -2148,6 +2186,298 @@ def analyze_representative_points(
         )
 
 
+def plot_feature_activation_trends_representative_points(
+    results: ProcessedExamples | ReprocessedResults,
+    fs_splitting_nodes: list[int],
+    point_ids: list[int],
+    pca_df: pd.DataFrame,
+    save_figs: bool = False,
+    pca_path: str | None = None,
+    subdir: str | None = None,
+    filename: str = "feature_activation_trends",
+    context_before: int = 10,  # New parameter
+    context_after: int = 5,  # New parameter
+) -> None:
+    """Plot line graph showing how feature activations change across points.
+
+    Args:
+        results: Results containing feature activations
+        fs_splitting_nodes: List of feature nodes to analyze
+        point_ids: List of point IDs to analyze
+        pca_df: DataFrame with PCA results and context info
+        save_figs: Whether to save the figures
+        pca_path: Path to save figures
+        subdir: Optional subdirectory for saving figures
+        filename: Filename for the saved figures
+        context_before: Number of characters to show before the token
+        context_after: Number of characters to show after the token
+    """
+    # Get activations for each point
+    activation_data = []
+    contexts = []
+
+    for point_id in point_ids:
+        point_result = get_point_result(results, point_id)
+        if isinstance(point_result, ProcessedExamples):
+            activation_array = (
+                point_result.all_graph_feature_acts.flatten().cpu().numpy()
+            )
+        else:
+            activation_array = (
+                point_result.all_graph_feature_acts.flatten().cpu().numpy()
+            )
+
+        activation_data.append(activation_array)
+        contexts.append(pca_df.loc[point_id, "context"])
+
+    # Convert to array for easier plotting
+    activation_matrix = np.array(activation_data)
+
+    # Create line plot
+    fig = go.Figure()
+
+    # Add a line for each feature
+    for i, feature_idx in enumerate(fs_splitting_nodes):
+        fig.add_trace(
+            go.Scatter(
+                x=list(range(len(point_ids))),
+                y=activation_matrix[:, i],
+                mode="lines+markers",
+                name=f"Feature {feature_idx}",
+                hovertemplate=(
+                    f"Feature {feature_idx}<br>"
+                    "Point: %{x}<br>"
+                    "Activation: %{y:.3f}<br>"
+                    "<extra></extra>"
+                ),
+            )
+        )
+
+    # Update layout with configurable context lengths
+    fig.update_layout(
+        title="Feature Activation Trends Across Points",
+        xaxis_title="Point Index",
+        yaxis_title="Activation Value",
+        xaxis=dict(
+            tickmode="array",
+            ticktext=[
+                f"..{ctx.replace('<|endoftext|>', '').split('|')[0][-context_before:]}|"
+                f"{ctx.replace('<|endoftext|>', '').split('|')[1]}|"
+                f"{ctx.replace('<|endoftext|>', '').split('|')[2][:context_after]}..."
+                for id, ctx in zip(point_ids, contexts)
+            ],
+            tickvals=list(range(len(point_ids))),
+        ),
+        showlegend=True,
+        width=800,
+        height=600,
+        hovermode="x unified",
+    )
+
+    # Save if requested
+    if save_figs and pca_path:
+        save_path = pca_path
+        if subdir:
+            save_path = pj(save_path, subdir)
+        os.makedirs(save_path, exist_ok=True)
+
+        fig.write_image(pj(save_path, filename + ".png"), scale=4.0)
+        fig.write_image(pj(save_path, filename + ".svg"))
+        fig.write_image(pj(save_path, filename + ".pdf"))
+        fig.write_html(pj(save_path, filename + ".html"))
+
+    fig.show()
+
+
+def plot_feature_activation_trends_horizontal(
+    results: ProcessedExamples | ReprocessedResults,
+    fs_splitting_nodes: list[int],
+    point_ids: list[int],
+    pca_df: pd.DataFrame,
+    save_figs: bool = False,
+    pca_path: str | None = None,
+    subdir: str | None = None,
+    filename: str = "feature_activation_trends_horizontal",
+) -> None:
+    """Plot horizontal line graph showing how feature activations change across points.
+
+    Args:
+        results: Results containing feature activations
+        fs_splitting_nodes: List of feature nodes to analyze
+        point_ids: List of point IDs to analyze
+        pca_df: DataFrame with PCA results and context info
+        save_figs: Whether to save the figures
+        pca_path: Path to save figures
+        subdir: Optional subdirectory for saving figures
+        filename: Filename for the saved figures
+    """
+    # Get activations for each point
+    activation_data = []
+    contexts = []
+
+    for point_id in point_ids:
+        point_result = get_point_result(results, point_id)
+        if isinstance(point_result, ProcessedExamples):
+            activation_array = (
+                point_result.all_graph_feature_acts.flatten().cpu().numpy()
+            )
+        else:
+            activation_array = (
+                point_result.all_graph_feature_acts.flatten().cpu().numpy()
+            )
+
+        activation_data.append(activation_array)
+        contexts.append(pca_df.loc[point_id, "context"])
+
+    # Convert to array for easier plotting
+    activation_matrix = np.array(activation_data)
+
+    # Create line plot
+    fig = go.Figure()
+
+    # Format contexts for labels - show more of the context
+    context_labels = [
+        f"{ctx.replace('<|endoftext|>', '').split('|')[0][-30:]} | "
+        f"{ctx.replace('<|endoftext|>', '').split('|')[1]} | "
+        f"{ctx.replace('<|endoftext|>', '').split('|')[2][:30]}..."
+        for ctx in contexts
+    ]
+
+    # Add a line for each feature
+    for i, feature_idx in enumerate(fs_splitting_nodes):
+        fig.add_trace(
+            go.Scatter(
+                y=list(range(len(point_ids))),  # Swap x and y
+                x=activation_matrix[:, i],  # Swap x and y
+                mode="lines+markers",
+                name=f"Feature {feature_idx}",
+                hovertemplate=(
+                    f"Feature {feature_idx}<br>"
+                    "Point: %{y}<br>"  # Update template
+                    "Activation: %{x:.3f}<br>"  # Update template
+                    "<extra></extra>"
+                ),
+            )
+        )
+
+    # Update layout with swapped axes
+    fig.update_layout(
+        title="Feature Activation Trends Across Points",
+        yaxis_title="Point Index",  # Swap axis titles
+        xaxis_title="Activation Value",  # Swap axis titles
+        yaxis=dict(
+            tickmode="array",
+            ticktext=context_labels,
+            tickvals=list(range(len(point_ids))),
+            automargin=True,  # Allow margin to adjust for labels
+        ),
+        showlegend=True,
+        width=1000,  # Increase width to accommodate labels
+        height=max(600, 100 * len(point_ids)),  # Scale height with number of points
+        hovermode="y unified",  # Update hover mode
+        margin=dict(l=400),  # Add left margin for labels
+    )
+
+    # Save if requested
+    if save_figs and pca_path:
+        save_path = pca_path
+        if subdir:
+            save_path = pj(save_path, subdir)
+        os.makedirs(save_path, exist_ok=True)
+
+        fig.write_image(pj(save_path, filename + ".png"), scale=4.0)
+        fig.write_image(pj(save_path, filename + ".svg"))
+        fig.write_image(pj(save_path, filename + ".pdf"))
+        fig.write_html(pj(save_path, filename + ".html"))
+
+    fig.show()
+
+
+def plot_feature_activation_counts(
+    results: ProcessedExamples | ReprocessedResults,
+    point_ids: list[int],
+    pca_df: pd.DataFrame,
+    activation_threshold: float = 0.1,
+    save_figs: bool = False,
+    pca_path: str | None = None,
+    subdir: str | None = None,
+    filename: str = "feature_activation_counts",
+) -> None:
+    """Plot bar graph showing count of active features at each point.
+
+    Args:
+        results: Results containing feature activations
+        fs_splitting_nodes: List of feature nodes to analyze
+        point_ids: List of point IDs to analyze
+        pca_df: DataFrame with PCA results and context info
+        activation_threshold: Threshold for considering a feature active
+        save_figs: Whether to save the figures
+        pca_path: Path to save figures
+        subdir: Optional subdirectory for saving figures
+        filename: Filename for the saved figures
+    """
+    # Get activations for each point
+    activation_counts = []
+    contexts = []
+
+    for point_id in point_ids:
+        point_result = get_point_result(results, point_id)
+        activation_array = point_result.all_graph_feature_acts.flatten().cpu().numpy()
+
+        # Count features above threshold
+        active_features = np.sum(activation_array > activation_threshold)
+        activation_counts.append(active_features)
+        contexts.append(pca_df.loc[point_id, "context"])
+
+    # Create bar plot
+    fig = go.Figure()
+
+    # Add bars
+    fig.add_trace(
+        go.Bar(
+            x=list(range(len(point_ids))),
+            y=activation_counts,
+            text=activation_counts,
+            textposition="auto",
+            hovertemplate=(
+                "Point %{x}<br>" "Active Features: %{y}<br>" "<extra></extra>"
+            ),
+        )
+    )
+
+    # Update layout
+    fig.update_layout(
+        title=f"Number of Features Active Above {activation_threshold} Threshold",
+        xaxis_title="Point Index",
+        yaxis_title="Number of Active Features",
+        xaxis=dict(
+            tickmode="array",
+            ticktext=[
+                f"..{ctx.split('|')[0][-10:]}|{ctx.split('|')[1]}|{ctx.split('|')[2][:5]}..."
+                for id, ctx in zip(point_ids, contexts)
+            ],
+            tickvals=list(range(len(point_ids))),
+        ),
+        width=800,
+        height=600,
+        showlegend=False,
+    )
+
+    # Save if requested
+    if save_figs and pca_path:
+        save_path = pca_path
+        if subdir:
+            save_path = pj(save_path, subdir)
+        os.makedirs(save_path, exist_ok=True)
+
+        fig.write_image(pj(save_path, filename + ".png"), scale=4.0)
+        fig.write_image(pj(save_path, filename + ".svg"))
+        fig.write_image(pj(save_path, filename + ".pdf"))
+        fig.write_html(pj(save_path, filename + ".html"))
+
+    fig.show()
+
+
 def plot_feature_activations(
     results,
     fs_splitting_nodes,
@@ -2223,6 +2553,14 @@ def get_active_subgraphs(df, activation_threshold, results_path):
         active_subgraphs[subgraph_id] = subgraph
 
     return active_subgraphs
+
+
+def get_active_subgraph_ids(df, activation_threshold):
+    """Get all active subgraph IDs of size > 1."""
+    active_subgraph_ids = df[
+        (df["Activation"] > activation_threshold) & (df["subgraph_size"] > 4)
+    ]["subgraph_id"].unique()
+    return active_subgraph_ids
 
 
 def create_bar_plot_specific(
@@ -2391,6 +2729,13 @@ def analyze_specific_points(
 
         # Extract data for this point
         point_result = get_point_result(results, point_id)
+
+        if isinstance(point_result, ReprocessedResults):
+            raise ValueError(
+                "Passed ReprocessedResults, but cannot plot other subgraphs from Streamlit data. "
+                "Please set plot_without_other_subgraphs=True when loading data from generation or pass ProcessedExamples."
+            )
+
         point_pca_path = pj(pca_path, f"point_{point_id}") if pca_path else None
 
         if point_pca_path is not None:
@@ -2545,364 +2890,429 @@ def analyze_specific_points(
             fig.show()
 
 
-def analyze_specific_points_animated(
-    results,
-    fs_splitting_nodes,
-    fs_splitting_cluster,
-    activation_threshold,
-    node_df,
-    results_path,
-    pca_df,
-    point_ids,
-    plot_only_fs_nodes=False,
-    save_gif=False,
-    gif_path="animation.gif",
-):
-    # Create subplots
-    fig = make_subplots(
-        rows=1,
-        cols=3,
-        subplot_titles=("PCA Plot", "Feature Activation", "Subgraph Visualization"),
-        specs=[[{"type": "xy"}, {"type": "xy"}, {"type": "xy"}]],
-        horizontal_spacing=0.1,
-    )
-
-    # Calculate fixed node positions for the subgraph
-    subgraph = load_subgraph(results_path, activation_threshold, fs_splitting_cluster)
-    fixed_pos = nx.spring_layout(subgraph, seed=42)  # Use a fixed seed for consistency
-
-    # Calculate global maximum activation
-    global_max_activation = 0
-    for point_id in point_ids:
-        point_result = get_point_result(results, point_id)
-        df, _ = prepare_data(point_result, fs_splitting_nodes, node_df)
-        global_max_activation = max(global_max_activation, df["Activation"].max())
-
-    # Create frames for animation
-    frames = []
-    for point_id in point_ids:
-        frame_data, context = create_frame_data(
-            results=results,
-            fs_splitting_nodes=fs_splitting_nodes,
-            fs_splitting_cluster=fs_splitting_cluster,
-            activation_threshold=activation_threshold,
-            node_df=node_df,
-            results_path=results_path,
-            pca_df=pca_df,
-            point_id=point_id,
-            plot_only_fs_nodes=plot_only_fs_nodes,
-            fixed_pos=fixed_pos,
-        )
-        frame = go.Frame(
-            data=frame_data,
-            name=str(point_id),
-            layout=go.Layout(title=f"Point ID: {point_id}<br>{context}"),
-        )
-        frames.append(frame)
-
-    # Add traces for initial state (first point)
-    initial_frame_data = frames[0].data
-    for trace in initial_frame_data:
-        fig.add_trace(trace)
-
-    # Update layout
-    fig.update_layout(
-        updatemenus=[
-            {
-                "buttons": [
-                    {
-                        "args": [
-                            None,
-                            {
-                                "frame": {"duration": 500, "redraw": True},
-                                "fromcurrent": True,
-                            },
-                        ],
-                        "label": "Play",
-                        "method": "animate",
-                    },
-                    {
-                        "args": [
-                            [None],
-                            {
-                                "frame": {"duration": 0, "redraw": True},
-                                "mode": "immediate",
-                                "transition": {"duration": 0},
-                            },
-                        ],
-                        "label": "Pause",
-                        "method": "animate",
-                    },
-                ],
-                "direction": "left",
-                "pad": {"r": 10, "t": 87},
-                "showactive": False,
-                "type": "buttons",
-                "x": 0.1,
-                "xanchor": "right",
-                "y": 0,
-                "yanchor": "top",
-            }
-        ],
-        sliders=[
-            {
-                "active": 0,
-                "yanchor": "top",
-                "xanchor": "left",
-                "currentvalue": {
-                    "font": {"size": 20},
-                    "prefix": "Point ID: ",
-                    "visible": True,
-                    "xanchor": "right",
-                },
-                "transition": {"duration": 300, "easing": "cubic-in-out"},
-                "pad": {"b": 10, "t": 50},
-                "len": 0.9,
-                "x": 0.1,
-                "y": 0,
-                "steps": [
-                    {
-                        "args": [
-                            [str(point_id)],
-                            {
-                                "frame": {"duration": 300, "redraw": True},
-                                "mode": "immediate",
-                                "transition": {"duration": 300},
-                            },
-                        ],
-                        "label": str(point_id),
-                        "method": "animate",
-                    }
-                    for point_id in point_ids
-                ],
-            }
-        ],
-        height=600,
-        width=1500,
-        title=f"Point ID: {point_ids[0]}<br>{frames[0].layout.title.text.split('<br>')[1]}",
-        yaxis2=dict(
-            range=[0, global_max_activation]
-        ),  # Set fixed y-axis range for bar plot
-    )
-
-    # Add frames to the figure
-    fig.frames = frames
-
-    if save_gif:
-        # Create a folder to save individual frames
-        gif_name = os.path.splitext(os.path.basename(gif_path))[0]
-        gif_dir = os.path.dirname(gif_path)
-        frames_folder = os.path.join(gif_dir, f"{gif_name}_gif_frames")
-        print(frames_folder)
-        os.makedirs(frames_folder, exist_ok=True)
-
-        # Generate images for each frame in the animation
-        gif_frames = []
-        for i, frame in enumerate(fig.frames):
-            # Set main traces to appropriate traces within plotly frame
-            fig.update(data=frame.data)
-            # Update the title with the context for this frame
-            fig.update_layout(title=frame.layout.title)
-            # Generate image of current state with higher resolution
-            img_bytes = fig.to_image(format="png", scale=4.0)
-
-            # Save the frame as PNG
-            frame_path = os.path.join(frames_folder, f"frame_{i:04d}.png")
-            with open(frame_path, "wb") as f:
-                f.write(img_bytes)
-
-            gif_frames.append(Image.open(io.BytesIO(img_bytes)))
-
-        # Create animated GIF
-        gif_frames[0].save(
-            gif_path,
-            save_all=True,
-            append_images=gif_frames[1:],
-            optimize=True,
-            duration=1000,
-            loop=0,
-        )
-        print(f"Animation saved as GIF: {gif_path}")
-        print(f"Individual frames saved in folder: {frames_folder}")
-
-    return fig
-
-    return fig
-
-
-def create_frame_data(
-    results,
-    fs_splitting_nodes,
-    fs_splitting_cluster,
-    activation_threshold,
-    node_df,
-    results_path,
-    pca_df,
-    point_id,
-    plot_only_fs_nodes,
-    fixed_pos,
-):
-    frame_data = []
-
-    # PCA Plot
-    pca_trace = go.Scatter(
-        x=pca_df["PC2"],
-        y=pca_df["PC3"],
-        mode="markers",
-        marker=dict(
-            color=["red" if idx == point_id else "lightgrey" for idx in pca_df.index],
-            size=[15 if idx == point_id else 5 for idx in pca_df.index],
-        ),
-        text=[
-            context if idx == point_id else None
-            for idx, context in zip(pca_df.index, pca_df["context"])
-        ],
-        hoverinfo="text",
-        showlegend=False,
-        xaxis="x",
-        yaxis="y",
-    )
-    frame_data.append(pca_trace)
-
-    # Bar Plot
-    point_result = get_point_result(results, point_id)
-    df, context = prepare_data(point_result, fs_splitting_nodes, node_df)
-
-    # Add missing fs_splitting_nodes with activity 0
-    missing_nodes = set(fs_splitting_nodes) - set(df["Feature Index"])
-    if missing_nodes:
-        missing_df = pd.DataFrame(
-            {
-                "Feature Index": list(missing_nodes),
-                "Activation": [0] * len(missing_nodes),
-                "subgraph_id": [None] * len(missing_nodes),
-                "subgraph_size": [None] * len(missing_nodes),
-            }
-        )
-        df = pd.concat([df, missing_df], ignore_index=True)
-
-    if plot_only_fs_nodes:
-        df["Feature Index"] = df["Feature Index"].astype(int)
-        df = df[df["Feature Index"].isin(fs_splitting_nodes)]
-        df = df.sort_values("Feature Index")  # type: ignore
-        df["Feature Index"] = df["Feature Index"].astype(str)
-    else:  # Sort by activation
-        df = df.sort_values("Activation", ascending=False)
-
-    bar_trace = go.Bar(
-        x=df["Feature Index"].astype(str),
-        y=df["Activation"],
-        marker_color=[
-            "red" if idx == fs_splitting_cluster else "blue"
-            for idx in df["subgraph_id"]
-        ],
-        showlegend=False,
-        xaxis="x2",
-        yaxis="y2",
-    )
-    frame_data.append(bar_trace)
-
-    # Subgraph Visualization
-    subgraph = load_subgraph(results_path, activation_threshold, fs_splitting_cluster)
-    activation_array = point_result.all_feature_acts.flatten().cpu().numpy()
-
-    edge_trace, node_trace = create_subgraph_traces(
-        subgraph, node_df, activation_array, fixed_pos
-    )
-    frame_data.extend([edge_trace, node_trace])
-
-    return frame_data, context
-
-
-def create_subgraph_traces(subgraph, node_df, activation_array, pos):
-    edge_x, edge_y = [], []
-    for edge in subgraph.edges():
-        x0, y0 = pos[edge[0]]
-        x1, y1 = pos[edge[1]]
-        edge_x.extend([x0, x1, None])
-        edge_y.extend([y0, y1, None])
-
-    edge_trace = go.Scatter(
-        x=edge_x,
-        y=edge_y,
-        line=dict(width=0.5, color="#888"),
-        hoverinfo="none",
-        mode="lines",
-        showlegend=False,
-        xaxis="x3",
-        yaxis="y3",
-    )
-
-    node_x, node_y = [], []
-    for node in subgraph.nodes():
-        x, y = pos[node]
-        node_x.append(x)
-        node_y.append(y)
-
-    # Normalize activation values for color scaling
-    node_activations = [activation_array[node] for node in subgraph.nodes()]
-    normalized_activations = (
-        np.array(node_activations) - np.min(node_activations)  # type: ignore
-    ) / (np.max(node_activations) - np.min(node_activations))  # type: ignore
-
-    # Prepare the color map
-    cmap = plt.cm.get_cmap("viridis")
-    n_colors = 256
-
-    # Get the colormap in RGB
-    colormap_RGB = cmap(np.arange(cmap.N))
-
-    # Set the color for zero values to be white
-    colormap_RGB[0] = (
-        1,
-        1,
-        1,
-        1,
-    )  # This line sets the first color in the colormap to white
-
-    # Prepare custom color scale (in Plotly format)
-    colorscale = [
-        [i / (n_colors - 1), mcolors.rgb2hex(colormap_RGB[i])] for i in range(n_colors)
+def analyze_specific_points_from_thresholded(
+    results: ProcessedExamples | ReprocessedResults,
+    thresholded_matrix: np.ndarray,
+    fs_splitting_nodes: list[int],
+    fs_splitting_cluster: int,
+    activation_threshold: float,
+    node_df: pd.DataFrame,
+    pca_df: pd.DataFrame,
+    point_ids: list[int],
+    plot_only_fs_nodes: bool = False,
+    subdir: str | None = None,
+    save_figs: bool = False,
+    pca_path: str | None = None,
+    plot_without_other_subgraphs: bool = False,
+) -> None:
+    """
+    Analyze and visualize specific points from the PCA plot based on their IDs.
+    """
+    # Color palette for plots
+    # This wraps around the colors if you have more than about 10 points
+    colors = [
+        px.colors.qualitative.Safe[i % len(px.colors.qualitative.Safe)]
+        for i in range(len(point_ids))
     ]
 
-    node_trace = go.Scatter(
-        x=node_x,
-        y=node_y,
-        mode="markers+text",
-        hoverinfo="text",
-        marker=dict(
-            showscale=True,
-            colorscale=colorscale,
-            reversescale=False,
-            color=normalized_activations,
-            size=15,
-            colorbar=dict(
-                thickness=15,
-                title="Normalized Activation",
-                xanchor="left",
-                titleside="right",
-            ),
-            line_width=2,
-        ),
-        text=[str(node) for node in subgraph.nodes()],  # Add feature number as text
-        textposition="top center",  # Position the text above the node
-        textfont=dict(size=10, color="black"),  # Customize text appearance
-        showlegend=False,
-        xaxis="x3",
-        yaxis="y3",
-    )
+    for i, point_id in enumerate(point_ids):
+        print(f"\nAnalyzing point with ID {point_id}:")
 
-    node_hover_text = []
-    for node in subgraph.nodes():
-        node_info = node_df[node_df["node_id"] == node].iloc[0]
-        top_tokens = ast.literal_eval(node_info["top_10_tokens"])
-        node_hover_text.append(
-            f"Feature: {node}<br>Activation: {activation_array[node]:.4f}<br>Top token: {top_tokens[0]}"
+        # Extract data for this point
+        point_result = get_point_result(results, point_id)
+        point_pca_path = pj(pca_path, f"point_{point_id}") if pca_path else None
+
+        if point_pca_path is not None:
+            if not os.path.exists(point_pca_path):
+                os.makedirs(point_pca_path)
+
+        # Prepare data for plotting
+        df, context = prepare_data(point_result, fs_splitting_nodes, node_df)
+
+        # Create bar plot
+        bar_fig = create_bar_plot_specific(
+            df,
+            context,
+            fs_splitting_nodes,
+            fs_splitting_cluster,
+            colors[i],
+            height=800,
+            width=800,
+            plot_only_fs_nodes=plot_only_fs_nodes,
         )
 
-    node_trace.hovertext = node_hover_text
+        # Create pie charts
+        pie_fig = create_pie_charts(df, activation_threshold, context, color=colors[i])
 
-    return edge_trace, node_trace
+        # Get active subgraphs
+        if plot_without_other_subgraphs:
+            # If loading data from the generation for streamlit then all graph feature apps
+            # will not have been saved and therefore we cannot plot the feature
+            # activations of the other subgraphs
+            activation_array = (
+                point_result.all_graph_feature_acts.flatten().cpu().numpy()
+            )
+            active_subgraph_ids = [fs_splitting_cluster]
+        elif isinstance(point_result, ProcessedExamples):
+            activation_array = point_result.all_feature_acts.flatten().cpu().numpy()
+            # If all feature acts is not part of point result raise a error that we cannot plot other subgraphs from Streamlit data
+            active_subgraph_ids = get_active_subgraph_ids(df, activation_threshold)
+        else:
+            raise ValueError(
+                "Passed ReprocessedResults, but cannot plot other subgraphs from Streamlit data. "
+                "Please set plot_without_other_subgraphs=True when loading data from generation or pass ProcessedExamples."
+            )
+
+        if save_figs and pca_path:
+            if subdir is not None:
+                point_path = pj(pca_path, subdir, f"point_{point_id}")
+            else:
+                point_path = pj(pca_path, f"point_{point_id}")
+            if not os.path.exists(point_path):
+                os.makedirs(point_path)
+        else:
+            point_path = None
+
+        # Plot active subgraphs
+        subgraph_figs = []
+        for subgraph_id in active_subgraph_ids:
+            # subgraph_path = (
+            #     pj(pca_path, f"point_{point_id}", f"subgraph_{subgraph_id}")
+            #     if save_figs and pca_path
+            #     else None
+            # )
+            if save_figs and pca_path:
+                if point_path is None:
+                    raise ValueError("point_path is None")
+                if subdir is not None:
+                    subgraph_path = pj(point_path, f"subgraph_{subgraph_id}")
+                else:
+                    subgraph_path = pj(point_path, f"subgraph_{subgraph_id}")
+                subgraph, subgraph_df = generate_subgraph_plot_data(
+                    thresholded_matrix=thresholded_matrix,
+                    node_df=node_df,
+                    subgraph_id=subgraph_id,
+                )
+                # mask activation array to only be the nodes in the subgraph
+                activation_array_subgraph = activation_array[
+                    subgraph_df["node_id"].astype(int).values
+                ]  # type: ignore
+                subgraph_fig = plot_subgraph_static_from_nx(
+                    subgraph=subgraph,
+                    subgraph_df=subgraph_df,
+                    node_info_df=node_df,
+                    output_path=subgraph_path,
+                    activation_array=activation_array_subgraph,
+                    save_figs=save_figs,
+                    show_plot=False,
+                )
+                subgraph_figs.append(subgraph_fig)
+
+        # Save or show figures
+        if save_figs and pca_path:
+            # if subdir is not None:
+            #     point_path = pj(pca_path, subdir, f"point_{point_id}")
+            # else:
+            #     point_path = pj(pca_path, f"point_{point_id}")
+            if point_path is None:
+                raise ValueError("point_path is None")
+            os.makedirs(point_path, exist_ok=True)
+            bar_fig.write_image(
+                pj(point_path, f"bar_plot_point_{point_id}.png"), scale=4.0
+            )
+            bar_fig.write_html(pj(point_path, f"bar_plot_point_{point_id}.html"))
+            pie_fig.write_image(
+                pj(point_path, f"pie_charts_point_{point_id}.png"), scale=4.0
+            )
+            pie_fig.write_html(pj(point_path, f"pie_charts_point_{point_id}.html"))
+
+        bar_fig.show()
+        pie_fig.show()
+        for fig in subgraph_figs:
+            if fig is not None:
+                fig.show()
+            else:
+                print(
+                    "Subgraph figure is None. Likely no latents are within a subgraph."
+                )
+
+        # Print statistics for this point
+        # print_statistics(df, fs_splitting_nodes, activation_threshold)
+
+        # Create PCA plot (PC2 vs PC3) for this point
+        fig = go.Figure()
+
+        # Add all points in grey
+        fig.add_trace(
+            go.Scatter(
+                x=pca_df["PC2"],
+                y=pca_df["PC3"],
+                mode="markers",
+                marker=dict(
+                    color="lightgrey",
+                    size=10,
+                    line=dict(width=2, color="DarkSlateGrey"),
+                ),
+                name="Other points",
+                hoverinfo="none",
+            )
+        )
+
+        # Add the specific point in color
+        fig.add_trace(
+            go.Scatter(
+                x=[pca_df.loc[point_id, "PC2"]],
+                y=[pca_df.loc[point_id, "PC3"]],
+                mode="markers",
+                marker=dict(
+                    color=colors[i],
+                    size=15,
+                    symbol="star",
+                    line=dict(width=2, color="DarkSlateGrey"),
+                ),
+                name=f"Point {point_id}",
+                text=pca_df.loc[point_id, "context"],
+                hoverinfo="text",
+            )
+        )
+
+        fig.update_layout(
+            title=f"'{context}' - {point_id}",
+            xaxis_title="PC2",
+            yaxis_title="PC3",
+            width=800,
+            height=800,
+            showlegend=False,
+            # template = 'plotly_white'
+        )
+
+        fig.update_xaxes(constrain="domain")
+        fig.update_yaxes(scaleanchor="x")
+
+        if save_figs and pca_path:
+            if point_path is None:
+                raise ValueError("point_path is None")
+            fig.write_image(
+                pj(point_path, f"pca_pc2_vs_pc3_point_{point_id}.png"), scale=4.0
+            )
+            fig.write_html(pj(point_path, f"pca_pc2_vs_pc3_point_{point_id}.html"))
+        else:
+            fig.show()
+
+
+def analyze_specific_points_from_sparse_matrix_path(
+    results: ProcessedExamples | ReprocessedResults,
+    results_path: str,
+    fs_splitting_nodes: list[int],
+    fs_splitting_cluster: int,
+    activation_threshold: float,
+    node_df: pd.DataFrame,
+    pca_df: pd.DataFrame,
+    point_ids: list[int],
+    matrix_filename: str = "sparse_thresholded_matrix_1_5.npz",
+    plot_only_fs_nodes: bool = False,
+    subdir: str | None = None,
+    save_figs: bool = False,
+    pca_path: str | None = None,
+    plot_without_other_subgraphs: bool = False,
+) -> None:
+    """
+    Analyze and visualize specific points from the PCA plot based on their IDs.
+    """
+    sparse_thresholded_matrix = sparse.load_npz(
+        os.path.join(results_path, "thresholded_matrices", matrix_filename)
+    )
+
+    # Color palette for plots
+    # This wraps around the colors if you have more than about 10 points
+    colors = [
+        px.colors.qualitative.Safe[i % len(px.colors.qualitative.Safe)]
+        for i in range(len(point_ids))
+    ]
+
+    for i, point_id in enumerate(point_ids):
+        print(f"\nAnalyzing point with ID {point_id}:")
+
+        # Extract data for this point
+        point_result = get_point_result(results, point_id)
+        point_pca_path = pj(pca_path, f"point_{point_id}") if pca_path else None
+
+        if point_pca_path is not None:
+            if not os.path.exists(point_pca_path):
+                os.makedirs(point_pca_path)
+
+        # Prepare data for plotting
+        df, context = prepare_data(point_result, fs_splitting_nodes, node_df)
+
+        # Create bar plot
+        bar_fig = create_bar_plot_specific(
+            df,
+            context,
+            fs_splitting_nodes,
+            fs_splitting_cluster,
+            colors[i],
+            height=800,
+            width=800,
+            plot_only_fs_nodes=plot_only_fs_nodes,
+        )
+
+        # Create pie charts
+        pie_fig = create_pie_charts(df, activation_threshold, context, color=colors[i])
+
+        # Get active subgraphs
+        if plot_without_other_subgraphs:
+            # If loading data from the generation for streamlit then all graph feature apps
+            # will not have been saved and therefore we cannot plot the feature
+            # activations of the other subgraphs
+            activation_array = (
+                point_result.all_graph_feature_acts.flatten().cpu().numpy()
+            )
+            active_subgraph_ids = [fs_splitting_cluster]
+        elif isinstance(point_result, ProcessedExamples):
+            activation_array = point_result.all_feature_acts.flatten().cpu().numpy()
+            # If all feature acts is not part of point result raise a error that we cannot plot other subgraphs from Streamlit data
+            active_subgraph_ids = get_active_subgraph_ids(df, activation_threshold)
+        else:
+            raise ValueError(
+                "Passed ReprocessedResults, but cannot plot other subgraphs from Streamlit data. "
+                "Please set plot_without_other_subgraphs=True when loading data from generation or pass ProcessedExamples."
+            )
+
+        if save_figs and pca_path:
+            if subdir is not None:
+                point_path = pj(pca_path, subdir, f"point_{point_id}")
+            else:
+                point_path = pj(pca_path, f"point_{point_id}")
+            if not os.path.exists(point_path):
+                os.makedirs(point_path)
+        else:
+            point_path = None
+
+        # Plot active subgraphs
+        subgraph_figs = []
+        for subgraph_id in active_subgraph_ids:
+            # subgraph_path = (
+            #     pj(pca_path, f"point_{point_id}", f"subgraph_{subgraph_id}")
+            #     if save_figs and pca_path
+            #     else None
+            # )
+            if save_figs and pca_path:
+                if point_path is None:
+                    raise ValueError("point_path is None")
+                if subdir is not None:
+                    subgraph_path = pj(point_path, f"subgraph_{subgraph_id}")
+                else:
+                    subgraph_path = pj(point_path, f"subgraph_{subgraph_id}")
+                subgraph, subgraph_df = generate_subgraph_plot_data(
+                    thresholded_matrix=sparse_thresholded_matrix,
+                    node_df=node_df,
+                    subgraph_id=subgraph_id,
+                )
+                # mask activation array to only be the nodes in the subgraph
+                activation_array_subgraph = activation_array[
+                    subgraph_df["node_id"].astype(int).values
+                ]  # type: ignore
+                subgraph_fig = plot_subgraph_static_from_nx(
+                    subgraph=subgraph,
+                    subgraph_df=subgraph_df,
+                    node_info_df=node_df,
+                    output_path=subgraph_path,
+                    activation_array=activation_array_subgraph,
+                    save_figs=save_figs,
+                    show_plot=False,
+                )
+                subgraph_figs.append(subgraph_fig)
+
+        # Save or show figures
+        if save_figs and pca_path:
+            # if subdir is not None:
+            #     point_path = pj(pca_path, subdir, f"point_{point_id}")
+            # else:
+            #     point_path = pj(pca_path, f"point_{point_id}")
+            if point_path is None:
+                raise ValueError("point_path is None")
+            os.makedirs(point_path, exist_ok=True)
+            bar_fig.write_image(
+                pj(point_path, f"bar_plot_point_{point_id}.png"), scale=4.0
+            )
+            bar_fig.write_html(pj(point_path, f"bar_plot_point_{point_id}.html"))
+            pie_fig.write_image(
+                pj(point_path, f"pie_charts_point_{point_id}.png"), scale=4.0
+            )
+            pie_fig.write_html(pj(point_path, f"pie_charts_point_{point_id}.html"))
+
+        bar_fig.show()
+        pie_fig.show()
+        for fig in subgraph_figs:
+            if fig is not None:
+                fig.show()
+            else:
+                print(
+                    "Subgraph figure is None. Likely no latents are within a subgraph."
+                )
+
+        # Print statistics for this point
+        # print_statistics(df, fs_splitting_nodes, activation_threshold)
+
+        # Create PCA plot (PC2 vs PC3) for this point
+        fig = go.Figure()
+
+        # Add all points in grey
+        fig.add_trace(
+            go.Scatter(
+                x=pca_df["PC2"],
+                y=pca_df["PC3"],
+                mode="markers",
+                marker=dict(
+                    color="lightgrey",
+                    size=10,
+                    line=dict(width=2, color="DarkSlateGrey"),
+                ),
+                name="Other points",
+                hoverinfo="none",
+            )
+        )
+
+        # Add the specific point in color
+        fig.add_trace(
+            go.Scatter(
+                x=[pca_df.loc[point_id, "PC2"]],
+                y=[pca_df.loc[point_id, "PC3"]],
+                mode="markers",
+                marker=dict(
+                    color=colors[i],
+                    size=15,
+                    symbol="star",
+                    line=dict(width=2, color="DarkSlateGrey"),
+                ),
+                name=f"Point {point_id}",
+                text=pca_df.loc[point_id, "context"],
+                hoverinfo="text",
+            )
+        )
+
+        fig.update_layout(
+            title=f"'{context}' - {point_id}",
+            xaxis_title="PC2",
+            yaxis_title="PC3",
+            width=800,
+            height=800,
+            showlegend=False,
+            # template = 'plotly_white'
+        )
+
+        fig.update_xaxes(constrain="domain")
+        fig.update_yaxes(scaleanchor="x")
+
+        if save_figs and pca_path:
+            if point_path is None:
+                raise ValueError("point_path is None")
+            fig.write_image(
+                pj(point_path, f"pca_pc2_vs_pc3_point_{point_id}.png"), scale=4.0
+            )
+            fig.write_html(pj(point_path, f"pca_pc2_vs_pc3_point_{point_id}.html"))
+        else:
+            fig.show()
 
 
 #### Plotting from thresholded matrices
@@ -2986,20 +3396,23 @@ def plot_subgraph_static_from_nx(
     activation_array: np.ndarray | None = None,
     save_figs: bool = False,
     normalize_globally: bool = True,
-    base_node_size: int = 1000,
+    base_node_size: int = 500,
     colour_when_inactive: bool = True,
     plot_token_factors: bool = False,
     show_plot: bool = True,
+    font_size: int = 15,
+    label_downshift: float = 40.0,
 ) -> None:
     """
     Plot a static subgraph from a networkx graph, as provided by generate_subgraph_plot_data.
     subgraph: networkx graph
-    subgraph_df: pandas DataFrame, node information
-    node_info_df: pandas DataFrame | None, node information
+    subgraph_df: pandas DataFrame generated by `generate_subgraph_plot_data`
+    node_info_df: pandas DataFrame | None, node information dataframe
     output_path: str | None, output path
     activation_array: numpy array | None, activation array
     save_figs: bool, save figures
     normalize_globally: bool, normalize globally
+    font_size: int, font size
     """
 
     if not isinstance(subgraph, nx.Graph):
@@ -3016,8 +3429,11 @@ def plot_subgraph_static_from_nx(
     # Create a new figure
     plt.figure(figsize=(7, 7))
 
-    # Create a layout for our nodes
-    pos = nx.spring_layout(subgraph, k=0.5, iterations=50, seed=1234)
+    # Create a layout for our nodes - matched to interactive version
+    pos = nx.spring_layout(subgraph, seed=42, k=0.5)  # Fixed seed and k value to match
+
+    # Scale positions to match interactive version's scale
+    pos = {node: (coord[0] * 500, coord[1] * 500) for node, coord in pos.items()}
 
     # Use provided activation_array if available, otherwise use subgraph_df
     if activation_array is None:
@@ -3081,7 +3497,7 @@ def plot_subgraph_static_from_nx(
                 ) / activation_range
             else:
                 normalized_activation = 0.5
-            node_colors.append(plt.cm.get_cmap("Blues")(normalized_activation))
+            node_colors.append(plt.get_cmap("Blues")(normalized_activation))
 
     # Get edge weights
     edge_weights = [subgraph[u][v]["weight"] for u, v in subgraph.edges()]
@@ -3097,24 +3513,25 @@ def plot_subgraph_static_from_nx(
     else:
         edge_thickness = []
 
-    # Draw the graph
+    # Draw the graph with adjusted parameters
     nx.draw(
         subgraph,
         pos,
         with_labels=False,
-        node_size=node_sizes,  # Use calculated node sizes
+        node_size=node_sizes,
         node_color=node_colors,
         edgecolors="black",
-        linewidths=3,
+        linewidths=2,  # Changed to match interactive version
         edge_color=(0.5, 0.5, 0.5, 0.75),
         width=edge_thickness,
         arrows=True,
     )
 
-    # Add node labels outside the nodes
-    # Adjust label positions based on node sizes
-    label_pos = {k: (v[0], v[1] - 0.15) for k, v in pos.items()}
-    nx.draw_networkx_labels(subgraph, label_pos, labels, font_size=8)
+    # Adjust label positions with scaled coordinates
+    label_pos = {
+        k: (v[0], v[1] - label_downshift * (font_size / 15)) for k, v in pos.items()
+    }  # Adjusted offset for scale
+    nx.draw_networkx_labels(subgraph, label_pos, labels, font_size=font_size)
 
     plt.axis("off")
     plt.tight_layout()
@@ -3235,7 +3652,7 @@ def plot_subgraph_interactive_from_nx(
                 normalized_activation = (
                     activation_array[i] - min_activation
                 ) / activation_range
-                rgba = plt.cm.get_cmap("Blues")(normalized_activation)
+                rgba = plt.get_cmap("Blues")(normalized_activation)
                 color = f"#{int(rgba[0]*255):02x}{int(rgba[1]*255):02x}{int(rgba[2]*255):02x}"
             else:
                 color = "#084594"
@@ -3263,10 +3680,66 @@ def plot_subgraph_interactive_from_nx(
         weight = subgraph[u][v]["weight"]
         width = 1
         if edge_weights:
-            width = 1 + 4 * (weight - min(edge_weights)) / (  # type: ignore
-                max(edge_weights) - min(edge_weights)  # type: ignore
+            weight_range = max(edge_weights) - min(edge_weights)  # type: ignore
+            width = 1 + (
+                4 * (weight - min(edge_weights)) / weight_range  # type: ignore
+                if weight_range > 0
+                else 1
             )
         net.add_edge(u, v, width=width, color={"color": "rgba(128, 128, 128, 0.75)"})
 
     html = net.generate_html(notebook=False)
     return net, html
+
+
+def plot_subgraph_from_sparse_matrix_path(
+    results_path: str,
+    pca_path: str,
+    fs_splitting_cluster: int,
+    node_df: pd.DataFrame,
+    save_figs: bool = True,
+    font_size: int = 15,
+    label_downshift: float = 40.0,
+    matrix_filename: str = "sparse_thresholded_matrix_1_5.npz",
+    show_plot: bool = True,
+) -> tuple[nx.Graph, pd.DataFrame]:
+    """Load and plot a subgraph from a sparse matrix.
+
+    Args:
+        results_path: Path to the results directory containing thresholded matrices
+        pca_path: Path to save the output plots
+        fs_splitting_cluster: ID of the feature splitting cluster to plot
+        node_df: DataFrame containing node information
+        matrix_filename: Name of the sparse matrix file to load
+        save_figs: Whether to save the generated figures
+        show_plot: Whether to display the plot
+        font_size: Font size for node labels
+
+    Returns:
+        tuple: (networkx Graph object, DataFrame with subgraph data)
+    """
+    # Load sparse matrix
+    sparse_thresholded_matrix = sparse.load_npz(
+        os.path.join(results_path, "thresholded_matrices", matrix_filename)
+    )
+
+    # Generate subgraph data
+    subgraph, subgraph_df = generate_subgraph_plot_data_sparse(
+        sparse_thresholded_matrix=sparse_thresholded_matrix,
+        node_df=node_df,
+        subgraph_id=fs_splitting_cluster,
+    )
+
+    # Plot the subgraph
+    plot_subgraph_static_from_nx(
+        subgraph=subgraph,
+        output_path=pj(pca_path, "subgraph_static"),
+        subgraph_df=subgraph_df,
+        node_info_df=node_df,
+        save_figs=save_figs,
+        show_plot=show_plot,
+        font_size=font_size,
+        label_downshift=label_downshift,
+    )
+
+    return subgraph, subgraph_df

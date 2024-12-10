@@ -1,9 +1,15 @@
+from unittest.mock import patch
+
 import numpy as np
 import pandas as pd
 import pytest
 from plotly.graph_objs import Figure, Scatter
 
 from sae_cooccurrence.pca import plot_pca_feature_strength_streamlit
+
+# Mock plotly.io.kaleido before importing the module
+with patch("plotly.io.kaleido.scope", create=True):
+    from sae_cooccurrence.pca import plot_pca_feature_strength_streamlit
 
 
 @pytest.fixture
