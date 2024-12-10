@@ -59,15 +59,24 @@ def plot_feature_cooccurrence(
         "feature_acts_cooc_total_threshold_1_5.npz",
     )
 
+    jaccard_path = os.path.join(
+        get_git_root(),
+        "results",
+        model_name,
+        sae_release,
+        f"{sae_id_safe}",
+        "n_batches_100",
+        "feature_acts_cooc_jaccard_threshold_1_5.npz",
+    )
+
     data = np.load(cooc_path)
     matrix = data["arr_0"]
 
     # Extract submatrix for top features
     submatrix = matrix[top_sae_indices][:, top_sae_indices]
 
-    # Set diagonal to zero and keep upper triangular part
-    np.fill_diagonal(submatrix, 0)
-    submatrix = np.triu(submatrix)
+    # Create mask for lower triangle and diagonal
+    mask = np.tril(np.ones_like(submatrix))
 
     # Create plot
     plt.figure(figsize=(12, 10))
@@ -79,6 +88,7 @@ def plot_feature_cooccurrence(
         annot=True,
         fmt=".2f",
         square=True,
+        mask=mask,
     )
 
     # Add rectangles around highlighted features if specified
@@ -86,7 +96,7 @@ def plot_feature_cooccurrence(
         highlight_positions = [top_sae_indices.index(idx) for idx in highlight_indices]
         for i in highlight_positions:
             for j in highlight_positions:
-                if j >= i:  # Only upper triangular
+                if j > i:  # Changed from >= to > to exclude diagonal
                     ax.add_patch(
                         Rectangle((j, i), 1, 1, fill=False, edgecolor="red", lw=2)
                     )
@@ -109,6 +119,50 @@ def plot_feature_cooccurrence(
     os.makedirs(out_dir, exist_ok=True)
     plt.savefig(
         os.path.join(out_dir, "feature_cooccurrence.png"), bbox_inches="tight", dpi=300
+    )
+    plt.close()
+
+    # Load Jaccard similarity matrix
+    data_jaccard = np.load(jaccard_path)
+    jaccard_matrix = data_jaccard["arr_0"]
+
+    # Extract submatrix for top features
+    jaccard_submatrix = jaccard_matrix[top_sae_indices][:, top_sae_indices]
+
+    # Create mask for lower triangle and diagonal
+    jaccard_mask = np.tril(np.ones_like(jaccard_submatrix))
+
+    # Create Jaccard similarity plot
+    plt.figure(figsize=(12, 10))
+    ax_jaccard = sns.heatmap(
+        jaccard_submatrix,
+        cmap="viridis",
+        xticklabels=[str(idx) for idx in top_sae_indices],
+        yticklabels=[str(idx) for idx in top_sae_indices],
+        annot=True,
+        fmt=".2f",
+        square=True,
+        mask=jaccard_mask,
+    )
+
+    # Add rectangles around highlighted features if specified
+    if highlight_indices:
+        highlight_positions = [top_sae_indices.index(idx) for idx in highlight_indices]
+        for i in highlight_positions:
+            for j in highlight_positions:
+                if j > i:
+                    ax_jaccard.add_patch(
+                        Rectangle((j, i), 1, 1, fill=False, edgecolor="red", lw=2)
+                    )
+
+    plt.title(
+        f"Jaccard Similarity Matrix for Top {len(top_sae_indices)} Features\n"
+        f"Red boxes highlight selected features"
+    )
+
+    # Save Jaccard plot
+    plt.savefig(
+        os.path.join(out_dir, "jaccard_similarity.png"), bbox_inches="tight", dpi=300
     )
     plt.close()
 
