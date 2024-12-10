@@ -247,7 +247,7 @@ def get_layer_activations(
     device = device or get_device()
 
     with torch.no_grad():
-        for text in tqdm(texts):
+        for text in tqdm(texts, desc="Getting activations"):
             if is_hooked_transformer:
                 # HookedTransformer interface
                 tokens = model.to_tokens(text, truncate=True)
