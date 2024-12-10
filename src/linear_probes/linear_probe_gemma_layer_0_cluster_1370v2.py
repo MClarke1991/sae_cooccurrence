@@ -216,6 +216,7 @@ def train_probe(
     batch_size=32,
     n_epochs=10,
     learning_rate=0.001,
+    weight_decay=0.01,
 ):
     """Train a linear probe to detect patterns"""
     device = get_device()
@@ -265,7 +266,11 @@ def train_probe(
     # Initialize probe, criterion and optimizer
     probe = LinearProbe(activations.shape[1]).to(device)
     criterion = nn.BCEWithLogitsLoss()  # Changed to BCEWithLogitsLoss
-    optimizer = torch.optim.Adam(probe.parameters(), lr=learning_rate)
+    optimizer = torch.optim.AdamW(
+        probe.parameters(),
+        lr=learning_rate,
+        weight_decay=weight_decay,
+    )
 
     # Add metrics and loss history tracking
     metrics_history = []
@@ -375,7 +380,8 @@ if __name__ == "__main__":
     probe, model, tokenizer = train_probe(model_name=model_name, 
                                           layer_idx=layer_idx, 
                                           out_dir=out_dir, 
-                                          n_samples=n_examples)
+                                          n_samples=n_examples,
+                                          weight_decay=0.01)
     # probe, model, tokenizer = train_probe(model_name="gpt2-small", layer_idx=0)
 
     # Load SAE
