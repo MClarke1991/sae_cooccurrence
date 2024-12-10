@@ -165,14 +165,16 @@ def evaluate_probe(probe: nn.Module,
         'accuracy': accuracy
     }
 
-def plot_metrics(metrics_history: list[dict[str, float]], loss_history: list[float], out_dir: str) -> None:
+def plot_metrics(metrics_history: dict, loss_history: dict, out_dir: str) -> None:
     """Plot training metrics and loss over epochs"""
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
     
-    # Plot metrics
-    for metric in metrics_history[0].keys():
-        values = [m[metric] for m in metrics_history]
-        ax1.plot(range(1, len(values) + 1), values, label=metric, marker='o')
+    # Plot metrics for each split
+    for split in metrics_history:
+        for metric in metrics_history[split][0].keys():
+            values = [m[metric] for m in metrics_history[split]]
+            ax1.plot(range(1, len(values) + 1), values, 
+                    label=f"{split}_{metric}", marker='o')
     
     ax1.set_title('Probe Performance Metrics Over Training')
     ax1.set_xlabel('Epoch')
@@ -180,12 +182,14 @@ def plot_metrics(metrics_history: list[dict[str, float]], loss_history: list[flo
     ax1.legend()
     ax1.grid(True)
     
-    # Plot loss
-    ax2.plot(range(1, len(loss_history) + 1), loss_history, label='Loss', marker='o', color='red')
-    ax2.set_title('Training Loss Over Epochs')
+    # Plot losses
+    for split, losses in loss_history.items():
+        ax2.plot(range(1, len(losses) + 1), losses, 
+                label=f'{split}_loss', marker='o')
+    
+    ax2.set_title('Training and Validation Loss Over Epochs')
     ax2.set_xlabel('Epoch')
     ax2.set_ylabel('Loss')
-    ax2.set_ylim(bottom=0)
     ax2.legend()
     ax2.grid(True)
     
@@ -194,18 +198,24 @@ def plot_metrics(metrics_history: list[dict[str, float]], loss_history: list[flo
     plt.close()
 
 
-def save_metrics(metrics_history: list[dict[str, float]], 
-                loss_history: list[float], 
-                out_dir: str) -> None:
+def save_metrics(metrics_history: dict, loss_history: dict, out_dir: str) -> None:
     """Save training metrics and loss to a text file"""
     metrics_file = os.path.join(out_dir, "metrics.txt")
     
     with open(metrics_file, "w") as f:
-        f.write("Epoch\tLoss\tAccuracy\tPrecision\tRecall\tF1\n")
-        for epoch, (metrics, loss) in enumerate(zip(metrics_history, loss_history), 1):
-            f.write(f"{epoch}\t{loss:.4f}\t{metrics['accuracy']:.4f}\t"
-                   f"{metrics['precision']:.4f}\t{metrics['recall']:.4f}\t"
-                   f"{metrics['f1']:.4f}\n")
+        headers = ["Epoch", "Split", "Loss", "Accuracy", "Precision", "Recall", "F1"]
+        f.write("\t".join(headers) + "\n")
+        
+        n_epochs = len(metrics_history['train'])
+        for epoch in range(n_epochs):
+            for split in metrics_history:
+                metrics = metrics_history[split][epoch]
+                loss = loss_history.get(split, [0] * n_epochs)[epoch]
+                f.write(f"{epoch+1}\t{split}\t{loss:.4f}\t"
+                       f"{metrics['accuracy']:.4f}\t"
+                       f"{metrics['precision']:.4f}\t"
+                       f"{metrics['recall']:.4f}\t"
+                       f"{metrics['f1']:.4f}\n")
 
 
 def train_probe(
@@ -247,20 +257,27 @@ def train_probe(
         device=device,
     )
 
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(
-        activations, labels, test_size=0.2, random_state=42
+    # Update the data split to include validation
+    X_train, X_temp, y_train, y_temp = train_test_split(
+        activations, labels, test_size=0.3, random_state=42
+    )
+    X_val, X_test, y_val, y_test = train_test_split(
+        X_temp, y_temp, test_size=0.5, random_state=42
     )
 
-    # Create datasets and dataloaders
+    # Create datasets and dataloaders for all splits
     train_dataset = ActivationDataset(
         torch.FloatTensor(X_train), torch.FloatTensor(y_train).reshape(-1, 1), device
+    )
+    val_dataset = ActivationDataset(
+        torch.FloatTensor(X_val), torch.FloatTensor(y_val).reshape(-1, 1), device
     )
     test_dataset = ActivationDataset(
         torch.FloatTensor(X_test), torch.FloatTensor(y_test).reshape(-1, 1), device
     )
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size)
     test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
     # Initialize probe, criterion and optimizer
@@ -272,14 +289,19 @@ def train_probe(
         weight_decay=weight_decay,
     )
 
-    # Add metrics and loss history tracking
-    metrics_history = []
-    loss_history = []
+    # Add validation metrics tracking
+    metrics_history = {'train': [], 'val': [], 'test': []}
+    loss_history = {'train': [], 'val': []}
+    best_val_loss = float('inf')
+    best_probe_state = None
+    patience = 5
+    patience_counter = 0
 
     # Training loop
     for epoch in tqdm(range(n_epochs), desc="Training"):
+        # Training phase
         probe.train()
-        total_loss = 0
+        total_train_loss = 0
 
         for batch_activations, batch_labels in train_loader:
             optimizer.zero_grad()
@@ -287,22 +309,56 @@ def train_probe(
             loss = criterion(logits, batch_labels)
             loss.backward()
             optimizer.step()
-            total_loss += loss.item()
+            total_train_loss += loss.item()
         
-        avg_loss = total_loss / len(train_loader)
-        loss_history.append(avg_loss)
+        avg_train_loss = total_train_loss / len(train_loader)
+        loss_history['train'].append(avg_train_loss)
 
-        # Evaluation
-        metrics = evaluate_probe(probe, test_loader)
-        metrics_history.append(metrics)
+        # Validation phase
+        probe.eval()
+        total_val_loss = 0
+        with torch.no_grad():
+            for batch_activations, batch_labels in val_loader:
+                logits = probe(batch_activations)
+                loss = criterion(logits, batch_labels)
+                total_val_loss += loss.item()
+        
+        avg_val_loss = total_val_loss / len(val_loader)
+        loss_history['val'].append(avg_val_loss)
+
+        # Evaluation on all sets
+        train_metrics = evaluate_probe(probe, train_loader)
+        val_metrics = evaluate_probe(probe, val_loader)
+        test_metrics = evaluate_probe(probe, test_loader)
+        
+        metrics_history['train'].append(train_metrics)
+        metrics_history['val'].append(val_metrics)
+        metrics_history['test'].append(test_metrics)
+
+        # Early stopping check
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            best_probe_state = probe.state_dict().copy()
+            patience_counter = 0
+        else:
+            patience_counter += 1
+
+        if patience_counter >= patience:
+            print(f"Early stopping triggered at epoch {epoch+1}")
+            break
         
         print(
-            f"Epoch {epoch+1}/{n_epochs}, Loss: {avg_loss:.4f}, "
-            f"Accuracy: {metrics['accuracy']:.4f}, F1: {metrics['f1']:.4f}, "
-            f"Precision: {metrics['precision']:.4f}, Recall: {metrics['recall']:.4f}"
+            f"Epoch {epoch+1}/{n_epochs}\n"
+            f"Train - Loss: {avg_train_loss:.4f}, Acc: {train_metrics['accuracy']:.4f}\n"
+            f"Val   - Loss: {avg_val_loss:.4f}, Acc: {val_metrics['accuracy']:.4f}\n"
+            f"Test  - Acc: {test_metrics['accuracy']:.4f}"
         )
 
-    # Plot metrics and save to file after training
+    # Load best model
+    if best_probe_state is not None:
+        probe.load_state_dict(best_probe_state)
+
+    # Update plotting and saving functions to handle the new metrics structure
     plot_metrics(metrics_history, loss_history, out_dir)
     save_metrics(metrics_history, loss_history, out_dir)
 
