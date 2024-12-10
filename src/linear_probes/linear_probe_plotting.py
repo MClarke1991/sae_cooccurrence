@@ -202,7 +202,7 @@ def plot_feature_cooccurrence(
     top_5_features = feature_indices_df["Feature Index"].head(5).tolist()
 
     # Plot cosine similarity vs cooccurrence
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(8, 8))
     _ = plt.scatter(
         pairs_df[~pairs_df["highlighted"]]["cosine_avg"],
         pairs_df[~pairs_df["highlighted"]]["cooc"],
@@ -250,7 +250,7 @@ def plot_feature_cooccurrence(
     plt.close()
 
     # Plot cosine similarity vs Jaccard
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(8, 8))
     plt.scatter(
         pairs_df[~pairs_df["highlighted"]]["cosine_avg"],
         pairs_df[~pairs_df["highlighted"]]["jaccard"],
@@ -263,7 +263,7 @@ def plot_feature_cooccurrence(
             pairs_df[pairs_df["highlighted"]]["jaccard"],
             color="red",
             alpha=0.7,
-            label="Highlighted pairs",
+            label="Pairs in subgraph",
         )
 
     # Collect texts for adjustText
