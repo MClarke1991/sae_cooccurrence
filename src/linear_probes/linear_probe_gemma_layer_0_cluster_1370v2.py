@@ -276,12 +276,14 @@ class LinearProbe(nn.Module):
         self.linear = nn.Linear(input_size, 1)
 
     def forward(self, x):
-        return torch.sigmoid(self.linear(x))
+        return self.linear(x)  # Remove sigmoid from forward pass
 
 
-def evaluate_probe(probe: nn.Module, 
-                   test_loader: DataLoader, 
-                   device: torch.device):
+def evaluate_probe(
+    probe: nn.Module,
+    test_loader: DataLoader,
+    device: torch.device,
+) -> dict[str, float]:
     """Evaluate probe performance with multiple metrics"""
     probe.eval()
     all_preds = []
@@ -289,24 +291,33 @@ def evaluate_probe(probe: nn.Module,
     
     with torch.no_grad():
         for batch_activations, batch_labels in test_loader:
-            outputs = probe(batch_activations)
-            predicted = (outputs >= 0.5).float()
-            all_preds.extend(predicted.cpu().numpy())
-            all_labels.extend(batch_labels.cpu().numpy())
+            batch_activations = batch_activations.to(device)
+            batch_labels = batch_labels.to(device)
+            
+            # Get logits and convert to probabilities
+            logits = probe(batch_activations)
+            probs = torch.sigmoid(logits)
+            predicted = (probs >= 0.5).float()
+            
+            all_preds.append(predicted.cpu().numpy())
+            all_labels.append(batch_labels.cpu().numpy())
     
-    all_preds = np.array(all_preds)
-    all_labels = np.array(all_labels)
+    all_preds = np.concatenate(all_preds).ravel()
+    all_labels = np.concatenate(all_labels).ravel()
     
     precision, recall, f1, _ = precision_recall_fscore_support(
-        all_labels, all_preds, average='binary'
+        all_labels,
+        all_preds,
+        average="binary",
+        zero_division=0
     )
     accuracy = accuracy_score(all_labels, all_preds)
     
     return {
-        'precision': precision,
-        'recall': recall,
-        'f1': f1,
-        'accuracy': accuracy
+        "precision": float(precision),
+        "recall": float(recall),
+        "f1": float(f1),
+        "accuracy": float(accuracy),
     }
 
 def plot_metrics(metrics_history: list[dict[str, float]], out_dir: str) -> None:
@@ -326,6 +337,7 @@ def plot_metrics(metrics_history: list[dict[str, float]], out_dir: str) -> None:
     plt.show()
     plt.savefig(os.path.join(out_dir, "metrics.png"))
 
+
 def train_probe(
     model_name,
     out_dir,
@@ -335,10 +347,11 @@ def train_probe(
     n_epochs=10,
     learning_rate=0.001,
 ):
-    """Train a linear probe to detect 'one of' patterns"""
+    """Train a linear probe to detect patterns"""
     device = get_device()
 
     # Generate example sentences
+    print(f"Generating {n_samples} examples...")
     examples, labels = generate_examples(n_samples)
 
     # Load model and tokenizer
@@ -352,8 +365,6 @@ def train_probe(
         print("Falling back to AutoModel")
         model = AutoModel.from_pretrained(model_name, device=device)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-    # model = model.to(device)
 
     # Get activations
     activations = get_layer_activations(
@@ -381,9 +392,9 @@ def train_probe(
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
-    # Initialize probe and optimizer
+    # Initialize probe, criterion and optimizer
     probe = LinearProbe(activations.shape[1]).to(device)
-    criterion = nn.BCELoss()
+    criterion = nn.BCEWithLogitsLoss()  # Changed to BCEWithLogitsLoss
     optimizer = torch.optim.Adam(probe.parameters(), lr=learning_rate)
 
     # Add metrics history tracking
@@ -396,8 +407,8 @@ def train_probe(
 
         for batch_activations, batch_labels in train_loader:
             optimizer.zero_grad()
-            outputs = probe(batch_activations)
-            loss = criterion(outputs, batch_labels)
+            logits = probe(batch_activations)
+            loss = criterion(logits, batch_labels)  # BCEWithLogitsLoss handles the sigmoid internally
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
