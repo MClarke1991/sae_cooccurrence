@@ -369,13 +369,13 @@ def find_similar_sae_features(probe, sae, top_k=10):
     # Save top features to CSV
     feature_data = {
         "Feature Index": top_indices.cpu().numpy(),
-        "Cosine Similarity": top_similarities.cpu().numpy()
+        "Cosine Similarity": top_similarities.detach().cpu().numpy()
     }
     pd.DataFrame(feature_data).to_csv("top_similar_sae_features.csv", index=False)
 
     # Plot the top similar features
     plt.figure(figsize=(12, 6))
-    plt.bar(range(top_k), top_similarities.cpu().numpy(), tick_label=top_indices.cpu().numpy())
+    plt.bar(range(top_k), top_similarities.detach().cpu().numpy(), tick_label=top_indices.cpu().numpy())
     plt.title("Top Similar SAE Features to Linear Probe Weights")
     plt.xlabel("SAE Feature Index")
     plt.ylabel("Cosine Similarity")
