@@ -1,8 +1,8 @@
 import os
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
 import torch
 import torch.nn as nn
 from sae_lens import SAE
@@ -148,7 +148,7 @@ class ActivationDataset(Dataset):
 #     return list(examples), list(labels)
 
 
-def generate_examples(n_samples=1000):
+def generate_examples(n_samples=1000) -> tuple[list[str], list[int]]:
     """Generate example sentences with number words (one-ten) and without"""
 
     templates_with = [
@@ -240,8 +240,8 @@ def generate_examples(n_samples=1000):
 
 
 def get_layer_activations(
-    model, tokenizer, texts, layer_idx=-1, is_hooked_transformer=False, device=None
-):
+    model: HookedTransformer, tokenizer, texts: list[str], layer_idx=-1, is_hooked_transformer=False, device=None
+) -> np.ndarray:
     """Get activations from a specific layer for a batch of texts"""
     activations = []
     device = device or get_device()
@@ -279,7 +279,9 @@ class LinearProbe(nn.Module):
         return torch.sigmoid(self.linear(x))
 
 
-def evaluate_probe(probe, test_loader, device):
+def evaluate_probe(probe: nn.Module, 
+                   test_loader: DataLoader, 
+                   device: torch.device):
     """Evaluate probe performance with multiple metrics"""
     probe.eval()
     all_preds = []
@@ -307,7 +309,7 @@ def evaluate_probe(probe, test_loader, device):
         'accuracy': accuracy
     }
 
-def plot_metrics(metrics_history, out_dir):
+def plot_metrics(metrics_history: list[dict[str, float]], out_dir: str) -> None:
     """Plot training metrics over epochs"""
     plt.figure(figsize=(12, 8))
     
