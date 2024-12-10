@@ -621,8 +621,8 @@ def find_similar_sae_features(probe: nn.Module, sae: SAE, out_dir: str, top_k=10
 # Example usage
 if __name__ == "__main__":
     
-    # config_path = os.path.join(get_git_root(), "src", "linear_probes", "config_linear_gemma_counting.toml")
-    config_path = os.path.join(get_git_root(), "src", "linear_probes", "config_linear_gpt2_counting.toml")
+    config_path = os.path.join(get_git_root(), "src", "linear_probes", "config_linear_gemma_counting.toml")
+    # config_path = os.path.join(get_git_root(), "src", "linear_probes", "config_linear_gpt2_counting.toml")
     config = toml.load(config_path)
     
     model_name = config["model"]["model_name"]
