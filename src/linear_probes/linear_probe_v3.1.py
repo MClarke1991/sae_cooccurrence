@@ -277,32 +277,39 @@ class LinearProbe(nn.Module):
 
 
 def evaluate_probe(probe: nn.Module, 
-                   test_loader: DataLoader):
-    """Evaluate probe performance with multiple metrics"""
+                   test_loader: DataLoader,
+                   device: torch.device) -> dict[str, float]:
+    """Evaluate probe performance with multiple metrics, handling edge cases"""
     probe.eval()
     all_preds = []
     all_labels = []
     
     with torch.no_grad():
         for batch_activations, batch_labels in test_loader:
+            batch_activations = batch_activations.to(device)
+            batch_labels = batch_labels.to(device)
             outputs = probe(batch_activations)
-            predicted = (outputs >= 0.5).float()
+            predicted = (torch.sigmoid(outputs) >= 0.5).float()  # Apply sigmoid here
             all_preds.extend(predicted.cpu().numpy())
             all_labels.extend(batch_labels.cpu().numpy())
     
     all_preds = np.array(all_preds)
     all_labels = np.array(all_labels)
     
+    # Handle edge cases with zero_division parameter
     precision, recall, f1, _ = precision_recall_fscore_support(
-        all_labels, all_preds, average='binary'
+        all_labels, 
+        all_preds, 
+        average='binary',
+        zero_division=0  # Explicitly handle zero division case
     )
     accuracy = accuracy_score(all_labels, all_preds)
     
     return {
-        'precision': precision,
-        'recall': recall,
-        'f1': f1,
-        'accuracy': accuracy
+        'precision': float(precision),
+        'recall': float(recall),
+        'f1': float(f1),
+        'accuracy': float(accuracy)
     }
 
 def plot_metrics(metrics_history: dict, loss_history: dict, out_dir: str) -> None:
@@ -357,27 +364,27 @@ def save_metrics(metrics_history: dict, loss_history: dict, out_dir: str) -> Non
                        f"{metrics['recall']:.4f}\t"
                        f"{metrics['f1']:.4f}\n")
 
-
 def train_probe(
-    model_name,
-    out_dir,
+    model_name: str,
+    out_dir: str,
     config: TextGenerationConfig,
-    layer_idx=0,
-    n_samples=1000,
-    batch_size=32,
-    n_epochs=10,
-    learning_rate=0.001,
-    weight_decay=0.01,
+    layer_idx: int = 0,
+    n_samples: int = 1000,
+    batch_size: int = 32,
+    n_epochs: int = 10,
+    learning_rate: float = 0.001,
+    weight_decay: float = 0.01,
 ):
-    """Train a linear probe to detect patterns"""
+    """Train a linear probe with improved training loop and metrics handling"""
     device = get_device()
+    print(f"Using device: {device}")
 
     # Generate example sentences
     print(f"Generating {n_samples} examples...")
     examples, labels = generate_balanced_examples(
         n_samples,
         config=config,
-        seed=42  # for reproducibility
+        seed=42
     )
 
     # Load model and tokenizer
@@ -389,7 +396,7 @@ def train_probe(
     except Exception as e:
         print(f"Failed to load with HookedTransformer: {e}")
         print("Falling back to AutoModel")
-        model = AutoModel.from_pretrained(model_name, device=device)
+        model = AutoModel.from_pretrained(model_name).to(device)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     # Get activations
@@ -402,7 +409,7 @@ def train_probe(
         device=device,
     )
 
-    # Update the data split to include validation
+    # Split data
     X_train, X_temp, y_train, y_temp = train_test_split(
         activations, labels, test_size=0.3, random_state=42
     )
@@ -410,31 +417,37 @@ def train_probe(
         X_temp, y_temp, test_size=0.5, random_state=42
     )
 
-    # Create datasets and dataloaders for all splits
+    # Create datasets and dataloaders
     train_dataset = ActivationDataset(
-        torch.FloatTensor(X_train), torch.FloatTensor(y_train).reshape(-1, 1), device
+        torch.FloatTensor(X_train), 
+        torch.FloatTensor(y_train).reshape(-1, 1), 
+        device
     )
     val_dataset = ActivationDataset(
-        torch.FloatTensor(X_val), torch.FloatTensor(y_val).reshape(-1, 1), device
+        torch.FloatTensor(X_val), 
+        torch.FloatTensor(y_val).reshape(-1, 1), 
+        device
     )
     test_dataset = ActivationDataset(
-        torch.FloatTensor(X_test), torch.FloatTensor(y_test).reshape(-1, 1), device
+        torch.FloatTensor(X_test), 
+        torch.FloatTensor(y_test).reshape(-1, 1), 
+        device
     )
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
     test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
-    # Initialize probe, criterion and optimizer
+    # Initialize probe and training components
     probe = LinearProbe(activations.shape[1]).to(device)
-    criterion = nn.BCEWithLogitsLoss()  # Changed to BCEWithLogitsLoss
+    criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.AdamW(
         probe.parameters(),
         lr=learning_rate,
         weight_decay=weight_decay,
     )
 
-    # Add validation metrics tracking
+    # Training tracking
     metrics_history = {'train': [], 'val': [], 'test': []}
     loss_history = {'train': [], 'val': []}
     best_val_loss = float('inf')
@@ -447,34 +460,46 @@ def train_probe(
         # Training phase
         probe.train()
         total_train_loss = 0
+        batch_count = 0
 
         for batch_activations, batch_labels in train_loader:
+            batch_activations = batch_activations.to(device)
+            batch_labels = batch_labels.to(device)
+            
             optimizer.zero_grad()
             logits = probe(batch_activations)
             loss = criterion(logits, batch_labels)
             loss.backward()
             optimizer.step()
+            
             total_train_loss += loss.item()
+            batch_count += 1
         
-        avg_train_loss = total_train_loss / len(train_loader)
+        avg_train_loss = total_train_loss / batch_count
         loss_history['train'].append(avg_train_loss)
 
         # Validation phase
         probe.eval()
         total_val_loss = 0
+        val_batch_count = 0
+        
         with torch.no_grad():
             for batch_activations, batch_labels in val_loader:
+                batch_activations = batch_activations.to(device)
+                batch_labels = batch_labels.to(device)
+                
                 logits = probe(batch_activations)
                 loss = criterion(logits, batch_labels)
                 total_val_loss += loss.item()
+                val_batch_count += 1
         
-        avg_val_loss = total_val_loss / len(val_loader)
+        avg_val_loss = total_val_loss / val_batch_count
         loss_history['val'].append(avg_val_loss)
 
-        # Evaluation on all sets
-        train_metrics = evaluate_probe(probe, train_loader)
-        val_metrics = evaluate_probe(probe, val_loader)
-        test_metrics = evaluate_probe(probe, test_loader)
+        # Evaluate on all sets
+        train_metrics = evaluate_probe(probe, train_loader, device)
+        val_metrics = evaluate_probe(probe, val_loader, device)
+        test_metrics = evaluate_probe(probe, test_loader, device)
         
         metrics_history['train'].append(train_metrics)
         metrics_history['val'].append(val_metrics)
@@ -494,21 +519,25 @@ def train_probe(
         
         print(
             f"Epoch {epoch+1}/{n_epochs}\n"
-            f"Train - Loss: {avg_train_loss:.4f}, Acc: {train_metrics['accuracy']:.4f}\n"
-            f"Val   - Loss: {avg_val_loss:.4f}, Acc: {val_metrics['accuracy']:.4f}\n"
-            f"Test  - Acc: {test_metrics['accuracy']:.4f}"
+            f"Train - Loss: {avg_train_loss:.4f}, "
+            f"Acc: {train_metrics['accuracy']:.4f}, "
+            f"F1: {train_metrics['f1']:.4f}\n"
+            f"Val   - Loss: {avg_val_loss:.4f}, "
+            f"Acc: {val_metrics['accuracy']:.4f}, "
+            f"F1: {val_metrics['f1']:.4f}\n"
+            f"Test  - Acc: {test_metrics['accuracy']:.4f}, "
+            f"F1: {test_metrics['f1']:.4f}"
         )
 
     # Load best model
     if best_probe_state is not None:
         probe.load_state_dict(best_probe_state)
 
-    # Update plotting and saving functions to handle the new metrics structure
+    # Save results
     plot_metrics(metrics_history, loss_history, out_dir)
     save_metrics(metrics_history, loss_history, out_dir)
 
     return probe, model, tokenizer
-
 
 def analyze_neurons(probe, n_top=10):
     """Analyze which neurons have the highest weights in the probe"""
