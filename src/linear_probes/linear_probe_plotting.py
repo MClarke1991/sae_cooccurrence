@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import toml
+from adjustText import adjust_text
 from matplotlib.patches import Rectangle
 
 from sae_cooccurrence.utils.set_paths import get_git_root
@@ -197,22 +198,46 @@ def plot_feature_cooccurrence(
 
     pairs_df = pd.DataFrame(pairs)
 
+    # Get top 5 features by cosine similarity
+    top_5_features = feature_indices_df["Feature Index"].head(5).tolist()
+
     # Plot cosine similarity vs cooccurrence
     plt.figure(figsize=(10, 6))
-    plt.scatter(
+    _ = plt.scatter(
         pairs_df[~pairs_df["highlighted"]]["cosine_avg"],
         pairs_df[~pairs_df["highlighted"]]["cooc"],
         alpha=0.5,
         label="Regular pairs",
     )
     if highlight_indices:
-        plt.scatter(
+        _ = plt.scatter(
             pairs_df[pairs_df["highlighted"]]["cosine_avg"],
             pairs_df[pairs_df["highlighted"]]["cooc"],
             color="red",
             alpha=0.7,
-            label="Highlighted pairs",
+            label="Pairs in subgraph",
         )
+
+    # Collect texts for adjustText
+    texts = []
+    for _, row in pairs_df.iterrows():
+        if row["idx1"] in top_5_features and row["idx2"] in top_5_features:
+            texts.append(
+                plt.text(
+                    float(row["cosine_avg"]),
+                    float(row["cooc"]),
+                    f"{row['idx1']},{row['idx2']}",
+                    fontsize=8,
+                )
+            )
+
+    # Adjust text positions to prevent overlap
+    adjust_text(
+        texts,
+        arrowprops=dict(arrowstyle="-", color="gray", lw=0.5),
+        expand_points=(1.5, 1.5),
+    )
+
     plt.xlabel("Average Cosine Similarity")
     plt.ylabel("Co-occurrence")
     plt.title("Cosine Similarity vs Co-occurrence")
@@ -240,6 +265,27 @@ def plot_feature_cooccurrence(
             alpha=0.7,
             label="Highlighted pairs",
         )
+
+    # Collect texts for adjustText
+    texts = []
+    for _, row in pairs_df.iterrows():
+        if row["idx1"] in top_5_features and row["idx2"] in top_5_features:
+            texts.append(
+                plt.text(
+                    float(row["cosine_avg"]),
+                    float(row["jaccard"]),
+                    f"{row['idx1']},{row['idx2']}",
+                    fontsize=8,
+                )
+            )
+
+    # Adjust text positions to prevent overlap
+    adjust_text(
+        texts,
+        arrowprops=dict(arrowstyle="->", color="gray", lw=0.5),
+        expand_points=(1.5, 1.5),
+    )
+
     plt.xlabel("Average Cosine Similarity")
     plt.ylabel("Jaccard Similarity")
     plt.title("Cosine Similarity vs Jaccard Similarity")
