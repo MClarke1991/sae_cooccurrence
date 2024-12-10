@@ -37,121 +37,10 @@ class ActivationDataset(Dataset):
         return self.activations[idx], self.labels[idx]
 
 
-# def generate_examples(n_samples=1000):
-#     """Generate example sentences with and without 'one of'"""
-#     templates_with = [
-#         "This is one of the best {}",
-#         "That was one of my favorite {}",
-#         "She is one of the most talented {}",
-#         "It's one of those {} that everyone loves",
-#         "He became one of the leading {}",
-#     ]
-
-#     templates_without = [
-#         "This is the best {}",
-#         "That was my favorite {}",
-#         "She is the most talented {}",
-#         "It's the kind of {} that everyone loves",
-#         "He became the leading {}",
-#     ]
-
-#     nouns = [
-#         "books",
-#         "movies",
-#         "artists",
-#         "scientists",
-#         "musicians",
-#         "athletes",
-#         "teachers",
-#         "stories",
-#         "places",
-#         "experiences",
-#     ]
-
-#     examples = []
-#     labels = []
-
-#     for _ in range(n_samples // 2):
-#         # Generate positive example (with "one of")
-#         template = np.random.choice(templates_with)
-#         noun = np.random.choice(nouns)
-#         examples.append(template.format(noun))
-#         labels.append(1)
-
-#         # Generate negative example (without "one of")
-#         template = np.random.choice(templates_without)
-#         noun = np.random.choice(nouns)
-#         examples.append(template.format(noun))
-#         labels.append(0)
-
-#     return examples, labels
-
-
-# def generate_examples(n_samples=1000):
-#     """Generate example sentences with and without 'monday'"""
-#     templates_with = [
-#         "I have a meeting on Monday {}",
-#         "Monday {} is always busy",
-#         "Let's schedule it for Monday {}",
-#         "The Monday {} session was productive",
-#         "I'll start the project on Monday {}",
-#         "Monday {} is the deadline",
-#         "We always have team meetings on Monday {}",
-#         "The Monday {} report needs to be finished",
-#     ]
-
-#     templates_without = [
-#         "I have a meeting on Tuesday {}",
-#         "The weekend {} is always busy",
-#         "Let's schedule it for tomorrow {}",
-#         "The weekly {} session was productive",
-#         "I'll start the project tomorrow {}",
-#         "Friday {} is the deadline",
-#         "We always have team meetings on Wednesday {}",
-#         "The daily {} report needs to be finished",
-#     ]
-
-#     time_phrases = [
-#         "morning",
-#         "afternoon",
-#         "evening",
-#         "next week",
-#         "this month",
-#         "at 2 PM",
-#         "after lunch",
-#         "before noon",
-#         "during the meeting",
-#         "at the office",
-#     ]
-
-#     examples = []
-#     labels = []
-
-#     for _ in range(n_samples // 2):
-#         # Generate positive example (with "monday")
-#         template = np.random.choice(templates_with)
-#         time_phrase = np.random.choice(time_phrases)
-#         examples.append(template.format(time_phrase))
-#         labels.append(1)
-
-#         # Generate negative example (without "monday")
-#         template = np.random.choice(templates_without)
-#         time_phrase = np.random.choice(time_phrases)
-#         examples.append(template.format(time_phrase))
-#         labels.append(0)
-
-#     # Shuffle the examples and labels together
-#     combined = list(zip(examples, labels))
-#     np.random.shuffle(combined)
-#     examples, labels = zip(*combined)
-
-#     return list(examples), list(labels)
-
-
 def generate_examples(n_samples=1000) -> tuple[list[str], list[int]]:
     """Generate example sentences with number words (one-ten) and without"""
-
-    templates_with = [
+    
+    templates = [
         "I ate {} {} for lunch",
         "There are {} {} on the shelf",
         "We walked {} {} in the park",
@@ -164,79 +53,47 @@ def generate_examples(n_samples=1000) -> tuple[list[str], list[int]]:
         "The class has {} {} enrolled",
     ]
 
-    templates_without = [
-        "I ate {} {} for lunch",  # Will use digits instead of words
-        "There are {} {} on the shelf",
-        "We walked {} {} in the park",
-        "She bought {} {} at the store",
-        "They have {} {} at home",
-        "I waited {} {} for the bus",
-        "The garden has {} {} planted",
-        "He scored {} {} in the game",
-        "We saw {} {} in the tree",
-        "The class has {} {} enrolled",
-    ]
-
     number_words = [
-        "one",
-        "two",
-        "three",
-        "four",
-        "five",
-        "six",
-        "seven",
-        "eight",
-        "nine",
-        "ten",
+        "one", "two", "three", "four", "five",
+        "six", "seven", "eight", "nine", "ten"
     ]
-
+    
     objects = [
-        "cookies",
-        "books",
-        "miles",
-        "shirts",
-        "cats",
-        "minutes",
-        "flowers",
-        "goals",
-        "birds",
-        "students",
-        "apples",
-        "boxes",
-        "papers",
-        "pictures",
-        "tasks",
+        "cookies", "books", "miles", "shirts", "cats",
+        "minutes", "flowers", "goals", "birds", "students",
+        "apples", "boxes", "papers", "pictures", "tasks"
     ]
 
     examples = []
     labels = []
-
-    for _ in range(n_samples // 2):
-        # Generate positive example (with number word)
-        template = np.random.choice(templates_with)
-        number = np.random.choice(number_words)
+    
+    for _ in range(n_samples):
+        template = np.random.choice(templates)
         object_word = np.random.choice(objects)
-        examples.append(template.format(number, object_word))
-        labels.append(1)
-
-        # Generate negative example (with digit or no number)
-        template = np.random.choice(templates_without)
-        if np.random.random() < 0.5:
-            # Use digit
-            number = str(np.random.randint(1, 11))
+        
+        # Randomly decide whether to use a number word or not
+        if np.random.random() < 0.5:  # 50% chance for each class
+            # Use number word
+            number = np.random.choice(number_words)
+            label = 1
         else:
-            # Use phrase without number
-            number = "some"
-        object_word = np.random.choice(objects)
-        examples.append(template.format(number, object_word))
-        labels.append(0)
-
-    # Shuffle the examples and labels together
-    combined = list(zip(examples, labels))
-    np.random.shuffle(combined)
-    examples, labels = zip(*combined)
-
-    return list(examples), list(labels)
+            # Use either a digit or "some"
+            if np.random.random() < 0.7:  # 70% chance for digit within negative class
+                number = str(np.random.randint(1, 11))
+            else:  # 30% chance for "some" within negative class
+                number = np.random.choice(["some", "many", "several", "few"])
+            label = 0
+            
+        example = template.format(number, object_word)
+        examples.append(example)
+        labels.append(label)
+    
+    # Shuffle examples and labels together
+    indices = np.random.permutation(len(examples))
+    examples = [examples[i] for i in indices]
+    labels = [labels[i] for i in indices]
+    
+    return examples, labels
 
 
 def get_layer_activations(
@@ -288,6 +145,7 @@ def evaluate_probe(
     probe.eval()
     all_preds = []
     all_labels = []
+    all_probs = []  # Add this to store raw probabilities
     
     with torch.no_grad():
         for batch_activations, batch_labels in test_loader:
@@ -301,9 +159,16 @@ def evaluate_probe(
             
             all_preds.append(predicted.cpu().numpy())
             all_labels.append(batch_labels.cpu().numpy())
+            all_probs.append(probs.cpu().numpy())  # Store raw probabilities
     
     all_preds = np.concatenate(all_preds).ravel()
     all_labels = np.concatenate(all_labels).ravel()
+    all_probs = np.concatenate(all_probs).ravel()
+    
+    # Print distribution information
+    print(f"\nPrediction distribution: {np.bincount(all_preds.astype(int)) / len(all_preds)}")
+    print(f"Label distribution: {np.bincount(all_labels.astype(int)) / len(all_labels)}")
+    print(f"Probability stats: min={all_probs.min():.3f}, max={all_probs.max():.3f}, mean={all_probs.mean():.3f}")
     
     precision, recall, f1, _ = precision_recall_fscore_support(
         all_labels,
