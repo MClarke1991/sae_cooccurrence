@@ -136,53 +136,34 @@ class LinearProbe(nn.Module):
         return self.linear(x)  # Remove sigmoid from forward pass
 
 
-def evaluate_probe(
-    probe: nn.Module,
-    test_loader: DataLoader,
-    device: torch.device,
-) -> dict[str, float]:
+def evaluate_probe(probe: nn.Module, 
+                   test_loader: DataLoader, 
+                   device: torch.device):
     """Evaluate probe performance with multiple metrics"""
     probe.eval()
     all_preds = []
     all_labels = []
-    all_probs = []  # Add this to store raw probabilities
     
     with torch.no_grad():
         for batch_activations, batch_labels in test_loader:
-            batch_activations = batch_activations.to(device)
-            batch_labels = batch_labels.to(device)
-            
-            # Get logits and convert to probabilities
-            logits = probe(batch_activations)
-            probs = torch.sigmoid(logits)
-            predicted = (probs >= 0.5).float()
-            
-            all_preds.append(predicted.cpu().numpy())
-            all_labels.append(batch_labels.cpu().numpy())
-            all_probs.append(probs.cpu().numpy())  # Store raw probabilities
+            outputs = probe(batch_activations)
+            predicted = (outputs >= 0.5).float()
+            all_preds.extend(predicted.cpu().numpy())
+            all_labels.extend(batch_labels.cpu().numpy())
     
-    all_preds = np.concatenate(all_preds).ravel()
-    all_labels = np.concatenate(all_labels).ravel()
-    all_probs = np.concatenate(all_probs).ravel()
-    
-    # Print distribution information
-    print(f"\nPrediction distribution: {np.bincount(all_preds.astype(int)) / len(all_preds)}")
-    print(f"Label distribution: {np.bincount(all_labels.astype(int)) / len(all_labels)}")
-    print(f"Probability stats: min={all_probs.min():.3f}, max={all_probs.max():.3f}, mean={all_probs.mean():.3f}")
+    all_preds = np.array(all_preds)
+    all_labels = np.array(all_labels)
     
     precision, recall, f1, _ = precision_recall_fscore_support(
-        all_labels,
-        all_preds,
-        average="binary",
-        zero_division=0
+        all_labels, all_preds, average='binary'
     )
     accuracy = accuracy_score(all_labels, all_preds)
     
     return {
-        "precision": float(precision),
-        "recall": float(recall),
-        "f1": float(f1),
-        "accuracy": float(accuracy),
+        'precision': precision,
+        'recall': recall,
+        'f1': f1,
+        'accuracy': accuracy
     }
 
 def plot_metrics(metrics_history: list[dict[str, float]], out_dir: str) -> None:
