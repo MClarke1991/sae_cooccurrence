@@ -166,6 +166,89 @@ def plot_feature_cooccurrence(
     )
     plt.close()
 
+    # Create correlation plots
+    cosine_sims = feature_indices_df.set_index("Feature Index")["Cosine Similarity"]
+
+    # Define specific pairs to highlight
+    highlight_pairs = {
+        (1469, 8129),
+        (1469, 6449),
+        (6449, 8129),
+        (6449, 13989),
+        (8129, 13989),
+    }
+
+    # Get all pairs of features and their correlations
+    pairs = []
+    for i, idx1 in enumerate(top_sae_indices):
+        for j, idx2 in enumerate(top_sae_indices[i + 1 :], i + 1):
+            # Ensure pairs are ordered (smaller index first)
+            pair = tuple(sorted([idx1, idx2]))
+            pairs.append(
+                {
+                    "idx1": idx1,
+                    "idx2": idx2,
+                    "cooc": submatrix[i, j],
+                    "jaccard": jaccard_submatrix[i, j],
+                    "cosine_avg": (cosine_sims[idx1] + cosine_sims[idx2]) / 2,
+                    "highlighted": pair in highlight_pairs,
+                }
+            )
+
+    pairs_df = pd.DataFrame(pairs)
+
+    # Plot cosine similarity vs cooccurrence
+    plt.figure(figsize=(10, 6))
+    plt.scatter(
+        pairs_df[~pairs_df["highlighted"]]["cosine_avg"],
+        pairs_df[~pairs_df["highlighted"]]["cooc"],
+        alpha=0.5,
+        label="Regular pairs",
+    )
+    if highlight_indices:
+        plt.scatter(
+            pairs_df[pairs_df["highlighted"]]["cosine_avg"],
+            pairs_df[pairs_df["highlighted"]]["cooc"],
+            color="red",
+            alpha=0.7,
+            label="Highlighted pairs",
+        )
+    plt.xlabel("Average Cosine Similarity")
+    plt.ylabel("Co-occurrence")
+    plt.title("Cosine Similarity vs Co-occurrence")
+    plt.legend()
+    plt.savefig(
+        os.path.join(out_dir, "cosine_vs_cooccurrence.png"),
+        bbox_inches="tight",
+        dpi=300,
+    )
+    plt.close()
+
+    # Plot cosine similarity vs Jaccard
+    plt.figure(figsize=(10, 6))
+    plt.scatter(
+        pairs_df[~pairs_df["highlighted"]]["cosine_avg"],
+        pairs_df[~pairs_df["highlighted"]]["jaccard"],
+        alpha=0.5,
+        label="Regular pairs",
+    )
+    if highlight_indices:
+        plt.scatter(
+            pairs_df[pairs_df["highlighted"]]["cosine_avg"],
+            pairs_df[pairs_df["highlighted"]]["jaccard"],
+            color="red",
+            alpha=0.7,
+            label="Highlighted pairs",
+        )
+    plt.xlabel("Average Cosine Similarity")
+    plt.ylabel("Jaccard Similarity")
+    plt.title("Cosine Similarity vs Jaccard Similarity")
+    plt.legend()
+    plt.savefig(
+        os.path.join(out_dir, "cosine_vs_jaccard.png"), bbox_inches="tight", dpi=300
+    )
+    plt.close()
+
 
 if __name__ == "__main__":
     # Load config
