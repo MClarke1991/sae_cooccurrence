@@ -166,22 +166,46 @@ def evaluate_probe(probe: nn.Module,
         'accuracy': accuracy
     }
 
-def plot_metrics(metrics_history: list[dict[str, float]], out_dir: str) -> None:
-    """Plot training metrics over epochs"""
-    plt.figure(figsize=(12, 8))
+def plot_metrics(metrics_history: list[dict[str, float]], loss_history: list[float], out_dir: str) -> None:
+    """Plot training metrics and loss over epochs"""
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
     
-    # Create a line plot for each metric
+    # Plot metrics
     for metric in metrics_history[0].keys():
         values = [m[metric] for m in metrics_history]
-        plt.plot(range(1, len(values) + 1), values, label=metric, marker='o')
+        ax1.plot(range(1, len(values) + 1), values, label=metric, marker='o')
     
-    plt.title('Probe Performance Metrics Over Training')
-    plt.xlabel('Epoch')
-    plt.ylabel('Score')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+    ax1.set_title('Probe Performance Metrics Over Training')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Score')
+    ax1.legend()
+    ax1.grid(True)
+    
+    # Plot loss
+    ax2.plot(range(1, len(loss_history) + 1), loss_history, label='Loss', marker='o', color='red')
+    ax2.set_title('Training Loss Over Epochs')
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('Loss')
+    ax2.legend()
+    ax2.grid(True)
+    
+    plt.tight_layout()
     plt.savefig(os.path.join(out_dir, "metrics.png"))
+    plt.close()
+
+
+def save_metrics(metrics_history: list[dict[str, float]], 
+                loss_history: list[float], 
+                out_dir: str) -> None:
+    """Save training metrics and loss to a text file"""
+    metrics_file = os.path.join(out_dir, "metrics.txt")
+    
+    with open(metrics_file, "w") as f:
+        f.write("Epoch\tLoss\tAccuracy\tPrecision\tRecall\tF1\n")
+        for epoch, (metrics, loss) in enumerate(zip(metrics_history, loss_history), 1):
+            f.write(f"{epoch}\t{loss:.4f}\t{metrics['accuracy']:.4f}\t"
+                   f"{metrics['precision']:.4f}\t{metrics['recall']:.4f}\t"
+                   f"{metrics['f1']:.4f}\n")
 
 
 def train_probe(
@@ -243,8 +267,9 @@ def train_probe(
     criterion = nn.BCEWithLogitsLoss()  # Changed to BCEWithLogitsLoss
     optimizer = torch.optim.Adam(probe.parameters(), lr=learning_rate)
 
-    # Add metrics history tracking
+    # Add metrics and loss history tracking
     metrics_history = []
+    loss_history = []
 
     # Training loop
     for epoch in tqdm(range(n_epochs), desc="Training"):
@@ -254,23 +279,27 @@ def train_probe(
         for batch_activations, batch_labels in train_loader:
             optimizer.zero_grad()
             logits = probe(batch_activations)
-            loss = criterion(logits, batch_labels)  # BCEWithLogitsLoss handles the sigmoid internally
+            loss = criterion(logits, batch_labels)
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
+        
+        avg_loss = total_loss / len(train_loader)
+        loss_history.append(avg_loss)
 
         # Evaluation
         metrics = evaluate_probe(probe, test_loader, device)
         metrics_history.append(metrics)
         
         print(
-            f"Epoch {epoch+1}/{n_epochs}, Loss: {total_loss/len(train_loader):.4f}, "
+            f"Epoch {epoch+1}/{n_epochs}, Loss: {avg_loss:.4f}, "
             f"Accuracy: {metrics['accuracy']:.4f}, F1: {metrics['f1']:.4f}, "
             f"Precision: {metrics['precision']:.4f}, Recall: {metrics['recall']:.4f}"
         )
 
-    # Plot metrics after training
-    plot_metrics(metrics_history, out_dir)
+    # Plot metrics and save to file after training
+    plot_metrics(metrics_history, loss_history, out_dir)
+    save_metrics(metrics_history, loss_history, out_dir)
 
     return probe, model, tokenizer
 
