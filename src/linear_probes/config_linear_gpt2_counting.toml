@@ -1,0 +1,14 @@
+# config.toml
+
+[model]
+model_name = "gpt2-small"
+
+[sae]
+sae_release = "gpt2-small-res-jb"
+sae_id = "blocks.0.hook_resid_pre"
+
+[layer]
+layer_idx = 0
+
+[examples]
+n_examples = 1000
