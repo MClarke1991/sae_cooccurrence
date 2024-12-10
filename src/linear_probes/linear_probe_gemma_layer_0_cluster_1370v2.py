@@ -480,12 +480,16 @@ if __name__ == "__main__":
     sae_id = "layer_0/width_16k/canonical"
     sae_id_safe = sae_id.replace("/", "_").replace(".", "_")
     layer_idx = 0
+    n_examples = 100
     
     out_dir = os.path.join(get_git_root(), "results", "linear_probes", model_name, sae_release, sae_id_safe)
     os.makedirs(out_dir, exist_ok=True)
     
     # Train the probe
-    probe, model, tokenizer = train_probe(model_name=model_name, layer_idx=layer_idx, out_dir=out_dir)
+    probe, model, tokenizer = train_probe(model_name=model_name, 
+                                          layer_idx=layer_idx, 
+                                          out_dir=out_dir, 
+                                          n_samples=n_examples)
     # probe, model, tokenizer = train_probe(model_name="gpt2-small", layer_idx=0)
 
     # Load SAE
