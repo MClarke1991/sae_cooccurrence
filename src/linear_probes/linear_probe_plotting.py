@@ -295,6 +295,34 @@ def plot_feature_cooccurrence(
     )
     plt.close()
 
+    # Create a bar plot for the top 10 highest cosine similarity features
+    top_cosine_features = feature_indices_df.nlargest(10, "Cosine Similarity")
+    plt.figure(figsize=(8, 8))
+
+    # Set colors for highlighted and non-highlighted features
+    colors = [
+        "red" if idx in highlight_indices else "blue"
+        for idx in top_cosine_features["Feature Index"]
+    ]
+
+    plt.bar(
+        top_cosine_features["Feature Index"].astype(str),
+        top_cosine_features["Cosine Similarity"],
+        color=colors,
+    )
+
+    plt.xlabel("Feature Index")
+    plt.ylabel("Cosine Similarity")
+    plt.title("Top 10 Highest Cosine Similarity Features")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig(
+        os.path.join(out_dir, "top_cosine_similarity_features.png"),
+        bbox_inches="tight",
+        dpi=300,
+    )
+    plt.close()
+
 
 if __name__ == "__main__":
     # Load config
