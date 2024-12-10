@@ -350,7 +350,7 @@ def load_sae(
     return sae
 
 
-def find_similar_sae_features(probe, sae, top_k=10):
+def find_similar_sae_features(probe: nn.Module, sae: SAE, out_dir: str, top_k=10):
     """Find SAE features most similar to the linear probe weights using cosine similarity"""
     # Get probe weights and normalize them
     probe_weights = probe.linear.weight.detach().squeeze()
@@ -371,7 +371,7 @@ def find_similar_sae_features(probe, sae, top_k=10):
         "Feature Index": top_indices.cpu().numpy(),
         "Cosine Similarity": top_similarities.detach().cpu().numpy()
     }
-    pd.DataFrame(feature_data).to_csv("top_similar_sae_features.csv", index=False)
+    pd.DataFrame(feature_data).to_csv(os.path.join(out_dir, "top_similar_sae_features.csv"), index=False)
 
     # Plot the top similar features
     plt.figure(figsize=(12, 6))
@@ -381,7 +381,8 @@ def find_similar_sae_features(probe, sae, top_k=10):
     plt.ylabel("Cosine Similarity")
     plt.xticks(rotation=45)
     plt.tight_layout()
-    plt.show()
+    plt.savefig(os.path.join(out_dir, "top_similar_sae_features.png"))
+    plt.close()
 
     return top_indices.tolist(), top_similarities.tolist()
 
@@ -418,7 +419,7 @@ if __name__ == "__main__":
     top_neurons, top_weights = analyze_neurons(probe)
 
     # Find similar SAE features
-    top_features, similarities = find_similar_sae_features(probe, sae)
+    top_features, similarities = find_similar_sae_features(probe, sae, out_dir)
 
     # Print results
     print("\nTop neurons for 'one of' detection:")
