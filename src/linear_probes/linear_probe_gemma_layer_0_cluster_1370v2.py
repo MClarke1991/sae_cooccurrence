@@ -1,4 +1,5 @@
 import os
+from dataclasses import dataclass
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -37,63 +38,201 @@ class ActivationDataset(Dataset):
         return self.activations[idx], self.labels[idx]
 
 
-def generate_examples(n_samples=1000) -> tuple[list[str], list[int]]:
-    """Generate example sentences with number words (one-ten) and without"""
+# def generate_examples(n_samples=1000) -> tuple[list[str], list[int]]:
+#     """Generate example sentences with number words (one-ten) and without"""
     
-    templates = [
-        "I ate {} {} for lunch",
-        "There are {} {} on the shelf",
-        "We walked {} {} in the park",
-        "She bought {} {} at the store",
-        "They have {} {} at home",
-        "I waited {} {} for the bus",
-        "The garden has {} {} planted",
-        "He scored {} {} in the game",
-        "We saw {} {} in the tree",
-        "The class has {} {} enrolled",
-    ]
+#     templates = [
+#         "I ate {} {} for lunch",
+#         "There are {} {} on the shelf",
+#         "We walked {} {} in the park",
+#         "She bought {} {} at the store",
+#         "They have {} {} at home",
+#         "I waited {} {} for the bus",
+#         "The garden has {} {} planted",
+#         "He scored {} {} in the game",
+#         "We saw {} {} in the tree",
+#         "The class has {} {} enrolled",
+#     ]
 
-    number_words = [
-        "one", "two", "three", "four", "five",
-        "six", "seven", "eight", "nine", "ten"
-    ]
+#     number_words = [
+#         "one", "two", "three", "four", "five",
+#         "six", "seven", "eight", "nine", "ten"
+#     ]
     
-    objects = [
-        "cookies", "books", "miles", "shirts", "cats",
-        "minutes", "flowers", "goals", "birds", "students",
-        "apples", "boxes", "papers", "pictures", "tasks"
-    ]
+#     objects = [
+#         "cookies", "books", "miles", "shirts", "cats",
+#         "minutes", "flowers", "goals", "birds", "students",
+#         "apples", "boxes", "papers", "pictures", "tasks"
+#     ]
 
+#     examples = []
+#     labels = []
+    
+#     for _ in range(n_samples):
+#         template = np.random.choice(templates)
+#         object_word = np.random.choice(objects)
+        
+#         # Randomly decide whether to use a number word or not
+#         if np.random.random() < 0.5:  # 50% chance for each class
+#             # Use number word
+#             number = np.random.choice(number_words)
+#             label = 1
+#         else:
+#             # Use either a digit or "some"
+#             if np.random.random() < 0.7:  # 70% chance for digit within negative class
+#                 number = str(np.random.randint(1, 11))
+#             else:  # 30% chance for "some" within negative class
+#                 number = np.random.choice(["some", "many", "several", "few"])
+#             label = 0
+            
+#         example = template.format(number, object_word)
+#         examples.append(example)
+#         labels.append(label)
+    
+#     # Shuffle examples and labels together
+#     indices = np.random.permutation(len(examples))
+#     examples = [examples[i] for i in indices]
+#     labels = [labels[i] for i in indices]
+    
+#     return examples, labels
+
+@dataclass
+class TextGenerationConfig:
+    """Configuration for text generation parameters"""
+    number_word_prob: float = 0.5  # Probability of using a number word
+    digit_prob: float = 0.7  # Probability of using digit vs other words within negative class
+    min_number: int = 1
+    max_number: int = 11
+    templates: list[str] | None = None
+    number_words: list[str] | None = None
+    objects: list[str] | None = None
+    
+    def __post_init__(self):
+        # Default templates with more variety and complexity
+        self.templates = self.templates or [
+            "I ate {} {} for lunch today",
+            "There are {} {} on the shelf now",
+            "We walked {} {} in the beautiful park",
+            "She bought {} {} at the local store",
+            "They have {} {} at their home",
+            "I waited {} {} for the express bus",
+            "The garden has {} {} planted in rows",
+            "He scored {} {} during the game",
+            "We saw {} {} in the old tree",
+            "The class has {} {} enrolled this term",
+            "The recipe calls for {} {} to be added",
+            "They collected {} {} during the drive",
+            "I noticed {} {} in the corner",
+            "The shelf holds {} {} neatly arranged",
+            "We counted {} {} at the event"
+        ]
+        
+        # Extended number words list
+        self.number_words = self.number_words or [
+            "one", "two", "three", "four", "five",
+            "six", "seven", "eight", "nine", "ten",
+            # "eleven", "twelve", "thirteen", "fourteen", "fifteen",
+            # "twenty", "thirty", "forty", "fifty"
+        ]
+        
+        # Extended objects list with more variety
+        self.objects = self.objects or [
+            "cookies", "books", "miles", "shirts", "cats",
+            "minutes", "flowers", "goals", "birds", "students",
+            "apples", "boxes", "papers", "pictures", "tasks",
+            "pencils", "notebooks", "chairs", "plates", "bottles",
+            "emails", "messages", "documents", "reports", "cards",
+            "packages", "letters", "folders", "files", "tools"
+        ]
+
+def generate_balanced_examples(
+    n_samples: int = 1000,
+    config: TextGenerationConfig | None = None,
+    seed: int | None = None
+) -> tuple[list[str], list[int]]:
+    """
+    Generate balanced example sentences with number words and without.
+    
+    Args:
+        n_samples: Number of examples to generate
+        config: Configuration object for text generation parameters
+        seed: Random seed for reproducibility
+    
+    Returns:
+        Tuple of (examples, labels) where examples are sentences and labels are 1 for
+        number words and 0 for digits or other quantifiers
+    """
+    if seed is not None:
+        np.random.seed(seed)
+        
+    config = config or TextGenerationConfig()
+    
+    # Ensure balanced classes
+    n_per_class = n_samples // 2
     examples = []
     labels = []
     
-    for _ in range(n_samples):
-        template = np.random.choice(templates)
-        object_word = np.random.choice(objects)
+    # Helper function to generate a single example
+    def generate_single_example(use_number_word: bool) -> tuple[str, int]:
+        template = np.random.choice(config.templates)  # type: ignore
+        object_word = np.random.choice(config.objects)  # type: ignore
         
-        # Randomly decide whether to use a number word or not
-        if np.random.random() < 0.5:  # 50% chance for each class
-            # Use number word
-            number = np.random.choice(number_words)
+        if use_number_word:
+            number = np.random.choice(config.number_words)  # type: ignore
             label = 1
         else:
-            # Use either a digit or "some"
-            if np.random.random() < 0.7:  # 70% chance for digit within negative class
-                number = str(np.random.randint(1, 11))
-            else:  # 30% chance for "some" within negative class
-                number = np.random.choice(["some", "many", "several", "few"])
+            if np.random.random() < config.digit_prob:
+                number = str(np.random.randint(config.min_number, config.max_number))
+            else:
+                quantifiers = ["some", "many", "several", "few", "numerous", "various", 
+                             "countless", "multiple", "abundant", "sparse"]
+                number = np.random.choice(quantifiers)
             label = 0
             
-        example = template.format(number, object_word)
+        return template.format(number, object_word), label
+
+    # Generate positive examples (with number words)
+    for _ in tqdm(range(n_per_class), desc="Generating positive examples"):
+        example, label = generate_single_example(use_number_word=True)
         examples.append(example)
         labels.append(label)
-    
+        
+    # Generate negative examples (with digits or quantifiers)
+    for _ in tqdm(range(n_per_class), desc="Generating negative examples"):
+        example, label = generate_single_example(use_number_word=False)
+        examples.append(example)
+        labels.append(label)
+
     # Shuffle examples and labels together
     indices = np.random.permutation(len(examples))
     examples = [examples[i] for i in indices]
     labels = [labels[i] for i in indices]
     
     return examples, labels
+
+def validate_examples(examples: list[str], labels: list[int]) -> bool:
+    """
+    Validate generated examples to ensure they meet requirements.
+    
+    Args:
+        examples: List of generated sentences
+        labels: List of corresponding labels
+    
+    Returns:
+        bool: True if validation passes, False otherwise
+    """
+    if len(examples) != len(labels):
+        print("Error: Mismatch between examples and labels length")
+        return False
+        
+    # Check class balance
+    positive_count = sum(labels)
+    if positive_count != len(labels) // 2:
+        print(f"Error: Unbalanced classes. Positive examples: {positive_count}, "
+              f"Expected: {len(labels) // 2}")
+        return False
+    
+    return True
 
 
 def get_layer_activations(
@@ -194,13 +333,13 @@ def plot_metrics(metrics_history: dict, loss_history: dict, out_dir: str) -> Non
     ax2.grid(True)
     
     plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, "metrics.png"))
+    plt.savefig(os.path.join(out_dir, f"metrics_n_examples_{n_examples}.png"))
     plt.close()
 
 
 def save_metrics(metrics_history: dict, loss_history: dict, out_dir: str) -> None:
     """Save training metrics and loss to a text file"""
-    metrics_file = os.path.join(out_dir, "metrics.txt")
+    metrics_file = os.path.join(out_dir, f"metrics_n_examples_{n_examples}.txt")
     
     with open(metrics_file, "w") as f:
         headers = ["Epoch", "Split", "Loss", "Accuracy", "Precision", "Recall", "F1"]
@@ -221,6 +360,7 @@ def save_metrics(metrics_history: dict, loss_history: dict, out_dir: str) -> Non
 def train_probe(
     model_name,
     out_dir,
+    config: TextGenerationConfig,
     layer_idx=0,
     n_samples=1000,
     batch_size=32,
@@ -233,7 +373,11 @@ def train_probe(
 
     # Generate example sentences
     print(f"Generating {n_samples} examples...")
-    examples, labels = generate_examples(n_samples)
+    examples, labels = generate_balanced_examples(
+        n_samples,
+        config=config,
+        seed=42  # for reproducibility
+    )
 
     # Load model and tokenizer
     is_hooked_transformer = False
@@ -375,7 +519,7 @@ def analyze_neurons(probe, n_top=10):
         "Neuron Index": top_neurons,
         "Weight": weights[top_neurons]
     }
-    pd.DataFrame(neuron_data).to_csv("top_neurons.csv", index=False)
+    pd.DataFrame(neuron_data).to_csv(os.path.join(out_dir, f"top_neurons_n_examples_{n_examples}.csv"), index=False)
 
     # Plot top neuron weights
     plt.figure(figsize=(12, 6))
@@ -428,7 +572,7 @@ def find_similar_sae_features(probe: nn.Module, sae: SAE, out_dir: str, top_k=10
         "Feature Index": top_indices.cpu().numpy(),
         "Cosine Similarity": top_similarities.detach().cpu().numpy()
     }
-    pd.DataFrame(feature_data).to_csv(os.path.join(out_dir, "top_similar_sae_features.csv"), index=False)
+    pd.DataFrame(feature_data).to_csv(os.path.join(out_dir, f"top_similar_sae_features_n_examples_{n_examples}.csv"), index=False)
 
     # Plot the top similar features
     plt.figure(figsize=(12, 6))
@@ -438,7 +582,7 @@ def find_similar_sae_features(probe: nn.Module, sae: SAE, out_dir: str, top_k=10
     plt.ylabel("Cosine Similarity")
     plt.xticks(rotation=45)
     plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, "top_similar_sae_features.png"))
+    plt.savefig(os.path.join(out_dir, f"top_similar_sae_features_n_examples_{n_examples}.png"))
     plt.close()
 
     return top_indices.tolist(), top_similarities.tolist()
@@ -454,7 +598,21 @@ if __name__ == "__main__":
     layer_idx = 0
     n_examples = 100
     
-    out_dir = os.path.join(get_git_root(), "results", "linear_probes", model_name, sae_release, sae_id_safe)
+    config = TextGenerationConfig(
+        number_word_prob=0.5,
+        digit_prob=0.7,
+        min_number=1,
+        max_number=11,
+        # Optionally override templates, number_words, or objects
+    )
+    
+    out_dir = os.path.join(get_git_root(), 
+                           "results", 
+                           "linear_probes", 
+                           model_name, 
+                           sae_release, 
+                           sae_id_safe, 
+                           f"n_examples_{n_examples}")
     os.makedirs(out_dir, exist_ok=True)
     
     # Train the probe
@@ -462,6 +620,7 @@ if __name__ == "__main__":
                                           layer_idx=layer_idx, 
                                           out_dir=out_dir, 
                                           n_samples=n_examples,
+                                          config=config,
                                           weight_decay=0.01)
     # probe, model, tokenizer = train_probe(model_name="gpt2-small", layer_idx=0)
 
