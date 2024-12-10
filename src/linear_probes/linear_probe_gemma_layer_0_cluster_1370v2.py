@@ -1,8 +1,8 @@
 import os
-from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 from sae_lens import SAE
@@ -137,8 +137,7 @@ class LinearProbe(nn.Module):
 
 
 def evaluate_probe(probe: nn.Module, 
-                   test_loader: DataLoader, 
-                   device: torch.device):
+                   test_loader: DataLoader):
     """Evaluate probe performance with multiple metrics"""
     probe.eval()
     all_preds = []
@@ -293,7 +292,7 @@ def train_probe(
         loss_history.append(avg_loss)
 
         # Evaluation
-        metrics = evaluate_probe(probe, test_loader, device)
+        metrics = evaluate_probe(probe, test_loader)
         metrics_history.append(metrics)
         
         print(
@@ -313,6 +312,13 @@ def analyze_neurons(probe, n_top=10):
     """Analyze which neurons have the highest weights in the probe"""
     weights = probe.linear.weight.detach().cpu().numpy().squeeze()
     top_neurons = np.argsort(np.abs(weights))[-n_top:]
+
+    # Save top neurons to CSV
+    neuron_data = {
+        "Neuron Index": top_neurons,
+        "Weight": weights[top_neurons]
+    }
+    pd.DataFrame(neuron_data).to_csv("top_neurons.csv", index=False)
 
     # Plot top neuron weights
     plt.figure(figsize=(12, 6))
@@ -359,6 +365,23 @@ def find_similar_sae_features(probe, sae, top_k=10):
 
     # Get top-k most similar features
     top_similarities, top_indices = torch.topk(similarities, k=top_k)
+
+    # Save top features to CSV
+    feature_data = {
+        "Feature Index": top_indices.cpu().numpy(),
+        "Cosine Similarity": top_similarities.cpu().numpy()
+    }
+    pd.DataFrame(feature_data).to_csv("top_similar_sae_features.csv", index=False)
+
+    # Plot the top similar features
+    plt.figure(figsize=(12, 6))
+    plt.bar(range(top_k), top_similarities.cpu().numpy(), tick_label=top_indices.cpu().numpy())
+    plt.title("Top Similar SAE Features to Linear Probe Weights")
+    plt.xlabel("SAE Feature Index")
+    plt.ylabel("Cosine Similarity")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
 
     return top_indices.tolist(), top_similarities.tolist()
 
