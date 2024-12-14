@@ -1,7 +1,7 @@
 # Compositionality and Ambiguity: Latent Co-occurrence and Interpretable Subspaces
-Matthew A. Clarke, Hardik Bhatnagar, Joseph Bloom
+[Matthew A. Clarke](https://mclarke1991.github.io/), [Hardik Bhatnagar](https://hrdkbhatnagar.github.io/), [Joseph Bloom](https://www.linkedin.com/in/joseph-bloom1/)
 
-This repository contains the code for the LessWrong "Compositionality and Ambiguity: Latent Co-occurrence and Interpretable Subspaces" (in progress).
+This repository contains the code for the LessWrong "Compositionality and Ambiguity: Latent Co-occurrence and Interpretable Subspaces" (in progress). See also [our app](https://feature-cooccurrence.streamlit.app/) to explore the results.
 
 ## Installation
 
@@ -151,3 +151,15 @@ poetry run streamlit run sae_cooccurrence/general_streamlit.py
 ### Streamlit App Configuration
 
 The streamlit app configuration is stored in `sae_cooccurrence/config_pca_streamlit_maxexamples.toml`. This allows the user to specify the models, SAE releases, and SAE IDs to use in the app.
+
+# Citation
+Please cite the package as follows:
+
+```
+@misc{clarke2024saecooccurrence,
+   title = {Compositionality and Ambiguity: Latent Co-occurrence and Interpretable Subspaces},
+   author = {Matthew A. Clarke, Hardik Bhatnagar, Joseph Bloom},
+   year = {2024},
+   howpublished = {\url{https://github.com/mclarke1991/sae_cooccurrence}},
+}
+```
