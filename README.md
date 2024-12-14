@@ -37,13 +37,16 @@ Output:
 #### Script 3: Analyze Subspaces
 `3_analyse_subspaces.ipynb` - Template notebook to analyse a subspace using PCA.
 
-#### Script 5: PCA for Streamlit
-`5_pca_for_streamlit.py` generates PCA data for a set of example graphs.
+#### Script 4: PCA for Streamlit
+`4_pca_for_streamlit.py` generates PCA data for a set of example graphs.
 
 Output:
 - An h5 file containing:
   - PCA data (pca_df)
   - Results from pca.py/ProcessedResults class (includes tokens, context, etc.)
+
+#### Script 5: pca_from_streamlit_template.ipynb
+Template notebook to examine and analyse PCA data saved as h5 files from `4_pca_for_streamlit.py` rather than running the PCA from scratch as in `3_analyse_subspaces.ipynb`.
 
 ### Configuration Options
 
