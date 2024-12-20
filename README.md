@@ -1,7 +1,7 @@
 # Compositionality and Ambiguity: Latent Co-occurrence and Interpretable Subspaces
 [Matthew A. Clarke](https://mclarke1991.github.io/), [Hardik Bhatnagar](https://hrdkbhatnagar.github.io/), [Joseph Bloom](https://www.linkedin.com/in/joseph-bloom1/)
 
-This repository contains the code for the LessWrong "Compositionality and Ambiguity: Latent Co-occurrence and Interpretable Subspaces" (in progress). See also [our app](https://feature-cooccurrence.streamlit.app/) to explore the results.
+This repository contains the code for the LessWrong [Compositionality and Ambiguity: Latent Co-occurrence and Interpretable Subspaces](https://www.lesswrong.com/posts/WNoqEivcCSg8gJe5h/compositionality-and-ambiguity-latent-co-occurrence-and) (in progress). See also [our app](https://feature-cooccurrence.streamlit.app/) to explore the results.
 
 ## Installation
 
